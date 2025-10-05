@@ -89,9 +89,8 @@ class WLHistogram:
             self.last_update.pop(k, None)
 
         # 限制最大 bin 数
-        print(f"self.hist{len(self.hist)}, self.max_bins{self.max_bins}")
+        print(f"_clean_bins self.hist{len(self.hist)}, self.max_bins{self.max_bins}")
         if len(self.hist) > self.max_bins:
-            print(f"Enter self.hist{self.hist}, self.max_bins{self.max_bins}")
             sorted_bins = sorted(self.last_update.items(), key=lambda x: x[1], reverse=True)
             keep = set(k for k, _ in sorted_bins[:self.max_bins])
             for k in list(self.hist.keys()):
@@ -119,8 +118,6 @@ class WLHistogram:
             if v not in affected_time or ts > affected_time[v]:
                 affected_time[v] = ts
 
-        if not affected_time:
-            return
 
         t0 = time.time()
         updated_keys = self.update_wl_local(affected_time)
@@ -222,7 +219,7 @@ class HistoSketch:
 class UnicornGraphEmbedder(GraphEmbedderBase):
     def __init__(self, snapshots, features=None, mapp=None,
                  R=3, decay_lambda=0.0005, sketch_size=256,
-                 snapshot_edges=2000, wl_batch=500, max_bins=20000):
+                 max_bins=20000):
         super().__init__(snapshots, features, mapp)
         self.snapshots = self.G
         self.wl = WLHistogram(R=R, decay_lambda=decay_lambda, max_bins=max_bins)
