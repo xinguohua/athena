@@ -40,27 +40,6 @@ class WLHistogram:
             self._pair_hash_cache[key] = h
         return h
 
-    # ---------- Graph ingest ----------
-    def ingest_edge(self, u, v, edge_type, u_label=None, v_label=None):
-        """单条边增量：建邻接 + 设置初始标签 + 局部 WL"""
-        if u_label is not None:
-            self.labels.setdefault(u, u_label)
-        if v_label is not None:
-            self.labels.setdefault(v, v_label)
-
-        et_map_u = self.adj[u]
-        if edge_type not in et_map_u:
-            et_map_u[edge_type] = set()
-        et_map_u[edge_type].add(v)
-
-        rev_type = f"rev_{edge_type}"
-        et_map_v = self.adj[v]
-        if rev_type not in et_map_v:
-            et_map_v[rev_type] = set()
-        et_map_v[rev_type].add(u)
-
-        self.update_wl_local({u, v})
-
     def ingest_edges(self, edges, types, node_gids, node_labels=None):
         """
         批量 ingest 多条边：
@@ -242,8 +221,7 @@ class UnicornGraphEmbedder(GraphEmbedderBase):
             t0s = time.time()
             sketch = self.hs.sketch(self.wl.hist)
             t_sketch = time.time() - t0s
-            print(f"[snapshot {sidx}] sketch: {t_sketch:.4f}s")
-
+            print(f"[snapshot {sidx}] sketch: {t_sketch:.4f}s (bins={len(self.wl.hist)})")
             self.sketch_snapshots.append((time.time(), sketch))
 
     def get_snapshot_embeddings(self, snapshot_sequence=None):
@@ -283,7 +261,6 @@ class UnicornGraphEmbedder(GraphEmbedderBase):
         print(f"[get_snapshot_embeddings] build array: {t_total:.4f}s, raw_shape={arr.shape}, normed_shape={normed.shape}")
         # 打印一些统计信息帮助调试
         print(f"[get_snapshot_embeddings] col mean (first3)={col_mean[:3]}, col std (first3)={col_std[:3]}")
-
         return normed.astype(np.float32)
 
     def embed_edges(self):
