@@ -8,22 +8,32 @@ import numpy as np
 from process.embedders.base import GraphEmbedderBase
 
 
-# --- WL histogram + decay (流式 / 全局直方图) ---
+# ===========================================================
+# === WL Histogram with Time Decay + Recent Bin Pruning =====
+# ===========================================================
 class WLHistogram:
-    def __init__(self, R=3, decay_lambda=0.0005):
+    def __init__(self, R=3, decay_lambda=0.0005, max_bins=20000):
+        """
+        R: WL传播层数
+        decay_lambda: 时间衰减系数
+        max_bins: 最大bin数（仅保留最新的max_bins条）
+        """
         self.R = R
         self.decay_lambda = decay_lambda
-        self.hist = defaultdict(float)     # global histogram: label -> weight
-        self.labels = {}                   # node -> current label (string)
+        self.max_bins = max_bins
+
+        self.hist = defaultdict(float)     # label -> weight
+        self.last_update = {}              # label -> 最近更新时间
+        self.labels = {}                   # node -> current label
         self.adj = defaultdict(dict)       # node -> edge_type -> set(neighbors)
         self.last_decay_ts = time.time()
-        # 哈希缓存，显著减少 mmh3 调用次数
-        self._label_hash_cache = {}        # str(label) -> int64
-        self._pair_hash_cache  = {}        # (etype, label) -> int64
 
-    # ---------- Hash helpers (with cache) ----------
+        # 缓存加速
+        self._label_hash_cache = {}
+        self._pair_hash_cache = {}
+
+    # ---------- Hash helpers ----------
     def _hash_label(self, lab: str) -> int:
-        """缓存后的标签哈希"""
         h = self._label_hash_cache.get(lab)
         if h is None:
             h = mmh3.hash64(lab)[0]
@@ -31,139 +41,172 @@ class WLHistogram:
         return h
 
     def _hash_pair(self, et: str, lbl: str) -> int:
-        """缓存后的 (edge_type, label) 组合哈希"""
         key = (et, lbl)
         h = self._pair_hash_cache.get(key)
         if h is None:
-            # 这里用 | 作为分隔符，避免 f-string 大量分配；cache 已经避免重复了
             h = mmh3.hash64(et + '|' + lbl)[0]
             self._pair_hash_cache[key] = h
         return h
 
-    def ingest_edges(self, edges, types, node_gids, node_labels=None):
+    # ---------- 单bin懒衰减 ----------
+    def _bump_bin(self, key: str, ts: float, delta: float = 1.0):
+        last_ts = self.last_update.get(key, None)
+        if last_ts is None:
+            w_prev = 0.0
+        else:
+            dt = max(0.0, ts - last_ts)
+            w_prev = self.hist.get(key, 0.0) * math.exp(-self.decay_lambda * dt)
+        self.hist[key] = w_prev + float(delta)
+        self.last_update[key] = ts
+
+        # ---------- 被动衰减 ----------
+    def _decay_passive(self, current_ts: float, affected_keys: set):
         """
-        批量 ingest 多条边：
-        - 建邻接
-        - 一次性设置初始标签
-        - 只对“新边端点集合”做局部 WL（随后按 R 轮向邻居传播）
+        对非活跃的 bin 执行被动衰减：
+        - affected_keys: 本轮已更新过的 bin，不再重复衰减
         """
-        if node_labels is not None:
+        for k, last_ts in list(self.last_update.items()):
+            if k in affected_keys:
+                continue
+            dt = current_ts - last_ts
+            if dt > 0:
+                decay_factor = math.exp(-self.decay_lambda * dt)
+                w = self.hist.get(k, 0.0) * decay_factor
+                if w < 1e-12:
+                    del self.hist[k]
+                    self.last_update.pop(k, None)
+                else:
+                    self.hist[k] = w
+                    self.last_update[k] = current_ts
+
+    # ---------- 全局清理 ----------
+    def _clean_bins(self):
+        """删除过小的或过旧的 bin，限制数量"""
+        # 删除非常小的
+        to_del = [k for k, w in self.hist.items() if w < 1e-12]
+        for k in to_del:
+            del self.hist[k]
+            self.last_update.pop(k, None)
+
+        # 限制最大 bin 数
+        print(f"self.hist{len(self.hist)}, self.max_bins{self.max_bins}")
+        if len(self.hist) > self.max_bins:
+            print(f"Enter self.hist{self.hist}, self.max_bins{self.max_bins}")
+            sorted_bins = sorted(self.last_update.items(), key=lambda x: x[1], reverse=True)
+            keep = set(k for k, _ in sorted_bins[:self.max_bins])
+            for k in list(self.hist.keys()):
+                if k not in keep:
+                    del self.hist[k]
+                    self.last_update.pop(k, None)
+            print(f"[WLHistogram] pruned to {self.max_bins} bins")
+
+    def ingest_edges(self, edges, types, node_gids, node_labels, timestamps):
+        if node_labels:
             for vid_local, label in node_labels.items():
                 gid = node_gids[vid_local]
                 self.labels.setdefault(gid, label)
 
-        affected = set()
+        affected_time = {}
         for i, (u_local, v_local) in enumerate(edges):
             et = types[i]
             u = node_gids[u_local]
             v = node_gids[v_local]
+            ts = timestamps[i] if timestamps is not None else 0
+            self.adj[u].setdefault(et, set()).add(v)
+            self.adj[v].setdefault(f"rev_{et}", set()).add(u)
+            if u not in affected_time or ts > affected_time[u]:
+                affected_time[u] = ts
+            if v not in affected_time or ts > affected_time[v]:
+                affected_time[v] = ts
 
-            et_map_u = self.adj[u]
-            if et not in et_map_u:
-                et_map_u[et] = set()
-            et_map_u[et].add(v)
-
-            rev_type = f"rev_{et}"
-            et_map_v = self.adj[v]
-            if rev_type not in et_map_v:
-                et_map_v[rev_type] = set()
-            et_map_v[rev_type].add(u)
-
-            affected.add(u)
-            affected.add(v)
-
-        if affected:
-            t0_upd = time.time()
-            self.update_wl_local(affected)
-            t_upd = time.time() - t0_upd
-            print(f"[ingest_edges] update_wl_local on {len(affected)} nodes: {t_upd:.4f}s")
-
-    # ---------- Decay ----------
-    def _decay(self):
-        now = time.time()
-        dt = now - self.last_decay_ts
-        if dt <= 0:
-            return
-        factor = math.exp(-self.decay_lambda * dt)
-        keys = list(self.hist.keys())
-        for k in keys:
-            self.hist[k] *= factor
-            if self.hist[k] < 1e-12:
-                del self.hist[k]
-        self.last_decay_ts = now
-
-    # ---------- Local WL update ----------
-    def update_wl_local(self, affected_nodes):
-        """
-        只更新受影响节点，并按 R 轮向外层邻居传播（同步式）：
-        - 每一轮使用“上一轮的标签快照”计算
-        - 使用交换律哈希（XOR 聚合）避免排序 + 字符串拼接
-        - 使用缓存减少哈希调用
-        """
-        if not affected_nodes:
+        if not affected_time:
             return
 
-        self._decay()
+        t0 = time.time()
+        updated_keys = self.update_wl_local(affected_time)
+        print(f"[ingest_edges] update_wl_local({len(affected_time)} nodes): {time.time() - t0:.4f}s")
 
-        # 同步式：每轮基于上一轮的标签快照
+        current_ts = max(affected_time.values())
+
+        # 第二阶段：衰减未更新的 bin
+        self._decay_passive(current_ts, updated_keys)
+
+        # 第三阶段：清理过期 / 超限的 bin
+        self._clean_bins()
+
+    def update_wl_local(self, affected_time: dict):
+        """
+        affected_time: {node_gid: ts}
+        - 每个节点用自己的时间戳更新；
+        - 邻居传播时取上层时间的最大值。
+        """
+        if not affected_time:
+            return
+
         labels_round = self.labels.copy()
-        frontier = set(n for n in affected_nodes if n in self.adj)  # 没有邻接的节点可跳过
+        frontier = set(affected_time.keys())
+        frontier_ts = dict(affected_time)
+        updated_keys = set()  # 本轮更新过的 bin
 
         for _ in range(self.R):
             if not frontier:
                 break
 
-            nxt = {}
-            # 仅对 frontier 节点更新
+            nxt_labels = {}
+            next_frontier_ts = {}
+
             for n in frontier:
+                ts_n = frontier_ts[n]
                 lab = labels_round.get(n, self.labels.get(n, "")) or ""
-                et_map = self.adj.get(n, {})
+
                 neigh_hash = 0
-                for et, nbrs in et_map.items():
-                    for x in nbrs:
-                        lbl_n = labels_round.get(x, self.labels.get(x, "")) or ""
-                        neigh_hash ^= self._hash_pair(et, lbl_n)
-
-                self_hash = self._hash_label(lab)
-                sig_val = (self_hash ^ neigh_hash) & ((1 << 64) - 1)
-                new_lab = hex(sig_val)
-                nxt[n] = new_lab
-                self.hist[new_lab] += 1.0
-
-            # 应用这一轮结果到快照 & 全局 labels
-            labels_round.update(nxt)
-            self.labels.update(nxt)
-
-            # 下一轮的 frontier：本轮更新节点的所有邻居（同步传播）
-            new_frontier = set()
-            for n in nxt.keys():
                 for et, nbrs in self.adj.get(n, {}).items():
-                    new_frontier.update(nbrs)
-            frontier = new_frontier
+                    for x in nbrs:
+                        lbl_x = labels_round.get(x, self.labels.get(x, "")) or ""
+                        neigh_hash ^= self._hash_pair(et, lbl_x)
+
+                sig_val = (self._hash_label(lab) ^ neigh_hash) & ((1 << 64) - 1)
+                new_lab = hex(sig_val)
+                nxt_labels[n] = new_lab
+
+                self._bump_bin(new_lab, ts_n, delta=1.0)
+                updated_keys.add(new_lab)
+
+                # 邻居传播
+                for et, nbrs in self.adj.get(n, {}).items():
+                    for x in nbrs:
+                        if x not in next_frontier_ts or ts_n > next_frontier_ts[x]:
+                            next_frontier_ts[x] = ts_n
+
+            labels_round.update(nxt_labels)
+            self.labels.update(nxt_labels)
+            frontier = set(next_frontier_ts.keys())
+            frontier_ts = next_frontier_ts
+
+        # 返回更新过的 bin key，用于后续被动衰减
+        return updated_keys
 
 
-# --- 极简 HistoSketch 占位实现（把直方图压成固定长度 sketch） ---
+
+
+# ===========================================================
+# === HistoSketch ===========================================
+# ===========================================================
 class HistoSketch:
-    """高效实现的 HistoSketch：将加权直方图映射为固定长度 sketch 向量。"""
-
-    def __init__(self, sketch_size: int = 64, seed: int = 42):
+    def __init__(self, sketch_size=64, seed=42):
         if sketch_size <= 0:
             raise ValueError("sketch_size 必须为正整数")
-
         self.K = sketch_size
         random.seed(seed)
-        # Consistent Weighted Sampling 参数
         self.a = [random.random() + 1e-9 for _ in range(self.K)]
 
-    def _cws_hash(self, key: str, weight: float, k: int) -> tuple[int, float]:
-        """为单个键值对计算第 k 个候选哈希与得分。"""
+    def _cws_hash(self, key: str, weight: float, k: int):
         h = mmh3.hash64(key, seed=k, signed=False)
         h = h[0] if isinstance(h, tuple) else h
         score = -math.log(max(weight, 1e-9)) / self.a[k]
         return h, score
 
-    def sketch(self, histogram: dict) -> list[int]:
-        """将直方图 {key: weight} 压缩为固定长度 sketch 向量。"""
+    def sketch(self, histogram: dict):
         sig = [(0, float('inf')) for _ in range(self.K)]
         for k_str, w in ((str(k), v) for k, v in histogram.items() if v > 0):
             for i in range(self.K):
@@ -173,98 +216,49 @@ class HistoSketch:
         return [int(h) for h, _ in sig]
 
 
-# --- UNICORN 风格嵌入器 ---
+# ===========================================================
+# === UnicornGraphEmbedder =================================
+# ===========================================================
 class UnicornGraphEmbedder(GraphEmbedderBase):
     def __init__(self, snapshots, features=None, mapp=None,
                  R=3, decay_lambda=0.0005, sketch_size=256,
-                 snapshot_edges=2000, wl_batch=500):
+                 snapshot_edges=2000, wl_batch=500, max_bins=20000):
         super().__init__(snapshots, features, mapp)
         self.snapshots = self.G
-        self.wl = WLHistogram(R=R, decay_lambda=decay_lambda)
+        self.wl = WLHistogram(R=R, decay_lambda=decay_lambda, max_bins=max_bins)
         self.hs = HistoSketch(sketch_size=sketch_size)
-        self.snapshot_edges = snapshot_edges
-        self.wl_batch = wl_batch
-        self.sketch_snapshots = []         # list[(ts, sketch)]
-        self.snapshot_embeddings = None
-        self._node_embeddings = {}
-        self._edge_embeddings = {}
+        self.sketch_snapshots = []
 
     def train(self):
-        """
-        基于 self.snapshots（每个元素是 igraph.Graph）生成快照嵌入：
-        - 批量 ingest 边与初始标签
-        - 仅对新增边端点集合做局部 WL（R 轮向外传播）
-        - 取全局直方图做 HistoSketch
-        """
-        if not hasattr(self, "snapshots") or not self.snapshots:
-            raise RuntimeError("self.snapshots 为空，请先设置快照数据")
-
         for sidx, g in enumerate(self.snapshots):
             if g is None:
                 continue
+            edges = g.get_edgelist()
+            types = g.es["type"]
+            props = g.vs["properties"]
+            timestamps = g.es["timestamp"]
+            node_gids = {vid: g.vs[vid]['name'] for vid in range(g.vcount())}
+            node_labels = {vid: props[vid] for vid in range(g.vcount())}
 
-            edges = g.get_edgelist()          # [(u,v), ...]
-            types = g.es["type"]              # len == |E|
-            props = g.vs["properties"]        # len == |V|
-
-            vcount = g.vcount()
-            node_gids = {vid: g.vs[vid]['name'] for vid in range(vcount)}
-            node_labels = {vid: props[vid] for vid in range(vcount)}
-
-            # 一次性建邻接 + 局部 WL
             t0 = time.time()
-            self.wl.ingest_edges(edges, types, node_gids, node_labels=node_labels)
-            t_ingest = time.time() - t0
-            print(f"[snapshot {sidx}] ingest_edges: {t_ingest:.4f}s")
+            self.wl.ingest_edges(edges, types, node_gids, node_labels, timestamps)
+            print(f"[snapshot {sidx}] ingest_edges: {time.time()-t0:.4f}s")
 
-            # 从全局直方图得到定长 sketch
             t0s = time.time()
             sketch = self.hs.sketch(self.wl.hist)
-            t_sketch = time.time() - t0s
-            print(f"[snapshot {sidx}] sketch: {t_sketch:.4f}s (bins={len(self.wl.hist)})")
-            self.sketch_snapshots.append((time.time(), sketch))
+            print(f"[snapshot {sidx}] sketch: {time.time()-t0s:.4f}s (bins={len(self.wl.hist)})")
+            self.sketch_snapshots.append((max(timestamps), sketch))
 
     def get_snapshot_embeddings(self, snapshot_sequence=None):
-        """
-        返回按索引序列选取的快照 sketch 堆叠成的矩阵 (n_snapshots, sketch_size)
-        """
-        if not self.sketch_snapshots:
-            raise RuntimeError("还没有任何快照，请先调用 train() 生成。")
-
-        if snapshot_sequence is None:
-            snapshot_sequence = list(range(len(self.sketch_snapshots)))
-
-        t0 = time.time()
-        embeddings = []
-        for idx in snapshot_sequence:
-            _, sketch = self.sketch_snapshots[idx]
-            embeddings.append(sketch)
-        # 原始 sketch 由 64-bit 整数构成，直接用这些巨大整数训练会导致数值不稳定（Inf）
-        arr = np.array(embeddings)
-
-        # 把 uint64 hash 映射到 [0, 1) 的浮点数，然后按列做标准化 (mean=0, std=1)
-        try:
-            # 确保是无符号 64 位范围
-            arr_u = arr.astype(np.uint64)
-            floats = arr_u.astype(np.float64) / float(1 << 64)
-        except Exception:
-            # 退回安全的转换路径
-            floats = arr.astype(np.float64)
-
-        # 列标准化，避免某些列的常数或非常小的方差导致除零
-        col_mean = floats.mean(axis=0)
-        col_std = floats.std(axis=0)
-        col_std[col_std == 0.0] = 1.0
-        normed = (floats - col_mean) / col_std
-
-        t_total = time.time() - t0
-        print(f"[get_snapshot_embeddings] build array: {t_total:.4f}s, raw_shape={arr.shape}, normed_shape={normed.shape}")
-        # 打印一些统计信息帮助调试
-        print(f"[get_snapshot_embeddings] col mean (first3)={col_mean[:3]}, col std (first3)={col_std[:3]}")
+        arr = np.array([s for _, s in self.sketch_snapshots], dtype=np.uint64)
+        floats = arr.astype(np.float64) / float(1 << 64)
+        normed = (floats - floats.mean(0)) / (floats.std(0) + 1e-9)
         return normed.astype(np.float32)
 
-    def embed_edges(self):
-        pass
-
     def embed_nodes(self):
-        pass
+        """暂不实现节点嵌入"""
+        return {}
+
+    def embed_edges(self):
+        """暂不实现边嵌入"""
+        return {}
