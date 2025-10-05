@@ -141,7 +141,7 @@ class ATLASHandler(BaseProcessor):
             a_idx = cache_graph.vs.find(name=actor_id).index
             o_idx = cache_graph.vs.find(name=object_id).index
             if not cache_graph.are_connected(a_idx, o_idx):
-                cache_graph.add_edge(a_idx, o_idx, type=action, timestamp=timestamp)
+                cache_graph.add_edge(a_idx, o_idx, actions=action, timestamp=timestamp)
 
             # --- 快照生成逻辑 ---
             n_nodes = len(cache_graph.vs)

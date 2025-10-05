@@ -231,7 +231,7 @@ class UnicornGraphEmbedder(GraphEmbedderBase):
             if g is None:
                 continue
             edges = g.get_edgelist()
-            types = g.es["type"]
+            types = g.es["actions"]
             props = g.vs["properties"]
             timestamps = g.es["timestamp"]
             node_gids = {vid: g.vs[vid]['name'] for vid in range(g.vcount())}

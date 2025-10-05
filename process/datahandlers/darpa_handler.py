@@ -103,7 +103,7 @@ class DARPAHandler(BaseProcessor):
         use_df = pd.concat(self.all_dfs, ignore_index=True)
         self.use_df = use_df.drop_duplicates()
 
-    def create_snapshots_from_graph(self, df, is_malicious=False, mode="community"):
+    def create_snapshots_from_graph(self, df, is_malicious=False, mode="time"):
         """
         通用快照生成函数
         - mode: "community" 或 "time"
@@ -133,20 +133,17 @@ class DARPAHandler(BaseProcessor):
                 except Exception as e:
                     print(f"警告：创建快照时出错: {e}")
 
-
         elif mode == "time":
             window = pd.Timedelta(minutes=5)
-            df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
-            df["timestamp"] = df["timestamp"] // 1000
-            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="us", errors="coerce")
-            t_min, t_max = df["timestamp"].min(), df["timestamp"].max()
+            df["timestamp_dt"] = pd.to_numeric(df["timestamp"], errors="coerce")  # 转为数值
+            df["timestamp_dt"] = df["timestamp_dt"] // 1000  # 可能是微秒，转换为毫秒
+            df["timestamp_dt"] = pd.to_datetime(df["timestamp_dt"], unit="us", errors="coerce")  # 转换为 datetime
+            t_min, t_max = df["timestamp_dt"].min(), df["timestamp_dt"].max()
             if pd.isna(t_min) or pd.isna(t_max):
                 return []  # 没有有效时间戳，直接返回空
             bins = pd.date_range(start=t_min, end=t_max + window, freq=window)
-
             for i in range(len(bins) - 1):
-
-                part = df[(df["timestamp"] >= bins[i]) & (df["timestamp"] < bins[i + 1])]
+                part = df[(df["timestamp_dt"] >= bins[i]) & (df["timestamp_dt"] < bins[i + 1])]
 
                 if part.empty:
                     continue
@@ -165,16 +162,22 @@ class DARPAHandler(BaseProcessor):
     def _build_graph_from_df(self, df):
         """给定 DataFrame 构建 igraph.Graph，返回 (features, edges, node_ids, relations, G)"""
         all_labels = set(self.all_labels)
-        nodes_props, nodes_type, edges_map, node_frequency = {}, {}, {}, {}
+        nodes_props, nodes_type, edges_map, node_frequency,node_last_ts =  {}, {}, {}, {},{}
 
         for r in df.itertuples(index=False):
             action = getattr(r, "action")
             actor_id = getattr(r, "actorID")
             object_id = getattr(r, "objectID")
+            raw_ts = getattr(r, "timestamp")
+            timestamp = float(raw_ts) if raw_ts is not None else 0.0
 
             # 频率统计
             node_frequency[actor_id] = node_frequency.get(actor_id, 0) + 1
             node_frequency[object_id] = node_frequency.get(object_id, 0) + 1
+
+            # === 更新时间戳 ===
+            node_last_ts[actor_id] = max(timestamp, node_last_ts.get(actor_id, 0))
+            node_last_ts[object_id] = max(timestamp, node_last_ts.get(object_id, 0))
 
             # actor 节点
             props_actor = extract_properties(actor_id, r, action,
@@ -190,8 +193,10 @@ class DARPAHandler(BaseProcessor):
             if object_id not in nodes_type:
                 nodes_type[object_id] = getattr(r, "object")
 
-            # 累加动作
-            edges_map.setdefault((actor_id, object_id), set()).add(action)
+            # === 累加动作和时间 ===
+            edges_map.setdefault((actor_id, object_id), {"actions": set(), "timestamp": []})
+            edges_map[(actor_id, object_id)]["actions"].add(action)
+            edges_map[(actor_id, object_id)]["timestamp"].append(timestamp)
 
         # === 创建图节点 ===
         node_ids = list(nodes_props.keys())
@@ -201,18 +206,20 @@ class DARPAHandler(BaseProcessor):
         G.add_vertices(len(node_ids))
         G.vs["name"] = node_ids
         G.vs["type"] = [nodes_type.get(nid) for nid in node_ids]
-        G.vs["properties"] = [nodes_props[nid] for nid in node_ids]
+        G.vs["properties"] = [str(nodes_props[nid]) for nid in node_ids]
         G.vs["label"] = [1 if nid in all_labels else 0 for nid in node_ids]
         G.vs["frequency"] = [node_frequency.get(nid, 0) for nid in node_ids]
+        G.vs["timestamp"] = [node_last_ts.get(nid, 0) for nid in node_ids]
 
         # === 创建图边 ===
         unique_edges = list(edges_map.keys())
         if unique_edges:
             edge_idx = [(index_map[a], index_map[b]) for (a, b) in unique_edges]
             G.add_edges(edge_idx)
-            G.es["actions"] = [list(edges_map[(a, b)]) for (a, b) in unique_edges]
+            G.es["actions"] = [str(list(edges_map[(a, b)])) for (a, b) in unique_edges]
+            G.es["timestamp"] = [max(edges_map[(a, b)]["timestamp"]) for (a, b) in unique_edges]
 
-        # === 下游需要的结构 ===
+            # === 下游需要的结构 ===
         features = [nodes_props[nid] for nid in node_ids]
         edge_index = [[], []]
         relations_index = {}
