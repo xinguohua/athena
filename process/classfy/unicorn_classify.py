@@ -3,7 +3,7 @@
 """
 UNICORN Detector (Prographer-style class)
 ----------------------------------------
-基于 UNICORN 论文的聚类阈值检测算法，但结构风格与 PrographerClassify 一致：
+基于 UNICORN 论文的聚类阈值检测算法
     - 使用 dataclass Config
     - 统一训练、保存、预测接口
     - 打印检测得分表 + 输出 diff_vectors
@@ -18,27 +18,27 @@ from typing import Dict, Tuple, Optional, Any
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
 
+from process.classfy import BaseClassify
+
 
 # ======================================================
-# ========== 配置 ======================================
+# ========== 配置类 =====================================
 # ======================================================
 @dataclass
 class UnicornConfig:
-    max_k: int = 6              # K-medoids 最大簇数
-    n_trials: int = 20          # 重启次数
-    max_iter: int = 500         # 每次迭代上限
-    num_stds: float = 1.0       # 阈值倍率
-    metric: str = "both"        # 阈值判定方式 ("mean"/"max"/"both")
+    max_k: int = 6
+    n_trials: int = 20
+    max_iter: int = 500
+    num_stds: float = 1.0
+    metric: str = "both"
     model_save_path: str = "unicorn_model.json"
-    threshold: float = 0.016    # 输出时用于打印的额外判断阈值（非主阈值）
+    threshold: float = 0.016
 
 
 # ======================================================
-# ========== 算法核心 ==================================
+# ========== 工具函数 ===================================
 # ======================================================
-
 def pairwise_hamming(arr: np.ndarray) -> np.ndarray:
-    """计算两两 Hamming 距离矩阵"""
     return squareform(pdist(arr, metric="hamming"))
 
 def hamming(a, b):
@@ -46,7 +46,7 @@ def hamming(a, b):
 
 
 class KMedoids:
-    """简化的 PAM 实现"""
+    """简化版 K-Medoids"""
     def __init__(self, dists: np.ndarray, k: int, max_iter: int = 200, n_trials: int = 20, seed: int = 42):
         self.dists = dists
         self.k = k
@@ -57,8 +57,8 @@ class KMedoids:
     def run(self):
         N = self.dists.shape[0]
         rng = random.Random(self.seed)
-        best = None
         best_cost = float("inf")
+        best = None
 
         def assign_and_cost(meds):
             labels = np.zeros(N, dtype=int)
@@ -70,7 +70,7 @@ class KMedoids:
             return labels, cost
 
         for _ in range(self.n_trials):
-            meds = rng.sample(range(N), self.k)
+            meds = rng.sample(range(N), min(self.k, N))
             labels, cost = assign_and_cost(meds)
             improved = True
             it = 0
@@ -79,7 +79,8 @@ class KMedoids:
                 it += 1
                 for mi, m in enumerate(list(meds)):
                     for h in range(N):
-                        if h in meds: continue
+                        if h in meds:
+                            continue
                         trial = list(meds)
                         trial[mi] = h
                         t_labels, t_cost = assign_and_cost(trial)
@@ -93,86 +94,106 @@ class KMedoids:
 
 
 # ======================================================
-# ========== 模型与检测器 ==============================
+# ========== 检测器实现 =================================
 # ======================================================
-class UnicornClassify:
+class UnicornClassify(BaseClassify):
     def __init__(self, cfg: Optional[UnicornConfig] = None, **kwargs):
+        super().__init__()
         self.cfg = cfg or UnicornConfig()
         for k, v in kwargs.items():
             if hasattr(self.cfg, k):
                 setattr(self.cfg, k, v)
-        self.models: Dict[str, Any] = {}
 
-    # ---------- 建模 ----------
-    def _build_submodel(self, sketches: np.ndarray) -> Dict[str, Any]:
-        dists = pairwise_hamming(sketches)
-        best_cost, best_res = float("inf"), None
-        for k in range(1, self.cfg.max_k + 1):
-            km = KMedoids(dists, k, self.cfg.max_iter, self.cfg.n_trials)
-            meds, labels = km.run()
-            cost = sum(dists[i, meds[labels[i]]] for i in range(len(labels)))
-            if cost < best_cost:
-                best_cost, best_res = cost, (meds, labels)
+    # ---------- 模型结构 ----------
+    def _build_model(self):
+        """这里模型本质是一个存放多个子模型的字典"""
+        return {}
 
-        meds, labels = best_res
-        clusters = []
-        for j, m_idx in enumerate(meds):
-            members = np.where(labels == j)[0]
-            if len(members) == 0:
-                continue
-            medoid = sketches[m_idx]
-            dists_j = [hamming(sketches[i], medoid) for i in members]
-            clusters.append({
-                "medoid": medoid.tolist(),
-                "mean": float(np.mean(dists_j)),
-                "max": float(np.max(dists_j)),
-                "std": float(np.std(dists_j) + 1e-12),
-            })
-        return {"clusters": clusters}
+    def save(self, path=None):
+        """覆盖 BaseClassify.save，用 JSON 保存聚类模型"""
+        path = path or self.cfg.model_save_path
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(self.model, f)
+        print(f"[Save] model saved to {path}")
 
-    # ---------- 训练 ----------
-    def train(self, train_data: Dict[str, np.ndarray]):
-        """
-        train_data: { "file_name": np.ndarray(sketch_vectors) }
-        """
-        print(f"[UNICORN] Training {len(train_data)} benign submodels...")
-        for name, sketches in train_data.items():
-            print(f"  -> {name}: {sketches.shape}")
-            self.models[name] = self._build_submodel(sketches)
-
-        # 保存
-        os.makedirs(os.path.dirname(self.cfg.model_save_path) or ".", exist_ok=True)
-        with open(self.cfg.model_save_path, "w") as f:
-            json.dump(self.models, f)
-        print(f"[Save] Model saved to {self.cfg.model_save_path}")
-
-    # ---------- 加载 ----------
-    def load(self, path: Optional[str] = None):
+    def load(self, path=None):
+        """覆盖 BaseClassify.load，用 JSON 读取"""
         path = path or self.cfg.model_save_path
         with open(path, "r") as f:
-            self.models = json.load(f)
-        print(f"[Load] Model loaded from {path} ({len(self.models)} submodels)")
+            self.model = json.load(f)
+        print(f"[Load] model loaded from {path} ({len(self.model)} submodels)")
+
+    # ---------- 训练逻辑 ----------
+    def _train_loop(self, embeddings, **kwargs):
+        """
+        embeddings: dict 或 ndarray
+            - 如果是 dict: {name: np.ndarray(sketch_vectors)}
+            - 如果是 ndarray: 单一数据集
+        """
+        cfg = self.cfg
+        if isinstance(embeddings, np.ndarray):
+            train_data = {"default": embeddings}
+        elif isinstance(embeddings, dict):
+            train_data = embeddings
+        else:
+            raise TypeError("embeddings 必须是 ndarray 或 dict[str, ndarray]")
+
+        print(f"[UNICORN] Training {len(train_data)} benign submodels...")
+
+        for name, sketches in train_data.items():
+            print(f"  -> {name}: {sketches.shape}")
+            dists = pairwise_hamming(sketches)
+            best_cost, best_res = float("inf"), None
+
+            # K-Medoids 搜索最佳聚类
+            for k in range(1, cfg.max_k + 1):
+                km = KMedoids(dists, k, cfg.max_iter, cfg.n_trials)
+                meds, labels = km.run()
+                cost = sum(dists[i, meds[labels[i]]] for i in range(len(labels)))
+                if cost < best_cost:
+                    best_cost, best_res = cost, (meds, labels)
+
+            meds, labels = best_res
+            clusters = []
+            for j, m_idx in enumerate(meds):
+                members = np.where(labels == j)[0]
+                if len(members) == 0:
+                    continue
+                medoid = sketches[m_idx]
+                dists_j = [hamming(sketches[i], medoid) for i in members]
+                clusters.append({
+                    "medoid": medoid.tolist(),
+                    "mean": float(np.mean(dists_j)),
+                    "max": float(np.max(dists_j)),
+                    "std": float(np.std(dists_j) + 1e-12),
+                })
+            self.model[name] = {"clusters": clusters}
+
+        # 保存
+        self.save(cfg.model_save_path)
 
     # ---------- 检测 ----------
-    def predict(self, sketches: np.ndarray, threshold: Optional[float] = None) -> Tuple[np.ndarray, Dict]:
+    def predict(self, embeddings: np.ndarray, threshold: Optional[float] = None) -> Tuple[np.ndarray, Dict]:
         """
         返回：
             labels: 0 正常 / 1 异常
-            diff_vectors: 异常点详情
+            diff_vectors: 异常详情
         """
-        if not self.models:
-            raise RuntimeError("Model not loaded or trained.")
+        if self.model is None or not self.model:
+            raise RuntimeError("model 未训练或未加载")
 
-        num_stds = self.cfg.num_stds
-        metric = self.cfg.metric
-        threshold = threshold or self.cfg.threshold
-        pred_labels = np.zeros(len(sketches), dtype=int)
-        diff_vectors = {}
-        scores = {}
+        cfg = self.cfg
+        num_stds = cfg.num_stds
+        metric = cfg.metric
+        threshold = threshold or cfg.threshold
 
-        for i, sk in enumerate(sketches):
+        pred_labels = np.zeros(len(embeddings), dtype=int)
+        diff_vectors, scores = {}, {}
+
+        for i, sk in enumerate(embeddings):
             distances = []
-            for submodel in self.models.values():
+            for submodel in self.model.values():
                 for c in submodel["clusters"]:
                     d = hamming(sk, np.array(c["medoid"]))
                     distances.append({
@@ -181,7 +202,8 @@ class UnicornClassify:
                         "max": c["max"],
                         "std": c["std"],
                     })
-            # 计算阈值是否异常
+
+            # 判定
             abnormal = True
             for dd in distances:
                 mean_ok = dd["d"] <= dd["mean"] + num_stds * dd["std"]

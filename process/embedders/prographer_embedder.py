@@ -11,7 +11,7 @@ from .base import GraphEmbedderBase
 class ProGrapherEmbedder(GraphEmbedderBase):
     # 新增：定义一个类级别的常量来存储模型保存路径
     # 这样修改路径时只需要改这一个地方。
-    MODEL_SAVE_PATH = 'prographer_encoder.pth'
+    _default_path = 'prographer_encoder.pth'
 
     def __init__(self, snapshot_sequence,
                  # --- Encoder (Graph2Vec) Parameters from Paper ---
@@ -23,8 +23,7 @@ class ProGrapherEmbedder(GraphEmbedderBase):
                  epochs=10,
                  # epochs=1,
                  weight_decay=1e-5,
-                 # --- 新增：序列长度参数 ---
-                 sequence_length=12
+                 model_path=None
                  ):
 
         super().__init__(snapshot_sequence,features=None,mapp=None)
@@ -38,6 +37,7 @@ class ProGrapherEmbedder(GraphEmbedderBase):
         self.rsg_vocab = {}
         self.snapshot_embeddings_layer = None
         self.rsg_embeddings_layer = None
+        self.model_path = model_path or self._default_path
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"--- ProGrapherEmbedder will use device: {self.device} ---")
 
@@ -198,7 +198,7 @@ class ProGrapherEmbedder(GraphEmbedderBase):
 
         print("\nEncoder training complete.")
 
-        self.save_model(self.MODEL_SAVE_PATH)
+        self.save_model(self.model_path)
 
 
     def save_model(self, path):
@@ -223,51 +223,42 @@ class ProGrapherEmbedder(GraphEmbedderBase):
         print("Encoder model saved successfully.")
 
     @classmethod
-    def load(cls, path, snapshot_sequence):
+    def load(cls, snapshot_sequence, path = None):
         """
         从文件加载预训练的编码器模型。
-        【修改】适应测试时不同的快照数量
+        要求测试时快照数量与训练时相同。
         """
+        path = path or cls._default_path
         print(f"Loading encoder model from {path}...")
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         state = torch.load(path, map_location=device)
 
+        # 初始化实例
         instance = cls(snapshot_sequence, **state['params'])
 
-        # 【修改】使用当前快照序列的长度，而不是训练时保存的长度
+        # 获取信息
         current_num_snapshots = len(snapshot_sequence)
-        num_rsgs = len(state['rsg_vocab'])
         original_num_snapshots = state['num_snapshots']
-        
+        num_rsgs = len(state['rsg_vocab'])
+
         print(f"Original training snapshots: {original_num_snapshots}")
         print(f"Current test snapshots: {current_num_snapshots}")
 
-        # 【关键修改】创建新的快照嵌入层以适应当前快照数量
-        instance.snapshot_embeddings_layer = nn.Embedding(current_num_snapshots, instance.embedding_dim)
+        # ---------- 重新构建 embedding 层 ----------
+        instance.snapshot_embeddings_layer = nn.Embedding(original_num_snapshots, instance.embedding_dim)
         instance.rsg_embeddings_layer = nn.Embedding(num_rsgs, instance.embedding_dim)
 
-        # 【修改】只加载RSG嵌入的权重，快照嵌入重新初始化
-        # RSG嵌入是通用的，可以直接加载
+        # ---------- 加载参数 ----------
+        instance.snapshot_embeddings_layer.load_state_dict(state['snapshot_embeddings_state_dict'])
         instance.rsg_embeddings_layer.load_state_dict(state['rsg_embeddings_state_dict'])
-        
-        # 【新增】快照嵌入需要重新初始化，因为数量可能不同
-        if current_num_snapshots == original_num_snapshots:
-            # 如果快照数量相同，直接加载
-            instance.snapshot_embeddings_layer.load_state_dict(state['snapshot_embeddings_state_dict'])
-            print("Loaded original snapshot embeddings (same snapshot count)")
-        else:
-            # 如果快照数量不同，重新初始化快照嵌入
-            nn.init.xavier_uniform_(instance.snapshot_embeddings_layer.weight)
-            print(f"Reinitialized snapshot embeddings for {current_num_snapshots} snapshots")
-        
         instance.rsg_vocab = state['rsg_vocab']
 
-        instance.snapshot_embeddings_layer.to(instance.device)
-        instance.rsg_embeddings_layer.to(instance.device)
+        # ---------- 模型设备和模式 ----------
+        instance.snapshot_embeddings_layer.to(device)
+        instance.rsg_embeddings_layer.to(device)
         instance.snapshot_embeddings_layer.eval()
         instance.rsg_embeddings_layer.eval()
-
-        print("Encoder model loaded successfully.")
+        print("Encoder model loaded successfully")
         return instance
 
     def get_snapshot_embeddings(self, snapshot_sequence=None):

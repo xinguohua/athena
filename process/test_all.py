@@ -21,8 +21,10 @@ from process.embedders import get_embedder_by_name
 # ========================================================================
 # 全局配置
 # ========================================================================
-EMBEDDER_NAME = "prographer"
-CLASSIFY_NAME = "prographer"
+# EMBEDDER_NAME = "prographer"
+# CLASSIFY_NAME = "prographer"
+EMBEDDER_NAME = "unicorn"
+CLASSIFY_NAME = "unicorn"
 
 SEQUENCE_LENGTH_L = 12
 DETECTION_THRESHOLD = 0.016
@@ -268,18 +270,17 @@ def print_debug_info(all_snapshots, eval_true, eval_pred, eval_start_idx):
 
 def predict_snapshots(
     snapshot_embeddings: np.ndarray,
-    model_path: Path,
 ) -> Tuple[np.ndarray, Dict]:
     """预测快照异常标签"""
 
     classify = get_classfy(CLASSIFY_NAME)
-    classify.load(model_path)
+    classify.load()
     pred_labels, diff_vectors  = classify.predict(snapshot_embeddings)
 
     return pred_labels, diff_vectors
 
 
-def run_evaluation(detector_model_path: Path, encoder_model_path: Path, path_map: dict) -> None:
+def run_evaluation(path_map: dict) -> None:
     snapshot_file = "snapshot_data.pkl"
     if not os.path.exists(snapshot_file):
         print(f"❌ 错误：快照数据文件不存在: {snapshot_file}")
@@ -313,12 +314,11 @@ def run_evaluation(detector_model_path: Path, encoder_model_path: Path, path_map
     print(f"  - 真实标签: {true_labels.tolist()}")
 
     embedder_cls = get_embedder_by_name(EMBEDDER_NAME)
-    embedder = embedder_cls.load(encoder_model_path, snapshot_sequence=all_snapshots)
+    embedder = embedder_cls.load(snapshot_sequence=all_snapshots)
     snapshot_embeddings = embedder.get_snapshot_embeddings()
 
     pred_labels, diff_vectors = predict_snapshots(
-        snapshot_embeddings[malicious_idx_start: malicious_idx_end + 1],
-        detector_model_path,
+        snapshot_embeddings[malicious_idx_start: malicious_idx_end + 1]
     )
     print(f"检测到 {len(diff_vectors)} 个异常快照")
     print(f"预测标签长度: {len(pred_labels)}")
@@ -358,11 +358,5 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
 
     env = config["local"] if "windows" in sys.platform else config["remote"]
-    detector_path, encoder_path = Path(env["DETECTOR_MODEL_PATH"]), Path(env["ENCODER_MODEL_PATH"])
 
-    if not detector_path.exists():
-        sys.exit(f"[ERROR] 检测器模型不存在: {detector_path}")
-    if not encoder_path.exists():
-        sys.exit(f"[ERROR] 编码器模型不存在: {encoder_path}")
-
-    run_evaluation(detector_path, encoder_path, env["path_map"])
+    run_evaluation(env["path_map"])

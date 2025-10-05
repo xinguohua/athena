@@ -5,6 +5,7 @@ class BaseClassify(ABC):
     def __init__(self):
         self.model = None
 
+
     @abstractmethod
     def _build_model(self):
         pass
@@ -27,7 +28,5 @@ class BaseClassify(ABC):
     def save(self, path):
         torch.save(self.model.state_dict(), path)
 
-    def load(self, path):
-        self.model = self._build_model()
-        self.model.load_state_dict(torch.load(path))
-        return self.model
+    def load(self):
+        pass

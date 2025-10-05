@@ -4,7 +4,9 @@ import random
 import mmh3
 from collections import defaultdict
 import numpy as np
-
+import json
+import pickle
+import os
 from process.embedders.base import GraphEmbedderBase
 
 
@@ -217,14 +219,23 @@ class HistoSketch:
 # === UnicornGraphEmbedder =================================
 # ===========================================================
 class UnicornGraphEmbedder(GraphEmbedderBase):
+    _default_path = "unicorn_embedder.pkl"
+
     def __init__(self, snapshots, features=None, mapp=None,
                  R=3, decay_lambda=0.0005, sketch_size=256,
-                 max_bins=20000):
+                 max_bins=20000, model_path=None):
         super().__init__(snapshots, features, mapp)
         self.snapshots = self.G
         self.wl = WLHistogram(R=R, decay_lambda=decay_lambda, max_bins=max_bins)
         self.hs = HistoSketch(sketch_size=sketch_size)
         self.sketch_snapshots = []
+        self.cfg = dict(
+            R=R,
+            decay_lambda=decay_lambda,
+            sketch_size=sketch_size,
+            max_bins=max_bins,
+        )
+        self.model_path = model_path or self._default_path
 
     def train(self):
         for sidx, g in enumerate(self.snapshots):
@@ -245,12 +256,63 @@ class UnicornGraphEmbedder(GraphEmbedderBase):
             sketch = self.hs.sketch(self.wl.hist)
             print(f"[snapshot {sidx}] sketch: {time.time()-t0s:.4f}s (bins={len(self.wl.hist)})")
             self.sketch_snapshots.append((max(timestamps), sketch))
+        self.save(self.model_path)
+        print(f"[UnicornGraphEmbedder] 已自动保存模型到 {self.model_path}")
 
     def get_snapshot_embeddings(self, snapshot_sequence=None):
         arr = np.array([s for _, s in self.sketch_snapshots], dtype=np.uint64)
         floats = arr.astype(np.float64) / float(1 << 64)
         normed = (floats - floats.mean(0)) / (floats.std(0) + 1e-9)
         return normed.astype(np.float32)
+
+    # --------------------------
+    # 保存模型
+    # --------------------------
+    def save(self, path="unicorn_embedder.pkl"):
+        """
+        保存 WL 状态 + Sketch 快照 + 参数
+        """
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        state = {
+            "cfg": self.cfg,
+            "wl_hist": {
+                "hist": dict(self.wl.hist),
+                "labels": self.wl.labels,
+                "last_update": self.wl.last_update,
+            },
+            "sketch_snapshots": self.sketch_snapshots,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+        with open(path, "wb") as f:
+            pickle.dump(state, f)
+        print(f"[UnicornGraphEmbedder] 模型保存到 {path}")
+
+    @classmethod
+    def load(cls, snapshot_sequence, path=None):
+        """
+        从文件加载预训练的嵌入器
+        """
+        path = path or cls._default_path
+        print(f"[UnicornGraphEmbedder] 从 {path} 加载模型中...")
+        with open(path, "rb") as f:
+            state = pickle.load(f)
+
+        # 重新实例化
+        cfg = state["cfg"]
+        instance = cls(snapshot_sequence or [], **cfg)
+
+        # 恢复 WLHistogram 状态
+        wl_state = state["wl_hist"]
+        instance.wl.hist = defaultdict(float, wl_state["hist"])
+        instance.wl.labels = wl_state["labels"]
+        instance.wl.last_update = wl_state["last_update"]
+
+        # 恢复 sketch 向量
+        instance.sketch_snapshots = state["sketch_snapshots"]
+
+        print(f"[UnicornGraphEmbedder] 加载成功，共 {len(instance.sketch_snapshots)} 个快照。")
+        return instance
 
     def embed_nodes(self):
         """暂不实现节点嵌入"""

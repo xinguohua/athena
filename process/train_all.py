@@ -8,11 +8,12 @@ from process.classfy import get_classfy
 
 # ---------------- 配置参数 ----------------
 CONFIG_PATH = "config.yaml"
-# DATASET_NAME = "atlas"          # 可切换数据集
-DATASET_NAME = "cadets"          # 可切换数据集
+DATASET_NAME = "atlas"          # 可切换数据集
+# DATASET_NAME = "cadets"          # 可切换数据集
 # EMBEDDER_NAME = "prographer"    # 嵌入器
 EMBEDDER_NAME = "unicorn"    # 嵌入器
-CLASSIFY_NAME = "prographer"     # 训练器
+# CLASSIFY_NAME = "prographer"     # 训练器
+CLASSIFY_NAME = "unicorn"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 

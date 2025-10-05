@@ -227,3 +227,9 @@ class PrographerClassify(BaseClassify):
             print(f"快照 {i:2d}   | {score:.6f}   | {status}")
         print("-" * 40 + "\n")
         return pred_labels, diff_vectors
+
+    def load(self, path=None):
+        path = path or self.cfg.model_save_path
+        self.model = self._build_model()
+        self.model.load_state_dict(torch.load(path))
+        return self.model
