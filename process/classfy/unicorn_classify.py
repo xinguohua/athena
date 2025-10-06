@@ -46,7 +46,6 @@ def hamming(a, b):
 
 
 class KMedoids:
-    """简化版 K-Medoids"""
     def __init__(self, dists: np.ndarray, k: int, max_iter: int = 200, n_trials: int = 20, seed: int = 42):
         self.dists = dists
         self.k = k
