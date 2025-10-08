@@ -179,7 +179,10 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             edges = g.get_edgelist()
             types = g.es["actions"]
             # 假设有 timestamp 属性，若无则用 sidx
-            timestamps = g.es.get("timestamp", [sidx] * len(edges))
+            try:
+                timestamps = g.es["timestamp"]
+            except (KeyError, AttributeError):
+                timestamps = [sidx] * len(edges)
 
             # 映射到全局节点 ID
             node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
@@ -200,10 +203,11 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                                            for u, v in edges]).t().to(self.device)
 
             # 节点特征：使用当前状态
-            node_features = torch.FloatTensor([
+            node_features_np = np.array([
                 self.node_states.get(nid, np.zeros(self.embedding_dim))
                 for nid in sorted(all_nodes)
-            ]).to(self.device)
+            ], dtype=np.float32)
+            node_features = torch.from_numpy(node_features_np).to(self.device)
 
             # 边特征：编码边类型（one-hot 或 embedding）
             edge_type_indices = [self.edge_type_vocab.get(types[i], 0) for i in range(len(edges))]
@@ -217,14 +221,14 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             for layer in self.gnn_layers:
                 x = layer(x, edge_index, edge_features)
 
-            # 更新活跃节点的状态
-            active_node_ids = set(node_gids)
-            for nid in active_node_ids:
-                idx = node_id_map[nid]
-                self._update_node_state(nid, x[idx].detach().numpy())
+                # 更新活跃节点的状态 (CUDA tensor 需要先 .cpu() 再 .numpy())
+                active_node_ids = set(node_gids)
+                for nid in active_node_ids:
+                    idx = node_id_map[nid]
+                    self._update_node_state(nid, x[idx].detach().cpu().numpy())
 
-            # 快照级嵌入：平均池化所有节点状态（或只用活跃节点）
-            snapshot_emb = x.mean(dim=0).detach().numpy()
+                # 快照级嵌入：平均池化所有节点状态（或只用活跃节点）
+                snapshot_emb = x.mean(dim=0).detach().cpu().numpy()
             self.snapshot_embeddings_list.append(snapshot_emb)
 
             t_elapsed = time.time() - t0
