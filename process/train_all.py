@@ -38,6 +38,12 @@ def build_embeddings(snapshots):
     embedder_cls = get_embedder_by_name(EMBEDDER_NAME)
     embedder = embedder_cls(snapshots)
     embedder.train()
+    
+    # 保存 embedder 模型 (如果有 save_model 方法)
+    if hasattr(embedder, 'save_model'):
+        model_path = f"{EMBEDDER_NAME}_model.pth"
+        embedder.save_model(model_path)
+    
     snapshot_embeddings = embedder.get_snapshot_embeddings()
     print("\n--- Encoder 过程完成 ---")
     print(f"[嵌入] 快照嵌入序列: {snapshot_embeddings.shape}")

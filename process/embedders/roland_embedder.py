@@ -269,3 +269,55 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
     def embed_edges(self):
         """边嵌入（暂未实现，可扩展）"""
         return {}
+
+    def save_model(self, path="roland_model.pth"):
+        """保存模型状态"""
+        state = {
+            'params': {
+                'embedding_dim': self.embedding_dim,
+                'num_layers': self.num_layers,
+                'update_method': self.update_method,
+                'alpha': self.alpha,
+            },
+            'gnn_layers_state': [layer.state_dict() for layer in self.gnn_layers],
+            'gru_cell_state': self.gru_cell.state_dict() if self.update_method == 'gru' else None,
+            'node_states': self.node_states,
+            'edge_type_vocab': self.edge_type_vocab,
+            'snapshot_embeddings': self.snapshot_embeddings_list,
+            'num_snapshots': len(self.snapshot_embeddings_list),
+        }
+        torch.save(state, path)
+        print(f"[ROLAND] 模型已保存到 {path}")
+
+    @classmethod
+    def load(cls, snapshot_sequence, path=None):
+        """加载预训练模型"""
+        if path is None:
+            path = "roland_model.pth"
+        
+        print(f"[ROLAND] 从 {path} 加载模型...")
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        state = torch.load(path, map_location=device)
+
+        # 创建实例
+        instance = cls(snapshot_sequence, **state['params'])
+
+        # 恢复 GNN 层状态
+        for i, layer_state in enumerate(state['gnn_layers_state']):
+            instance.gnn_layers[i].load_state_dict(layer_state)
+            instance.gnn_layers[i].to(device)
+            instance.gnn_layers[i].eval()
+
+        # 恢复 GRU 状态
+        if state['gru_cell_state'] is not None:
+            instance.gru_cell.load_state_dict(state['gru_cell_state'])
+            instance.gru_cell.to(device)
+            instance.gru_cell.eval()
+
+        # 恢复其他状态
+        instance.node_states = state['node_states']
+        instance.edge_type_vocab = state['edge_type_vocab']
+        instance.snapshot_embeddings_list = state['snapshot_embeddings']
+
+        print(f"[ROLAND] 模型加载成功 (原始训练快照数: {state['num_snapshots']}, 当前测试快照数: {len(snapshot_sequence)})")
+        return instance
