@@ -178,8 +178,11 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             # 提取边和特征
             edges = g.get_edgelist()
             types = g.es["type"]
-            # 假设有 timestamp 属性，若无则用 sidx
-            timestamps = g.es.get("timestamp", [sidx] * len(edges))
+            # 尝试获取 timestamp 属性，若不存在则使用 sidx
+            try:
+                timestamps = g.es["timestamp"]
+            except (KeyError, AttributeError):
+                timestamps = [sidx] * len(edges)
 
             # 映射到全局节点 ID
             node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
