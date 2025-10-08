@@ -177,8 +177,13 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
 
             # 提取边和特征
             edges = g.get_edgelist()
+<<<<<<< HEAD
             types = g.es["type"]
             # 尝试获取 timestamp 属性，若不存在则使用 sidx
+=======
+            types = g.es["actions"]
+            # 假设有 timestamp 属性，若无则用 sidx
+>>>>>>> refs/remotes/origin/main
             try:
                 timestamps = g.es["timestamp"]
             except (KeyError, AttributeError):
@@ -202,7 +207,11 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             edge_index = torch.LongTensor([[node_id_map[node_gids[u]], node_id_map[node_gids[v]]]
                                            for u, v in edges]).t().to(self.device)
 
+<<<<<<< HEAD
             # 节点特征：使用当前状态 (先转 numpy array 再转 tensor,避免警告)
+=======
+            # 节点特征：使用当前状态
+>>>>>>> refs/remotes/origin/main
             node_features_np = np.array([
                 self.node_states.get(nid, np.zeros(self.embedding_dim))
                 for nid in sorted(all_nodes)
@@ -221,6 +230,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             for layer in self.gnn_layers:
                 x = layer(x, edge_index, edge_features)
 
+<<<<<<< HEAD
             # 更新活跃节点的状态 (CUDA tensor 需要先 .cpu() 再 .numpy())
             active_node_ids = set(node_gids)
             for nid in active_node_ids:
@@ -229,6 +239,16 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
 
             # 快照级嵌入：平均池化所有节点状态（或只用活跃节点）
             snapshot_emb = x.mean(dim=0).detach().cpu().numpy()
+=======
+                # 更新活跃节点的状态 (CUDA tensor 需要先 .cpu() 再 .numpy())
+                active_node_ids = set(node_gids)
+                for nid in active_node_ids:
+                    idx = node_id_map[nid]
+                    self._update_node_state(nid, x[idx].detach().cpu().numpy())
+
+                # 快照级嵌入：平均池化所有节点状态（或只用活跃节点）
+                snapshot_emb = x.mean(dim=0).detach().cpu().numpy()
+>>>>>>> refs/remotes/origin/main
             self.snapshot_embeddings_list.append(snapshot_emb)
 
             t_elapsed = time.time() - t0
