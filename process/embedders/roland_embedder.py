@@ -55,6 +55,9 @@ class ResidualEdgeConv(nn.Module):
 
         # 残差连接（如果维度不匹配需要投影）
         self.residual = nn.Linear(in_dim, out_dim) if in_dim != out_dim else nn.Identity()
+        
+        # 添加 LayerNorm 提高数值稳定性
+        self.layer_norm = nn.LayerNorm(out_dim)
 
     def forward(self, node_features, edge_index, edge_features=None):
         """
@@ -84,7 +87,15 @@ class ResidualEdgeConv(nn.Module):
 
         # 残差连接
         out = aggr + self.residual(node_features)
-        return F.relu(out)
+        
+        # LayerNorm + ReLU
+        out = self.layer_norm(out)
+        out = F.relu(out)
+        
+        # 梯度裁剪,防止数值爆炸
+        out = torch.clamp(out, -10.0, 10.0)
+        
+        return out
 
 
 class ROLANDGraphEmbedder(GraphEmbedderBase):
@@ -141,10 +152,16 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
     def _init_node_state(self, node_id):
         """初始化节点状态（随机小值）"""
         if node_id not in self.node_states:
-            self.node_states[node_id] = np.random.randn(self.embedding_dim) * 0.01
+            # 使用更小的初始化值,避免数值不稳定
+            self.node_states[node_id] = np.random.randn(self.embedding_dim) * 0.001
 
     def _update_node_state(self, node_id, new_embedding):
         """更新节点状态（moving average 或 GRU）"""
+        # 检查 NaN
+        if np.isnan(new_embedding).any():
+            print(f"[WARNING] NaN detected in embedding for node {node_id}, skipping update")
+            return
+            
         if self.update_method == 'moving_average':
             old = self.node_states.get(node_id, np.zeros(self.embedding_dim))
             self.node_states[node_id] = (1 - self.alpha) * old + self.alpha * new_embedding
@@ -239,8 +256,25 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
 
             # 多层 GNN 传播
             x = node_features
+            nan_detected = False
             for layer in self.gnn_layers:
                 x = layer(x, edge_index, edge_features)
+                # 检查 NaN
+                if torch.isnan(x).any():
+                    print(f"[ERROR] NaN detected in GNN output at snapshot {sidx}")
+                    print(f"  - Input features range: [{node_features.min():.4f}, {node_features.max():.4f}]")
+                    nan_detected = True
+                    break
+            
+            # 如果检测到 NaN,使用上一个快照的嵌入或零向量
+            if nan_detected:
+                if self.snapshot_embeddings_list:
+                    snapshot_emb = self.snapshot_embeddings_list[-1].copy()
+                else:
+                    snapshot_emb = np.zeros(self.embedding_dim, dtype=np.float32)
+                self.snapshot_embeddings_list.append(snapshot_emb)
+                print(f"[snapshot {sidx}] Skipped due to NaN, using fallback embedding")
+                continue
 
             # 更新活跃节点的状态 (CUDA tensor 需要先 .cpu() 再 .numpy())
             active_node_ids = set(node_gids)
