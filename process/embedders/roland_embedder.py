@@ -143,10 +143,10 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             old = self.node_states.get(node_id, np.zeros(self.embedding_dim))
             self.node_states[node_id] = (1 - self.alpha) * old + self.alpha * new_embedding
         elif self.update_method == 'gru':
-            old = torch.FloatTensor(self.node_states.get(node_id, np.zeros(self.embedding_dim)))
-            new = torch.FloatTensor(new_embedding)
+            old = torch.FloatTensor(self.node_states.get(node_id, np.zeros(self.embedding_dim))).to(self.device)
+            new = torch.FloatTensor(new_embedding).to(self.device)
             updated = self.gru_cell(new.unsqueeze(0), old.unsqueeze(0)).squeeze(0)
-            self.node_states[node_id] = updated.detach().numpy()
+            self.node_states[node_id] = updated.detach().cpu().numpy()
         else:
             self.node_states[node_id] = new_embedding
 
@@ -177,7 +177,20 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
 
             # 提取边和特征
             edges = g.get_edgelist()
-
+            
+            # 处理空快照（没有边的情况）
+            if len(edges) == 0:
+                print(f"[snapshot {sidx}] 跳过空快照（无边）")
+                # 即使没有新边，也要保存当前状态作为快照嵌入
+                if self.node_states:
+                    current_states = np.array([self.node_states.get(nid, np.zeros(self.embedding_dim)) 
+                                              for nid in sorted(all_nodes)], dtype=np.float32)
+                    snapshot_emb = current_states.mean(axis=0)
+                else:
+                    snapshot_emb = np.zeros(self.embedding_dim, dtype=np.float32)
+                self.snapshot_embeddings_list.append(snapshot_emb)
+                continue
+                
             types = g.es["actions"]
             # 假设有 timestamp 属性，若无则用 sidx
             try:
@@ -199,10 +212,12 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             global_edges = [(node_gids[u], node_gids[v]) for u, v in edges]
             self.edge_bank.add_edges(global_edges, types, timestamps)
 
-            # 构造当前快照的 PyTorch 数据
-            edge_index = torch.LongTensor([[node_id_map[node_gids[u]], node_id_map[node_gids[v]]]
-                                           for u, v in edges]).t().to(self.device)
+            # 构造当前快照的 PyTorch 数据 (edge_index: shape (2, E))
+            src_nodes = [node_id_map[node_gids[u]] for u, v in edges]
+            dst_nodes = [node_id_map[node_gids[v]] for u, v in edges]
+            edge_index = torch.LongTensor([src_nodes, dst_nodes]).to(self.device)
 
+            # 节点特征：使用当前状态 (先转 numpy array 再转 tensor,避免警告)
             node_features_np = np.array([
                 self.node_states.get(nid, np.zeros(self.embedding_dim))
                 for nid in sorted(all_nodes)
@@ -221,15 +236,14 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             for layer in self.gnn_layers:
                 x = layer(x, edge_index, edge_features)
 
+            # 更新活跃节点的状态 (CUDA tensor 需要先 .cpu() 再 .numpy())
+            active_node_ids = set(node_gids)
+            for nid in active_node_ids:
+                idx = node_id_map[nid]
+                self._update_node_state(nid, x[idx].detach().cpu().numpy())
 
-                # 更新活跃节点的状态 (CUDA tensor 需要先 .cpu() 再 .numpy())
-                active_node_ids = set(node_gids)
-                for nid in active_node_ids:
-                    idx = node_id_map[nid]
-                    self._update_node_state(nid, x[idx].detach().cpu().numpy())
-
-                # 快照级嵌入：平均池化所有节点状态（或只用活跃节点）
-                snapshot_emb = x.mean(dim=0).detach().cpu().numpy()
+            # 快照级嵌入：平均池化所有节点状态（或只用活跃节点）
+            snapshot_emb = x.mean(dim=0).detach().cpu().numpy()
             self.snapshot_embeddings_list.append(snapshot_emb)
 
             t_elapsed = time.time() - t0
