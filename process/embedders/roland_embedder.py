@@ -92,8 +92,8 @@ class ResidualEdgeConv(nn.Module):
         out = self.layer_norm(out)
         out = F.relu(out)
         
-        # 梯度裁剪,防止数值爆炸
-        out = torch.clamp(out, -10.0, 10.0)
+        # 温和的梯度裁剪,保留更多信息
+        out = torch.clamp(out, -50.0, 50.0)
         
         return out
 
@@ -106,7 +106,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
 
     def __init__(self, snapshots, features=None, mapp=None,
                  embedding_dim=256, num_layers=2,
-                 update_method='moving_average', alpha=0.5,
+                 update_method='moving_average', alpha=0.7,
                  model_path=None):
         """
         Args:
@@ -114,7 +114,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             embedding_dim: 节点嵌入维度 (默认256,与Prographer分类器匹配)
             num_layers: GNN 层数
             update_method: 'moving_average' 或 'gru'
-            alpha: moving_average 的更新率
+            alpha: moving_average 的更新率 (默认0.7,更重视新信息)
             model_path: 模型保存路径，默认使用 _default_path
         """
         super().__init__(snapshots, features, mapp)
@@ -150,10 +150,11 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             self.gru_cell = nn.GRUCell(self.embedding_dim, self.embedding_dim).to(self.device)
 
     def _init_node_state(self, node_id):
-        """初始化节点状态（随机小值）"""
+        """初始化节点状态（Xavier初始化）"""
         if node_id not in self.node_states:
-            # 使用更小的初始化值,避免数值不稳定
-            self.node_states[node_id] = np.random.randn(self.embedding_dim) * 0.001
+            # 使用 Xavier/Glorot 初始化,更适合深度网络
+            limit = np.sqrt(6.0 / self.embedding_dim)
+            self.node_states[node_id] = np.random.uniform(-limit, limit, self.embedding_dim).astype(np.float32)
 
     def _update_node_state(self, node_id, new_embedding):
         """更新节点状态（moving average 或 GRU）"""
@@ -247,12 +248,24 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             ], dtype=np.float32)
             node_features = torch.from_numpy(node_features_np).to(self.device)
 
-            # 边特征：编码边类型（one-hot 或 embedding）
+            # 边特征：编码边类型 + 归一化的时间戳
             edge_type_indices = [self.edge_type_vocab.get(types[i], 0) for i in range(len(edges))]
             edge_features = torch.zeros(len(edges), 16, device=self.device)
+            
+            # One-hot 编码边类型
             for i, type_idx in enumerate(edge_type_indices):
-                if type_idx < 16:  # 简单映射到前16维
+                if type_idx < 15:  # 前15维用于类型
                     edge_features[i, type_idx] = 1.0
+            
+            # 第16维用于归一化的时间信息
+            if len(timestamps) > 0:
+                ts_array = np.array(timestamps, dtype=np.float32)
+                ts_min, ts_max = ts_array.min(), ts_array.max()
+                if ts_max > ts_min:
+                    ts_normalized = (ts_array - ts_min) / (ts_max - ts_min)
+                else:
+                    ts_normalized = np.ones_like(ts_array) * 0.5
+                edge_features[:, 15] = torch.from_numpy(ts_normalized).to(self.device)
 
             # 多层 GNN 传播
             x = node_features
@@ -282,8 +295,20 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 idx = node_id_map[nid]
                 self._update_node_state(nid, x[idx].detach().cpu().numpy())
 
-            # 快照级嵌入：平均池化所有节点状态（或只用活跃节点）
-            snapshot_emb = x.mean(dim=0).detach().cpu().numpy()
+            # 快照级嵌入：使用多种聚合方式增强表达能力
+            active_indices = [node_id_map[nid] for nid in active_node_ids]
+            if active_indices:
+                active_x = x[active_indices]  # 只取活跃节点
+                # 组合 mean, max, std 三种统计量
+                snapshot_mean = active_x.mean(dim=0).detach().cpu().numpy()
+                snapshot_max = active_x.max(dim=0)[0].detach().cpu().numpy()
+                snapshot_std = active_x.std(dim=0).detach().cpu().numpy()
+                
+                # 拼接并归一化 (使用前 embedding_dim 维度保持一致)
+                snapshot_emb = snapshot_mean * 0.5 + snapshot_max * 0.3 + snapshot_std * 0.2
+            else:
+                snapshot_emb = np.zeros(self.embedding_dim, dtype=np.float32)
+            
             self.snapshot_embeddings_list.append(snapshot_emb)
 
             t_elapsed = time.time() - t0
