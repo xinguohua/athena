@@ -89,10 +89,14 @@ class ResidualEdgeConv(nn.Module):
 
 class ROLANDGraphEmbedder(GraphEmbedderBase):
     """ROLAND 风格的动态图嵌入器"""
+    
+    # 类级别的默认模型保存路径
+    _default_path = 'roland_encoder.pth'
 
     def __init__(self, snapshots, features=None, mapp=None,
                  embedding_dim=256, num_layers=2,
-                 update_method='moving_average', alpha=0.5):
+                 update_method='moving_average', alpha=0.5,
+                 model_path=None):
         """
         Args:
             snapshots: list of igraph.Graph
@@ -100,6 +104,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             num_layers: GNN 层数
             update_method: 'moving_average' 或 'gru'
             alpha: moving_average 的更新率
+            model_path: 模型保存路径，默认使用 _default_path
         """
         super().__init__(snapshots, features, mapp)
         self.snapshots = self.G
@@ -107,6 +112,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         self.num_layers = num_layers
         self.update_method = update_method
         self.alpha = alpha
+        self.model_path = model_path or self._default_path
 
         # 初始化组件
         self.edge_bank = None
@@ -249,6 +255,9 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             t_elapsed = time.time() - t0
             print(f"[snapshot {sidx}] processed {len(edges)} edges, {len(active_node_ids)} nodes, {t_elapsed:.3f}s")
 
+        # 训练完成后自动保存模型
+        self.save_model(self.model_path)
+
     def get_snapshot_embeddings(self, snapshot_sequence=None):
         """返回快照嵌入矩阵"""
         if not self.snapshot_embeddings_list:
@@ -270,8 +279,9 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         """边嵌入（暂未实现，可扩展）"""
         return {}
 
-    def save_model(self, path="roland_model.pth"):
+    def save_model(self, path=None):
         """保存模型状态"""
+        path = path or self._default_path
         state = {
             'params': {
                 'embedding_dim': self.embedding_dim,
@@ -287,15 +297,14 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             'num_snapshots': len(self.snapshot_embeddings_list),
         }
         torch.save(state, path)
-        print(f"[ROLAND] 模型已保存到 {path}")
+        print(f"[ROLAND] Encoder model saved to {path}")
 
     @classmethod
     def load(cls, snapshot_sequence, path=None):
         """加载预训练模型"""
-        if path is None:
-            path = "roland_model.pth"
+        path = path or cls._default_path
         
-        print(f"[ROLAND] 从 {path} 加载模型...")
+        print(f"[ROLAND] Loading encoder model from {path}...")
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         state = torch.load(path, map_location=device)
 
@@ -319,5 +328,5 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         instance.edge_type_vocab = state['edge_type_vocab']
         instance.snapshot_embeddings_list = state['snapshot_embeddings']
 
-        print(f"[ROLAND] 模型加载成功 (原始训练快照数: {state['num_snapshots']}, 当前测试快照数: {len(snapshot_sequence)})")
+        print(f"[ROLAND] Encoder model loaded successfully (Original snapshots: {state['num_snapshots']}, Current snapshots: {len(snapshot_sequence)})")
         return instance
