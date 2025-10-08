@@ -177,7 +177,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
 
             # 提取边和特征
             edges = g.get_edgelist()
-            types = g.es["type"]
+            types = g.es["actions"]
             # 假设有 timestamp 属性，若无则用 sidx
             timestamps = g.es.get("timestamp", [sidx] * len(edges))
 
