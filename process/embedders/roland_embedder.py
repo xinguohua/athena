@@ -91,12 +91,12 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
     """ROLAND 风格的动态图嵌入器"""
 
     def __init__(self, snapshots, features=None, mapp=None,
-                 embedding_dim=128, num_layers=2,
+                 embedding_dim=256, num_layers=2,
                  update_method='moving_average', alpha=0.5):
         """
         Args:
             snapshots: list of igraph.Graph
-            embedding_dim: 节点嵌入维度
+            embedding_dim: 节点嵌入维度 (默认256,与Prographer分类器匹配)
             num_layers: GNN 层数
             update_method: 'moving_average' 或 'gru'
             alpha: moving_average 的更新率
