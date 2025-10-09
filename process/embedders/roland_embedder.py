@@ -157,21 +157,70 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             limit = np.sqrt(6.0 / self.embedding_dim)
             self.node_states[node_id] = np.random.uniform(-limit, limit, self.embedding_dim).astype(np.float32)
 
-    def _update_node_state(self, node_id, new_embedding):
-        """更新节点状态（moving average 或 GRU）"""
+    def _get_keep_ratio(self, node_id, existing_degree, new_degree, mode='linear'):
+        """
+        计算节点的 keep_ratio (ROLAND 核心创新)
+        state[t] = state[t-1] * keep_ratio + new_emb * (1 - keep_ratio)
+        
+        Args:
+            node_id: 节点ID
+            existing_degree: 历史累积度数
+            new_degree: 当前快照中的度数
+            mode: 'linear', 'constant', 'sqrt'
+        """
+        if mode == 'constant':
+            # 固定权重 (等价于原始 moving_average)
+            if existing_degree == 0 and new_degree > 0:
+                return 0.0  # 新节点完全使用新特征
+            return 1 - self.alpha
+        
+        elif mode == 'linear':
+            # 根据度数比例动态调整 (ROLAND 官方推荐)
+            if existing_degree == 0 and new_degree > 0:
+                return 0.0  # 新节点
+            total = existing_degree + new_degree
+            if total == 0:
+                return 1.0  # 孤立节点保持不变
+            return existing_degree / total  # 历史越多,保留越多
+        
+        elif mode == 'sqrt':
+            # 平方根衰减 (平滑版本)
+            if existing_degree == 0:
+                return 0.0
+            return np.sqrt(existing_degree) / (np.sqrt(existing_degree) + np.sqrt(new_degree + 1))
+        
+        else:
+            return 1 - self.alpha
+    
+    def _update_node_state(self, node_id, new_embedding, existing_degree=0, new_degree=0):
+        """更新节点状态（moving average 或 GRU，支持动态 keep_ratio）"""
         # 检查 NaN
         if np.isnan(new_embedding).any():
             print(f"[WARNING] NaN detected in embedding for node {node_id}, skipping update")
             return
-            
+        
+        old = self.node_states.get(node_id, np.zeros(self.embedding_dim))
+        
         if self.update_method == 'moving_average':
-            old = self.node_states.get(node_id, np.zeros(self.embedding_dim))
-            self.node_states[node_id] = (1 - self.alpha) * old + self.alpha * new_embedding
+            # ROLAND 官方方式: 动态 keep_ratio
+            keep_ratio = self._get_keep_ratio(node_id, existing_degree, new_degree, mode='linear')
+            self.node_states[node_id] = keep_ratio * old + (1 - keep_ratio) * new_embedding
+        
         elif self.update_method == 'gru':
-            old = torch.FloatTensor(self.node_states.get(node_id, np.zeros(self.embedding_dim))).to(self.device)
-            new = torch.FloatTensor(new_embedding).to(self.device)
-            updated = self.gru_cell(new.unsqueeze(0), old.unsqueeze(0)).squeeze(0)
+            old_tensor = torch.FloatTensor(old).to(self.device)
+            new_tensor = torch.FloatTensor(new_embedding).to(self.device)
+            updated = self.gru_cell(new_tensor.unsqueeze(0), old_tensor.unsqueeze(0)).squeeze(0)
             self.node_states[node_id] = updated.detach().cpu().numpy()
+        
+        elif self.update_method == 'masked_gru':
+            # 只更新活跃节点 (new_degree > 0)
+            if new_degree > 0:
+                old_tensor = torch.FloatTensor(old).to(self.device)
+                new_tensor = torch.FloatTensor(new_embedding).to(self.device)
+                updated = self.gru_cell(new_tensor.unsqueeze(0), old_tensor.unsqueeze(0)).squeeze(0)
+                self.node_states[node_id] = updated.detach().cpu().numpy()
+            # 否则保持原状态不变
+        
         else:
             self.node_states[node_id] = new_embedding
 
@@ -188,9 +237,10 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                     all_nodes.add(g.vs[v]['name'])
         num_nodes = len(all_nodes)
 
-        # 初始化 EdgeBank
+        # 初始化 EdgeBank 和度数跟踪
         self.edge_bank = EdgeBank(num_nodes)
         node_id_map = {nid: i for i, nid in enumerate(sorted(all_nodes))}
+        node_cumulative_degree = {nid: 0 for nid in all_nodes}  # 跟踪累积度数
 
         print(f"[ROLAND] Training on {len(self.snapshots)} snapshots, {num_nodes} nodes")
 
@@ -309,10 +359,29 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 continue
 
             # 更新活跃节点的状态 (CUDA tensor 需要先 .cpu() 再 .numpy())
+            # 计算当前快照中每个节点的度数
+            node_current_degree = {}
+            for u, v in edges:
+                u_gid, v_gid = node_gids[u], node_gids[v]
+                node_current_degree[u_gid] = node_current_degree.get(u_gid, 0) + 1
+                node_current_degree[v_gid] = node_current_degree.get(v_gid, 0) + 1
+            
             active_node_ids = set(node_gids)
             for nid in active_node_ids:
                 idx = node_id_map[nid]
-                self._update_node_state(nid, x[idx].detach().cpu().numpy())
+                new_degree = node_current_degree.get(nid, 0)
+                existing_degree = node_cumulative_degree[nid]
+                
+                # 使用动态 keep_ratio 更新节点状态
+                self._update_node_state(
+                    nid, 
+                    x[idx].detach().cpu().numpy(),
+                    existing_degree=existing_degree,
+                    new_degree=new_degree
+                )
+                
+                # 累积度数
+                node_cumulative_degree[nid] += new_degree
 
             # 快照级嵌入：使用多种聚合方式增强表达能力
             active_indices = [node_id_map[nid] for nid in active_node_ids]
