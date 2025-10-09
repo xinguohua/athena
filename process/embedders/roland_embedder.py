@@ -224,18 +224,20 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         if not hasattr(self, "snapshots") or not self.snapshots:
             raise RuntimeError("self.snapshots 为空")
 
-        # 推断节点总数
-        all_nodes = set()
+        # 推断所有节点并排序（直接用列表存储，保证顺序）
+        all_nodes_set = set()
         for g in self.snapshots:
             if g is not None:
                 for v in range(g.vcount()):
-                    all_nodes.add(g.vs[v]['name'])
+                    all_nodes_set.add(g.vs[v]['name'])
+        
+        all_nodes = sorted(all_nodes_set)  # 一次性排序，后续直接使用
         num_nodes = len(all_nodes)
 
         # 初始化 EdgeBank 和度数跟踪
         self.edge_bank = EdgeBank(num_nodes)
-        node_id_map = {nid: i for i, nid in enumerate(sorted(all_nodes))}
-        node_cumulative_degree = {nid: 0 for nid in all_nodes}  # 跟踪累积度数
+        node_id_map = {nid: i for i, nid in enumerate(all_nodes)}  # 直接用已排序的列表
+        node_cumulative_degree = {nid: 0 for nid in all_nodes}
 
         print(f"[ROLAND] Training on {len(self.snapshots)} snapshots, {num_nodes} nodes")
 
@@ -269,63 +271,51 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             dst_nodes = [node_id_map[node_gids[v]] for u, v in edges]
             edge_index = torch.LongTensor([src_nodes, dst_nodes]).to(self.device)
 
-            # 节点特征：使用当前快照的原始特征 (properties, degree等)
+            # 节点特征：只使用当前属性，不包含历史状态
+            # 历史状态会在 _update_node_state 中融合（ROLAND 官方方式）
             node_features_list = []
-            
-            for nid in sorted(all_nodes):
-                # 构造当前快照的节点特征向量
-                node_feat = np.zeros(self.embedding_dim, dtype=np.float32)
+            for nid in all_nodes:
+                # 当前属性特征（全部 embedding_dim 维）
+                property_feat = np.zeros(self.embedding_dim, dtype=np.float32)
                 
-                # 如果节点在当前快照中活跃,提取其特征
+                # 如果节点在当前快照中活跃，提取其 properties
                 if nid in node_gids:
                     local_idx = node_gids.index(nid)
-                    
-                    # 特征1: 当前度数 (归一化)
-                    degree = len([e for e in edges if node_gids[e[0]] == nid or node_gids[e[1]] == nid])
-                    node_feat[0] = min(degree / 50.0, 1.0)  # 归一化到 [0,1]
-                    
-                    # 特征2-65: 节点属性的 hash 特征
                     try:
                         properties_str = g.vs[local_idx]['properties']
                     except (KeyError, AttributeError):
                         properties_str = ''
                     
-                    if properties_str and len(properties_str) > 2:
-                        prop_hash = hash(properties_str)
-                        # 使用64位 hash 作为二进制特征
-                        for i in range(min(64, self.embedding_dim - 1)):
+                    # 使用稳定的 hash（md5）作为属性特征
+                    if properties_str:
+                        import hashlib
+                        prop_bytes = properties_str.encode('utf-8')
+                        prop_hash = int(hashlib.md5(prop_bytes).hexdigest()[:16], 16)
+                        
+                        # 二进制特征编码（使用前64维）
+                        for i in range(min(64, self.embedding_dim)):
                             bit_val = (prop_hash >> i) & 1
-                            node_feat[i + 1] = float(bit_val)
+                            property_feat[i] = float(bit_val)
                 
-                # 非活跃节点保持零特征 (表示不在当前快照中)
-                node_features_list.append(node_feat)
+                node_features_list.append(property_feat)
             
             node_features_np = np.array(node_features_list, dtype=np.float32)
             node_features = torch.from_numpy(node_features_np).to(self.device)
 
-            # 边特征：编码边类型 + 归一化的时间戳
+            # 边特征：只使用边类型的 one-hot 编码
             edge_type_indices = [self.edge_type_vocab.get(types[i], 0) for i in range(len(edges))]
             edge_features = torch.zeros(len(edges), 16, device=self.device)
             
-            # One-hot 编码边类型
+            # One-hot 编码边类型（使用全部16维）
             for i, type_idx in enumerate(edge_type_indices):
-                if type_idx < 15:  # 前15维用于类型
+                if type_idx < 16:
                     edge_features[i, type_idx] = 1.0
-            
-            # 第16维用于归一化的时间信息
-            if len(timestamps) > 0:
-                ts_array = np.array(timestamps, dtype=np.float32)
-                ts_min, ts_max = ts_array.min(), ts_array.max()
-                if ts_max > ts_min:
-                    ts_normalized = (ts_array - ts_min) / (ts_max - ts_min)
-                else:
-                    ts_normalized = np.ones_like(ts_array) * 0.5
-                edge_features[:, 15] = torch.from_numpy(ts_normalized).to(self.device)
 
-            # 多层 GNN 传播
+            # 多层 GNN 传播（ROLAND 官方方式：只用最后一层输出）
             x = node_features
             for layer in self.gnn_layers:
                 x = layer(x, edge_index, edge_features)
+            # x 现在是最后一层的输出，包含了多跳邻域的信息
 
             # 更新活跃节点的状态
             # 计算当前快照中每个节点的度数
