@@ -140,7 +140,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         hidden_conv_1=64,
         hidden_conv_2=32,
         temporal_type="gru",
-        num_epochs=10,
+        num_epochs=1,
         lr=0.001,
         model_path=None
     ):
