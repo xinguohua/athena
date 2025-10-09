@@ -383,8 +383,16 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         state = torch.load(path, map_location=device)
 
+        # 清理旧版本不兼容的参数
+        params = state['params'].copy()
+        obsolete_keys = ['num_layers', 'update_method', 'alpha']
+        for key in obsolete_keys:
+            if key in params:
+                print(f"[ROLAND] Warning: Removing obsolete parameter '{key}' from saved model")
+                del params[key]
+        
         # 创建实例
-        instance = cls(snapshot_sequence, **state['params'])
+        instance = cls(snapshot_sequence, **params)
         instance.model.load_state_dict(state['model_state'])
         instance.snapshot_embeddings_list = state['snapshot_embeddings']
         instance.all_nodes = state['all_nodes']
