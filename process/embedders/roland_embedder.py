@@ -1,440 +1,389 @@
 """
 ROLAND (Graph Learning Framework for Dynamic Graphs) Embedder
-基于 snap-stanford/roland 仓库和论文实现的动态图嵌入器
+基于 snap-stanford/roland 的无监督时序图嵌入器
 
-核心思想：
-1. EdgeBank: 缓存历史边信息用于快速检索
-2. 时序 GNN: residual edge convolution 聚合邻居特征
-3. 节点状态更新: moving_average / GRU 更新节点 embedding
-4. 快照级别嵌入: 聚合快照内所有节点状态得到图级表示
+架构：
+1. Pre-processing: 2层MLP (input_dim → 256 → 128)
+2. GCN Layers: 简单图卷积 (128→64→32)
+3. Temporal Update: 每层独立GRU/MLP/moving_average更新
+4. 训练: 无监督结构重建 MSE(sigmoid(h@h.T), A_true)
 """
-import time
-from collections import defaultdict
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Dict, Tuple
 
 from process.embedders.base import GraphEmbedderBase
 
 
-class EdgeBank:
-    """缓存历史边信息，用于快速邻居查询"""
-    def __init__(self, num_nodes: int):
-        self.num_nodes = num_nodes
-        self.edge_cache = defaultdict(set)  # node -> set of (neighbor, edge_type, timestamp)
-
-    def add_edges(self, edges, types, timestamps):
-        """批量添加边到缓存"""
-        for (u, v), etype, ts in zip(edges, types, timestamps):
-            self.edge_cache[u].add((v, etype, ts))
-            self.edge_cache[v].add((u, f"rev_{etype}", ts))
-
-    def get_neighbors(self, node_id):
-        """获取节点的所有历史邻居"""
-        return list(self.edge_cache.get(node_id, []))
-
-    def get_degree(self, node_id):
-        """获取节点度数"""
-        return len(self.edge_cache.get(node_id, []))
-
-
-class ResidualEdgeConv(nn.Module):
-    """残差边卷积层（ROLAND 核心 GNN 层）"""
-    def __init__(self, in_dim: int, out_dim: int, edge_dim: int = 16):
+class ROLANDUnsupervised(nn.Module):
+    """ROLAND 无监督时序 GNN 模型（基于结构重建）"""
+    
+    def __init__(
+        self, 
+        input_dim: int,
+        num_nodes: int,
+        hidden_conv_1: int = 64,
+        hidden_conv_2: int = 32,
+        temporal_type: str = "gru"  # gru/mlp/moving_average
+    ):
         super().__init__()
-        self.in_dim = in_dim
-        self.out_dim = out_dim
-
-        # 消息传递网络
-        self.msg_mlp = nn.Sequential(
-            nn.Linear(in_dim * 2 + edge_dim, out_dim),
-            nn.ReLU(),
-            nn.Linear(out_dim, out_dim)
-        )
-
-        # 残差连接（如果维度不匹配需要投影）
-        self.residual = nn.Linear(in_dim, out_dim) if in_dim != out_dim else nn.Identity()
+        self.input_dim = input_dim
+        self.num_nodes = num_nodes
+        self.hidden_conv_1 = hidden_conv_1
+        self.hidden_conv_2 = hidden_conv_2
+        self.temporal_type = temporal_type
         
-        # 添加 LayerNorm 提高数值稳定性
-        self.layer_norm = nn.LayerNorm(out_dim)
-
-    def forward(self, node_features, edge_index, edge_features=None):
+        # Pre-processing MLP (256 → 128)
+        self.pre1 = nn.Linear(input_dim, 256)
+        self.pre2 = nn.Linear(256, 128)
+        
+        # GCN Layers (简单邻接矩阵乘法)
+        self.conv1 = nn.Linear(128, hidden_conv_1)
+        self.conv2 = nn.Linear(hidden_conv_1, hidden_conv_2)
+        
+        # Temporal Update (每层独立)
+        if temporal_type == "gru":
+            self.gru1 = nn.GRUCell(hidden_conv_1, hidden_conv_1)
+            self.gru2 = nn.GRUCell(hidden_conv_2, hidden_conv_2)
+        elif temporal_type == "mlp":
+            self.mlp1 = nn.Sequential(
+                nn.Linear(hidden_conv_1 * 2, hidden_conv_1),
+                nn.LeakyReLU()
+            )
+            self.mlp2 = nn.Sequential(
+                nn.Linear(hidden_conv_2 * 2, hidden_conv_2),
+                nn.LeakyReLU()
+            )
+        # moving_average: alpha * h_new + (1-alpha) * h_old
+        
+        # Previous embeddings (两层独立状态)
+        self.register_buffer('prev_emb_1', torch.zeros(num_nodes, hidden_conv_1))
+        self.register_buffer('prev_emb_2', torch.zeros(num_nodes, hidden_conv_2))
+    
+    def reset_embeddings(self):
+        """重置历史状态（每个epoch开始时调用，防止未来信息泄漏）"""
+        self.prev_emb_1.zero_()
+        self.prev_emb_2.zero_()
+    
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor):
         """
-        node_features: (N, in_dim)
-        edge_index: (2, E)
-        edge_features: (E, edge_dim) 可选
+        Args:
+            x: 节点特征 (N, input_dim)
+            edge_index: COO格式边索引 (2, E)
+        
+        Returns:
+            final_emb: 最终节点嵌入 (N, hidden_conv_2)
+            new_embeddings: 两层的新状态 [layer1_emb, layer2_emb]
         """
-        device = node_features.device
+        # Pre-processing MLP
+        h = F.leaky_relu(self.pre1(x))
+        h = F.leaky_relu(self.pre2(h))  # (N, 128)
+        
+        # GCN Layer 1: 简单邻接矩阵乘法
+        h = self._gcn_forward(h, edge_index, self.conv1)  # (N, 64)
+        
+        # Temporal Update Layer 1
+        h = self._temporal_update(h, self.prev_emb_1, layer=1)
+        new_emb_1 = h.clone()
+        
+        # GCN Layer 2
+        h = self._gcn_forward(h, edge_index, self.conv2)  # (N, 32)
+        
+        # Temporal Update Layer 2
+        h = self._temporal_update(h, self.prev_emb_2, layer=2)
+        new_emb_2 = h.clone()
+        
+        return h, [new_emb_1, new_emb_2]
+    
+    def _gcn_forward(self, h: torch.Tensor, edge_index: torch.Tensor, linear: nn.Linear):
+        """简单 GCN: A @ H @ W (无自环/归一化版本)"""
+        # 聚合邻居特征: sum_{j in N(i)} h_j
         src, dst = edge_index[0], edge_index[1]
-
-        # 构造消息：[src_feat, dst_feat, edge_feat]
-        if edge_features is None:
-            edge_features = torch.zeros(edge_index.shape[1], 16, device=device)
-
-        msg_input = torch.cat([
-            node_features[src],
-            node_features[dst],
-            edge_features
-        ], dim=-1)
-
-        # 计算消息
-        messages = self.msg_mlp(msg_input)
-
-        # 聚合消息（scatter add）
-        aggr = torch.zeros(node_features.size(0), self.out_dim, device=device)
-        aggr.index_add_(0, dst, messages)
-
-        # 残差连接
-        out = aggr + self.residual(node_features)
+        aggr = torch.zeros_like(h)
+        aggr.index_add_(0, dst, h[src])
         
-        # LayerNorm + ReLU
-        out = self.layer_norm(out)
-        out = F.relu(out)
-        
-        # 温和的梯度裁剪,保留更多信息
-        out = torch.clamp(out, -50.0, 50.0)
+        # 线性变换
+        out = linear(aggr)
+        out = F.leaky_relu(out)
         
         return out
+    
+    def _temporal_update(self, h_new: torch.Tensor, h_old: torch.Tensor, layer: int):
+        """时序状态更新（GRU/MLP/moving_average）"""
+        if self.temporal_type == "gru":
+            gru = self.gru1 if layer == 1 else self.gru2
+            return gru(h_new, h_old)
+        
+        elif self.temporal_type == "mlp":
+            mlp = self.mlp1 if layer == 1 else self.mlp2
+            combined = torch.cat([h_new, h_old], dim=-1)
+            return mlp(combined)
+        
+        else:  # moving_average
+            alpha = 0.7  # 新状态权重
+            return alpha * h_new + (1 - alpha) * h_old
 
 
 class ROLANDGraphEmbedder(GraphEmbedderBase):
-    """ROLAND 风格的动态图嵌入器"""
+    """ROLAND 图嵌入器（包含训练逻辑）"""
     
-    # 类级别的默认模型保存路径
     _default_path = 'roland_encoder.pth'
 
-    def __init__(self, snapshots, features=None, mapp=None,
-                 embedding_dim=256, num_layers=2,
-                 update_method='moving_average', alpha=0.7,
-                 model_path=None):
+    def __init__(
+        self, 
+        snapshots, 
+        features=None, 
+        mapp=None,
+        embedding_dim=256,
+        hidden_conv_1=64,
+        hidden_conv_2=32,
+        temporal_type="gru",
+        num_epochs=10,
+        lr=0.001,
+        model_path=None
+    ):
         """
         Args:
             snapshots: list of igraph.Graph
-            embedding_dim: 节点嵌入维度 (默认256,与Prographer分类器匹配)
-            num_layers: GNN 层数
-            update_method: 'moving_average' 或 'gru'
-            alpha: moving_average 的更新率 (默认0.7,更重视新信息)
-            model_path: 模型保存路径，默认使用 _default_path
+            embedding_dim: 输入特征维度 (默认256)
+            hidden_conv_1: 第1层GCN输出维度 (默认64)
+            hidden_conv_2: 第2层GCN输出维度 (默认32，最终嵌入维度)
+            temporal_type: 时序更新类型 (gru/mlp/moving_average)
+            num_epochs: 训练轮数
+            lr: 学习率
         """
         super().__init__(snapshots, features, mapp)
         self.snapshots = self.G
         self.embedding_dim = embedding_dim
-        self.num_layers = num_layers
-        self.update_method = update_method
-        self.alpha = alpha
+        self.hidden_conv_1 = hidden_conv_1
+        self.hidden_conv_2 = hidden_conv_2
+        self.temporal_type = temporal_type
+        self.num_epochs = num_epochs
+        self.lr = lr
         self.model_path = model_path or self._default_path
 
-        # 初始化组件
-        self.edge_bank = None
-        self.node_states = {}  # node_id -> embedding vector
-        self.gnn_layers = []
-        self.snapshot_embeddings_list = []
+        # 设备
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        # 边类型编码器（简单映射）
-        self.edge_type_vocab = {}
-        self.node_type_vocab = {}  # 添加节点类型词汇表
-
-        # 构建 GNN 模型
-        self._build_model()
-
-    def _build_model(self):
-        """构建多层 GNN"""
-        dims = [self.embedding_dim] * (self.num_layers + 1)
-        for i in range(self.num_layers):
-            layer = ResidualEdgeConv(dims[i], dims[i+1], edge_dim=16)
-            self.gnn_layers.append(layer.to(self.device))
-
-        # GRU 更新器（如果使用 GRU 模式）
-        if self.update_method == 'gru':
-            self.gru_cell = nn.GRUCell(self.embedding_dim, self.embedding_dim).to(self.device)
-
-    def _init_node_state(self, node_id):
-        """初始化节点状态（Xavier初始化）"""
-        if node_id not in self.node_states:
-            # 使用 Xavier/Glorot 初始化,更适合深度网络
-            limit = np.sqrt(6.0 / self.embedding_dim)
-            self.node_states[node_id] = np.random.uniform(-limit, limit, self.embedding_dim).astype(np.float32)
-
-    def _get_keep_ratio(self, node_id, existing_degree, new_degree, mode='linear'):
-        """
-        计算节点的 keep_ratio (ROLAND 核心创新)
-        state[t] = state[t-1] * keep_ratio + new_emb * (1 - keep_ratio)
         
-        Args:
-            node_id: 节点ID
-            existing_degree: 历史累积度数
-            new_degree: 当前快照中的度数
-            mode: 'linear', 'constant', 'sqrt'
-        """
-        if mode == 'constant':
-            # 固定权重 (等价于原始 moving_average)
-            if existing_degree == 0 and new_degree > 0:
-                return 0.0  # 新节点完全使用新特征
-            return 1 - self.alpha
-        
-        elif mode == 'linear':
-            # 根据度数比例动态调整 (ROLAND 官方推荐)
-            if existing_degree == 0 and new_degree > 0:
-                return 0.0  # 新节点
-            total = existing_degree + new_degree
-            if total == 0:
-                return 1.0  # 孤立节点保持不变
-            return existing_degree / total  # 历史越多,保留越多
-        
-        elif mode == 'sqrt':
-            # 平方根衰减 (平滑版本)
-            if existing_degree == 0:
-                return 0.0
-            return np.sqrt(existing_degree) / (np.sqrt(existing_degree) + np.sqrt(new_degree + 1))
-        
-        else:
-            return 1 - self.alpha
-    
-    def _update_node_state(self, node_id, new_embedding, existing_degree=0, new_degree=0):
-        """更新节点状态（moving average 或 GRU，支持动态 keep_ratio）"""
-        old = self.node_states.get(node_id, np.zeros(self.embedding_dim))
-        
-        if self.update_method == 'moving_average':
-            # ROLAND 官方方式: 动态 keep_ratio
-            keep_ratio = self._get_keep_ratio(node_id, existing_degree, new_degree, mode='linear')
-            self.node_states[node_id] = keep_ratio * old + (1 - keep_ratio) * new_embedding
-        
-        elif self.update_method == 'gru':
-            old_tensor = torch.FloatTensor(old).to(self.device)
-            new_tensor = torch.FloatTensor(new_embedding).to(self.device)
-            updated = self.gru_cell(new_tensor.unsqueeze(0), old_tensor.unsqueeze(0)).squeeze(0)
-            self.node_states[node_id] = updated.detach().cpu().numpy()
-        
-        elif self.update_method == 'masked_gru':
-            # 只更新活跃节点 (new_degree > 0)
-            if new_degree > 0:
-                old_tensor = torch.FloatTensor(old).to(self.device)
-                new_tensor = torch.FloatTensor(new_embedding).to(self.device)
-                updated = self.gru_cell(new_tensor.unsqueeze(0), old_tensor.unsqueeze(0)).squeeze(0)
-                self.node_states[node_id] = updated.detach().cpu().numpy()
-            # 否则保持原状态不变
-        
-        else:
-            self.node_states[node_id] = new_embedding
-
-    def train(self):
-        """训练：逐快照处理，更新 EdgeBank 和节点状态"""
-        if not hasattr(self, "snapshots") or not self.snapshots:
-            raise RuntimeError("self.snapshots 为空")
-
-        # 推断所有节点并排序（直接用列表存储，保证顺序）
+        # 获取节点数量
         all_nodes_set = set()
-        for g in self.snapshots:
+        for g in snapshots:
             if g is not None:
                 for v in range(g.vcount()):
                     all_nodes_set.add(g.vs[v]['name'])
+        self.all_nodes = sorted(all_nodes_set)
+        self.num_nodes = len(self.all_nodes)
+        self.node_id_map = {nid: i for i, nid in enumerate(self.all_nodes)}
         
-        all_nodes = sorted(all_nodes_set)  # 一次性排序，后续直接使用
-        num_nodes = len(all_nodes)
+        # 初始化模型
+        self.model = ROLANDUnsupervised(
+            input_dim=embedding_dim,
+            num_nodes=self.num_nodes,
+            hidden_conv_1=hidden_conv_1,
+            hidden_conv_2=hidden_conv_2,
+            temporal_type=temporal_type
+        ).to(self.device)
+        
+        # 优化器
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        self.criterion = nn.MSELoss()
+        
+        # 存储最终嵌入
+        self.snapshot_embeddings_list = []
 
-        # 初始化 EdgeBank 和度数跟踪
-        self.edge_bank = EdgeBank(num_nodes)
-        node_id_map = {nid: i for i, nid in enumerate(all_nodes)}  # 直接用已排序的列表
-        node_cumulative_degree = {nid: 0 for nid in all_nodes}
-
-        print(f"[ROLAND] Training on {len(self.snapshots)} snapshots, {num_nodes} nodes")
-
-        for sidx, g in enumerate(self.snapshots):
-            if g is None:
-                continue
-
-            t0 = time.time()
-
-            # 提取边和特征
-            edges = g.get_edgelist()
-            types = g.es["actions"]
-            timestamps = g.es["timestamp"]
-
-            # 初始化节点状态（首次出现)
-            node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
-            for nid in node_gids:
-                self._init_node_state(nid)
-
-            # 构建边类型词汇表（首次出现时添加）
-            for etype in types:
-                if etype not in self.edge_type_vocab:
-                    self.edge_type_vocab[etype] = len(self.edge_type_vocab)
-
-            # 更新 EdgeBank
-            global_edges = [(node_gids[u], node_gids[v]) for u, v in edges]
-            self.edge_bank.add_edges(global_edges, types, timestamps)
-
-            # 构造当前快照的 PyTorch 数据 (edge_index: shape (2, E))
-            src_nodes = [node_id_map[node_gids[u]] for u, v in edges]
-            dst_nodes = [node_id_map[node_gids[v]] for u, v in edges]
-            edge_index = torch.LongTensor([src_nodes, dst_nodes]).to(self.device)
-
-            # 节点特征：只使用当前属性，不包含历史状态
-            # 历史状态会在 _update_node_state 中融合（ROLAND 官方方式）
-            node_features_list = []
-            for nid in all_nodes:
-                # 当前属性特征（全部 embedding_dim 维）
-                property_feat = np.zeros(self.embedding_dim, dtype=np.float32)
-                
-                # 如果节点在当前快照中活跃，提取其 properties
-                if nid in node_gids:
-                    local_idx = node_gids.index(nid)
-                    try:
-                        properties_str = g.vs[local_idx]['properties']
-                    except (KeyError, AttributeError):
-                        properties_str = ''
-                    
-                    # 使用稳定的 hash（md5）作为属性特征
-                    if properties_str:
-                        import hashlib
-                        prop_bytes = properties_str.encode('utf-8')
-                        prop_hash = int(hashlib.md5(prop_bytes).hexdigest()[:16], 16)
-                        
-                        # 二进制特征编码（使用前64维）
-                        for i in range(min(64, self.embedding_dim)):
-                            bit_val = (prop_hash >> i) & 1
-                            property_feat[i] = float(bit_val)
-                
-                node_features_list.append(property_feat)
+    def train(self):
+        """无监督训练：结构重建损失"""
+        print(f"[ROLAND] Training on {len(self.snapshots)} snapshots, {self.num_nodes} nodes")
+        print(f"[ROLAND] Epochs: {self.num_epochs}, Learning Rate: {self.lr}")
+        
+        for epoch in range(self.num_epochs):
+            # 每个epoch重置嵌入（防止未来信息泄漏）
+            self.model.reset_embeddings()
             
-            node_features_np = np.array(node_features_list, dtype=np.float32)
-            node_features = torch.from_numpy(node_features_np).to(self.device)
-
-            # 边特征：只使用边类型的 one-hot 编码
-            edge_type_indices = [self.edge_type_vocab.get(types[i], 0) for i in range(len(edges))]
-            edge_features = torch.zeros(len(edges), 16, device=self.device)
-            
-            # One-hot 编码边类型（使用全部16维）
-            for i, type_idx in enumerate(edge_type_indices):
-                if type_idx < 16:
-                    edge_features[i, type_idx] = 1.0
-
-            # 多层 GNN 传播（ROLAND 官方方式：只用最后一层输出）
-            x = node_features
-            for layer in self.gnn_layers:
-                x = layer(x, edge_index, edge_features)
-            # x 现在是最后一层的输出，包含了多跳邻域的信息
-
-            # 更新活跃节点的状态
-            # 计算当前快照中每个节点的度数
-            node_current_degree = {}
-            for u, v in edges:
-                u_gid, v_gid = node_gids[u], node_gids[v]
-                node_current_degree[u_gid] = node_current_degree.get(u_gid, 0) + 1
-                node_current_degree[v_gid] = node_current_degree.get(v_gid, 0) + 1
-            
-            active_node_ids = set(node_gids)
-            for nid in active_node_ids:
-                idx = node_id_map[nid]
-                new_degree = node_current_degree.get(nid, 0)
-                existing_degree = node_cumulative_degree[nid]
+            epoch_loss = 0.0
+            for sidx, g in enumerate(self.snapshots):
+                if g is None:
+                    continue
                 
-                # 使用动态 keep_ratio 更新节点状态
-                self._update_node_state(
-                    nid, 
-                    x[idx].detach().cpu().numpy(),
-                    existing_degree=existing_degree,
-                    new_degree=new_degree
-                )
+                # 转换 igraph 到 PyTorch
+                x, edge_index, A_true = self._igraph_to_torch(g)
                 
-                # 累积度数
-                node_cumulative_degree[nid] += new_degree
-
-            # 快照级嵌入：使用多种聚合方式增强表达能力
-            active_indices = [node_id_map[nid] for nid in active_node_ids]
-            if active_indices:
-                active_x = x[active_indices]  # 只取活跃节点
-                # 组合 mean, max, std 三种统计量
-                snapshot_mean = active_x.mean(dim=0).detach().cpu().numpy()
-                snapshot_max = active_x.max(dim=0)[0].detach().cpu().numpy()
-                snapshot_std = active_x.std(dim=0).detach().cpu().numpy()
+                # Forward
+                node_emb, new_embeddings = self.model(x, edge_index)
                 
-                # 拼接并归一化 (使用前 embedding_dim 维度保持一致)
-                snapshot_emb = snapshot_mean * 0.5 + snapshot_max * 0.3 + snapshot_std * 0.2
-            else:
-                snapshot_emb = np.zeros(self.embedding_dim, dtype=np.float32)
+                # 计算邻接矩阵重建损失
+                A_pred = torch.sigmoid(node_emb @ node_emb.T)
+                loss = self.criterion(A_pred, A_true)
+                
+                # Backward
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+                
+                # 更新历史状态（detach）
+                self.model.prev_emb_1 = new_embeddings[0].detach()
+                self.model.prev_emb_2 = new_embeddings[1].detach()
+                
+                epoch_loss += loss.item()
             
-            self.snapshot_embeddings_list.append(snapshot_emb)
-
-            t_elapsed = time.time() - t0
-            print(f"[snapshot {sidx}] processed {len(edges)} edges, {len(active_node_ids)} nodes, {t_elapsed:.3f}s")
-
-        # 训练完成后自动保存模型
-        self.save_model(self.model_path)
+            avg_loss = epoch_loss / len(self.snapshots)
+            if (epoch + 1) % 5 == 0:
+                print(f"  Epoch {epoch+1}/{self.num_epochs}, Avg Loss: {avg_loss:.6f}")
+        
+        print("[ROLAND] Training completed!")
+        
+        # 生成最终嵌入（推理模式）
+        self._generate_final_embeddings()
+    
+    def _generate_final_embeddings(self):
+        """训练后生成最终嵌入（用于后续任务）"""
+        self.model.eval()
+        self.model.reset_embeddings()
+        
+        with torch.no_grad():
+            for sidx, g in enumerate(self.snapshots):
+                if g is None:
+                    self.snapshot_embeddings_list.append({})
+                    continue
+                
+                x, edge_index, _ = self._igraph_to_torch(g)
+                final_emb, new_embeddings = self.model(x, edge_index)
+                
+                # 更新状态
+                self.model.prev_emb_1 = new_embeddings[0]
+                self.model.prev_emb_2 = new_embeddings[1]
+                
+                # 提取嵌入字典
+                embeddings_dict = self._extract_final_embeddings(g, final_emb)
+                self.snapshot_embeddings_list.append(embeddings_dict)
+    
+    def _igraph_to_torch(self, g) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """将 igraph 转换为 PyTorch 张量
+        
+        Returns:
+            x: 节点特征 (num_nodes, embedding_dim)
+            edge_index: COO边索引 (2, num_edges)
+            A_true: 真实邻接矩阵 (num_nodes, num_nodes)
+        """
+        # 节点特征：使用 properties 哈希
+        node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
+        node_features_list = []
+        
+        for nid in self.all_nodes:
+            feat = np.zeros(self.embedding_dim, dtype=np.float32)
+            
+            if nid in node_gids:
+                local_idx = node_gids.index(nid)
+                try:
+                    properties_str = g.vs[local_idx]['properties']
+                except (KeyError, AttributeError):
+                    properties_str = ''
+                
+                if properties_str:
+                    import hashlib
+                    prop_hash = int(hashlib.md5(properties_str.encode()).hexdigest()[:16], 16)
+                    for i in range(min(64, self.embedding_dim)):
+                        feat[i] = float((prop_hash >> i) & 1)
+            
+            node_features_list.append(feat)
+        
+        x = torch.from_numpy(np.array(node_features_list)).to(self.device)
+        
+        # 边索引
+        edges = g.get_edgelist()
+        src = [self.node_id_map[node_gids[u]] for u, v in edges]
+        dst = [self.node_id_map[node_gids[v]] for u, v in edges]
+        edge_index = torch.LongTensor([src, dst]).to(self.device)
+        
+        # 真实邻接矩阵（用于损失计算）
+        A_true = torch.zeros(self.num_nodes, self.num_nodes, device=self.device)
+        for s, d in zip(src, dst):
+            A_true[s, d] = 1.0
+            A_true[d, s] = 1.0  # 无向图
+        
+        return x, edge_index, A_true
+    
+    def _extract_final_embeddings(self, g, final_emb: torch.Tensor) -> Dict[str, np.ndarray]:
+        """提取节点嵌入字典"""
+        node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
+        embeddings_dict = {}
+        
+        for nid in node_gids:
+            idx = self.node_id_map[nid]
+            embeddings_dict[nid] = final_emb[idx].cpu().numpy()
+        
+        return embeddings_dict
 
     def get_snapshot_embeddings(self, snapshot_sequence=None):
-        """返回快照嵌入矩阵"""
+        """返回快照嵌入矩阵（快照级别聚合）"""
         if not self.snapshot_embeddings_list:
             raise RuntimeError("还没有快照嵌入，请先调用 train()")
 
         if snapshot_sequence is None:
             snapshot_sequence = list(range(len(self.snapshot_embeddings_list)))
 
-        embeddings = [self.snapshot_embeddings_list[i] for i in snapshot_sequence]
-        arr = np.array(embeddings, dtype=np.float32)
+        # 直接返回字典形式的嵌入
+        result = []
+        for i in snapshot_sequence:
+            embeddings = self.snapshot_embeddings_list[i]
+            if embeddings:
+                # 聚合所有节点嵌入：平均值
+                all_embs = np.array(list(embeddings.values()))
+                snapshot_emb = np.mean(all_embs, axis=0)
+            else:
+                snapshot_emb = np.zeros(self.hidden_conv_2)
+            result.append(snapshot_emb)
+        
+        arr = np.array(result, dtype=np.float32)
         print(f"[ROLAND] Snapshot embeddings: {arr.shape}")
         return arr
 
     def embed_nodes(self):
-        """返回节点嵌入字典"""
-        return {nid: emb.copy() for nid, emb in self.node_states.items()}
+        """返回最后一个快照的节点嵌入字典"""
+        if not self.snapshot_embeddings_list:
+            raise RuntimeError("还没有节点嵌入，请先调用 train()")
+        
+        return self.snapshot_embeddings_list[-1] if self.snapshot_embeddings_list else {}
 
     def embed_edges(self):
-        """边嵌入（暂未实现，可扩展）"""
+        """边嵌入（暂未实现）"""
         return {}
 
     def save_model(self, path=None):
         """保存模型状态"""
-        path = path or self._default_path
+        path = path or self.model_path
         state = {
             'params': {
                 'embedding_dim': self.embedding_dim,
-                'num_layers': self.num_layers,
-                'update_method': self.update_method,
-                'alpha': self.alpha,
+                'hidden_conv_1': self.hidden_conv_1,
+                'hidden_conv_2': self.hidden_conv_2,
+                'temporal_type': self.temporal_type,
+                'num_epochs': self.num_epochs,
+                'lr': self.lr,
             },
-            'gnn_layers_state': [layer.state_dict() for layer in self.gnn_layers],
-            'gru_cell_state': self.gru_cell.state_dict() if self.update_method == 'gru' else None,
-            'node_states': self.node_states,
-            'edge_type_vocab': self.edge_type_vocab,
-            'node_type_vocab': self.node_type_vocab,  # 保存节点类型词汇表
+            'model_state': self.model.state_dict(),
             'snapshot_embeddings': self.snapshot_embeddings_list,
-            'num_snapshots': len(self.snapshot_embeddings_list),
+            'all_nodes': self.all_nodes,
         }
         torch.save(state, path)
-        print(f"[ROLAND] Encoder model saved to {path}")
+        print(f"[ROLAND] Model saved to {path}")
 
     @classmethod
     def load(cls, snapshot_sequence, path=None):
         """加载预训练模型"""
         path = path or cls._default_path
         
-        print(f"[ROLAND] Loading encoder model from {path}...")
+        print(f"[ROLAND] Loading model from {path}...")
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         state = torch.load(path, map_location=device)
 
         # 创建实例
         instance = cls(snapshot_sequence, **state['params'])
-
-        # 恢复 GNN 层状态
-        for i, layer_state in enumerate(state['gnn_layers_state']):
-            instance.gnn_layers[i].load_state_dict(layer_state)
-            instance.gnn_layers[i].to(device)
-            instance.gnn_layers[i].eval()
-
-        # 恢复 GRU 状态
-        if state['gru_cell_state'] is not None:
-            instance.gru_cell.load_state_dict(state['gru_cell_state'])
-            instance.gru_cell.to(device)
-            instance.gru_cell.eval()
-
-        # 恢复其他状态
-        instance.node_states = state['node_states']
-        instance.edge_type_vocab = state['edge_type_vocab']
-        instance.node_type_vocab = state.get('node_type_vocab', {})  # 兼容旧模型
+        instance.model.load_state_dict(state['model_state'])
         instance.snapshot_embeddings_list = state['snapshot_embeddings']
+        instance.all_nodes = state['all_nodes']
 
-        print(f"[ROLAND] Encoder model loaded successfully (Original snapshots: {state['num_snapshots']}, Current snapshots: {len(snapshot_sequence)})")
+        print("[ROLAND] Model loaded successfully")
         return instance
