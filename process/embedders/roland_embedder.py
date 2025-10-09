@@ -177,6 +177,14 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         self.num_nodes = len(self.all_nodes)
         self.node_id_map = {nid: i for i, nid in enumerate(self.all_nodes)}
         
+        print(f"[ROLAND Init] Total nodes: {self.num_nodes:,}")
+        print(f"[ROLAND Init] Total snapshots: {len(snapshots)}")
+        
+        # 统计边数
+        total_edges = sum(g.ecount() if g else 0 for g in snapshots)
+        avg_edges = total_edges / len([g for g in snapshots if g]) if snapshots else 0
+        print(f"[ROLAND Init] Total edges: {total_edges:,}, Avg per snapshot: {avg_edges:.0f}")
+        
         # 初始化模型
         self.model = ROLANDUnsupervised(
             input_dim=embedding_dim,
@@ -194,7 +202,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         self.snapshot_embeddings_list = []
 
     def train(self):
-        """无监督训练：结构重建损失"""
+        """无监督训练：边重建损失（避免 O(N²) 显存）"""
         print(f"[ROLAND] Training on {len(self.snapshots)} snapshots, {self.num_nodes} nodes")
         print(f"[ROLAND] Epochs: {self.num_epochs}, Learning Rate: {self.lr}")
         
@@ -208,14 +216,25 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                     continue
                 
                 # 转换 igraph 到 PyTorch
-                x, edge_index, A_true = self._igraph_to_torch(g)
+                x, edge_index = self._igraph_to_torch(g)
                 
                 # Forward
                 node_emb, new_embeddings = self.model(x, edge_index)
                 
-                # 计算邻接矩阵重建损失
-                A_pred = torch.sigmoid(node_emb @ node_emb.T)
-                loss = self.criterion(A_pred, A_true)
+                # 边重建损失（只计算边上的点积，避免完整邻接矩阵）
+                # 正边：实际存在的边 (label=1)
+                src, dst = edge_index[0], edge_index[1]
+                pos_scores = torch.sigmoid((node_emb[src] * node_emb[dst]).sum(dim=-1))
+                pos_loss = -torch.log(pos_scores + 1e-8).mean()
+                
+                # 负采样：随机采样不存在的边 (label=0)
+                num_neg = min(edge_index.size(1), 1000)  # 限制负样本数量
+                neg_src = torch.randint(0, self.num_nodes, (num_neg,), device=self.device)
+                neg_dst = torch.randint(0, self.num_nodes, (num_neg,), device=self.device)
+                neg_scores = torch.sigmoid((node_emb[neg_src] * node_emb[neg_dst]).sum(dim=-1))
+                neg_loss = -torch.log(1 - neg_scores + 1e-8).mean()
+                
+                loss = pos_loss + neg_loss
                 
                 # Backward
                 self.optimizer.zero_grad()
@@ -248,7 +267,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                     self.snapshot_embeddings_list.append({})
                     continue
                 
-                x, edge_index, _ = self._igraph_to_torch(g)
+                x, edge_index = self._igraph_to_torch(g)
                 final_emb, new_embeddings = self.model(x, edge_index)
                 
                 # 更新状态
@@ -259,13 +278,12 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 embeddings_dict = self._extract_final_embeddings(g, final_emb)
                 self.snapshot_embeddings_list.append(embeddings_dict)
     
-    def _igraph_to_torch(self, g) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _igraph_to_torch(self, g) -> Tuple[torch.Tensor, torch.Tensor]:
         """将 igraph 转换为 PyTorch 张量
         
         Returns:
             x: 节点特征 (num_nodes, embedding_dim)
             edge_index: COO边索引 (2, num_edges)
-            A_true: 真实邻接矩阵 (num_nodes, num_nodes)
         """
         # 节点特征：使用 properties 哈希
         node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
@@ -297,13 +315,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         dst = [self.node_id_map[node_gids[v]] for u, v in edges]
         edge_index = torch.LongTensor([src, dst]).to(self.device)
         
-        # 真实邻接矩阵（用于损失计算）
-        A_true = torch.zeros(self.num_nodes, self.num_nodes, device=self.device)
-        for s, d in zip(src, dst):
-            A_true[s, d] = 1.0
-            A_true[d, s] = 1.0  # 无向图
-        
-        return x, edge_index, A_true
+        return x, edge_index
     
     def _extract_final_embeddings(self, g, final_emb: torch.Tensor) -> Dict[str, np.ndarray]:
         """提取节点嵌入字典"""
