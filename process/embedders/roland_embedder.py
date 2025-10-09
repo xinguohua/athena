@@ -134,6 +134,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
 
         # 边类型编码器（简单映射）
         self.edge_type_vocab = {}
+        self.node_type_vocab = {}  # 添加节点类型词汇表
 
         # 构建 GNN 模型
         self._build_model()
@@ -223,11 +224,34 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             dst_nodes = [node_id_map[node_gids[v]] for u, v in edges]
             edge_index = torch.LongTensor([src_nodes, dst_nodes]).to(self.device)
 
-            # 节点特征：使用当前状态 (先转 numpy array 再转 tensor,避免警告)
-            node_features_np = np.array([
-                self.node_states.get(nid, np.zeros(self.embedding_dim))
-                for nid in sorted(all_nodes)
-            ], dtype=np.float32)
+            # 节点特征：融合历史状态 + 当前快照的节点属性
+            node_features_list = []
+            
+            for nid in sorted(all_nodes):
+                # 基础特征：历史状态
+                base_feat = self.node_states.get(nid, np.zeros(self.embedding_dim, dtype=np.float32)).copy()
+                
+                # 如果节点在当前快照中活跃,叠加其属性特征
+                if nid in node_gids:
+                    local_idx = node_gids.index(nid)
+                    
+                    # 使用简单的字符串 hash 作为节点特征
+                    # properties 是字符串化的 set, 如 "{'prop1', 'prop2'}"
+                    properties_str = g.vs[local_idx].get('properties', '')
+                    if properties_str and len(properties_str) > 2:  # 不是空 set "{}"
+                        # 使用多个 hash 函数提取多维特征
+                        prop_hash = hash(properties_str)
+                        # 提取 32 位特征 (前32个维度)
+                        for i in range(32):
+                            bit_val = (prop_hash >> i) & 1
+                            base_feat[i] += bit_val * 0.2  # 叠加 hash bit
+                        
+                        # 添加字符串长度特征 (归一化到维度32)
+                        base_feat[32] += min(len(properties_str) / 1000.0, 1.0)
+                
+                node_features_list.append(base_feat)
+            
+            node_features_np = np.array(node_features_list, dtype=np.float32)
             node_features = torch.from_numpy(node_features_np).to(self.device)
 
             # 边特征：编码边类型 + 归一化的时间戳
@@ -334,6 +358,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             'gru_cell_state': self.gru_cell.state_dict() if self.update_method == 'gru' else None,
             'node_states': self.node_states,
             'edge_type_vocab': self.edge_type_vocab,
+            'node_type_vocab': self.node_type_vocab,  # 保存节点类型词汇表
             'snapshot_embeddings': self.snapshot_embeddings_list,
             'num_snapshots': len(self.snapshot_embeddings_list),
         }
@@ -367,6 +392,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         # 恢复其他状态
         instance.node_states = state['node_states']
         instance.edge_type_vocab = state['edge_type_vocab']
+        instance.node_type_vocab = state.get('node_type_vocab', {})  # 兼容旧模型
         instance.snapshot_embeddings_list = state['snapshot_embeddings']
 
         print(f"[ROLAND] Encoder model loaded successfully (Original snapshots: {state['num_snapshots']}, Current snapshots: {len(snapshot_sequence)})")
