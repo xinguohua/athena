@@ -224,36 +224,32 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             dst_nodes = [node_id_map[node_gids[v]] for u, v in edges]
             edge_index = torch.LongTensor([src_nodes, dst_nodes]).to(self.device)
 
-            # 节点特征：融合历史状态 + 当前快照的节点属性
+            # 节点特征：使用历史状态作为基础,叠加当前快照的结构/属性特征
             node_features_list = []
             
             for nid in sorted(all_nodes):
-                # 基础特征：历史状态
-                base_feat = self.node_states.get(nid, np.zeros(self.embedding_dim, dtype=np.float32)).copy()
+                # 使用历史状态作为初始特征 (这是上一步 GNN 学到的表示)
+                hist_state = self.node_states.get(nid, np.zeros(self.embedding_dim, dtype=np.float32))
+                node_feat = hist_state.copy()
                 
-                # 如果节点在当前快照中活跃,叠加其属性特征
+                # 如果节点在当前快照中活跃,叠加当前属性特征 (仅作为微调信号)
                 if nid in node_gids:
                     local_idx = node_gids.index(nid)
                     
-                    # 使用简单的字符串 hash 作为节点特征
-                    # properties 是字符串化的 set, 如 "{'prop1', 'prop2'}"
+                    # 节点属性的 hash 特征 (弱信号,权重小)
                     try:
                         properties_str = g.vs[local_idx]['properties']
                     except (KeyError, AttributeError):
                         properties_str = ''
                     
-                    if properties_str and len(properties_str) > 2:  # 不是空 set "{}"
-                        # 使用多个 hash 函数提取多维特征
+                    if properties_str and len(properties_str) > 2:
                         prop_hash = hash(properties_str)
-                        # 提取 32 位特征 (前32个维度)
-                        for i in range(32):
+                        # 只用前16位,避免覆盖太多历史信息
+                        for i in range(16):
                             bit_val = (prop_hash >> i) & 1
-                            base_feat[i] += bit_val * 0.2  # 叠加 hash bit
-                        
-                        # 添加字符串长度特征 (归一化到维度32)
-                        base_feat[32] += min(len(properties_str) / 1000.0, 1.0)
+                            node_feat[i] += bit_val * 0.05  # 很小的权重
                 
-                node_features_list.append(base_feat)
+                node_features_list.append(node_feat)
             
             node_features_np = np.array(node_features_list, dtype=np.float32)
             node_features = torch.from_numpy(node_features_np).to(self.device)
