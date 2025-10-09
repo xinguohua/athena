@@ -237,7 +237,11 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                     
                     # 使用简单的字符串 hash 作为节点特征
                     # properties 是字符串化的 set, 如 "{'prop1', 'prop2'}"
-                    properties_str = g.vs[local_idx].get('properties', '')
+                    try:
+                        properties_str = g.vs[local_idx]['properties']
+                    except (KeyError, AttributeError):
+                        properties_str = ''
+                    
                     if properties_str and len(properties_str) > 2:  # 不是空 set "{}"
                         # 使用多个 hash 函数提取多维特征
                         prop_hash = hash(properties_str)
