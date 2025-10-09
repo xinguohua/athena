@@ -369,7 +369,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             },
             'model_state': self.model.state_dict(),
             'snapshot_embeddings': self.snapshot_embeddings_list,
-            'all_nodes': self.all_nodes,
+            'all_nodes': self.all_nodes,  # 保存节点列表（load时重建node_id_map）
         }
         torch.save(state, path)
         print(f"[ROLAND] Model saved to {path}")
@@ -382,20 +382,18 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         print(f"[ROLAND] Loading model from {path}...")
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         state = torch.load(path, map_location=device)
-
-        # 清理旧版本不兼容的参数
-        params = state['params'].copy()
-        obsolete_keys = ['num_layers', 'update_method', 'alpha']
-        for key in obsolete_keys:
-            if key in params:
-                print(f"[ROLAND] Warning: Removing obsolete parameter '{key}' from saved model")
-                del params[key]
         
         # 创建实例
-        instance = cls(snapshot_sequence, **params)
+        instance = cls(snapshot_sequence, **state['params'])
+        
+        # 恢复模型权重和嵌入
         instance.model.load_state_dict(state['model_state'])
         instance.snapshot_embeddings_list = state['snapshot_embeddings']
         instance.all_nodes = state['all_nodes']
+        
+        # 重建 node_id_map
+        instance.node_id_map = {nid: i for i, nid in enumerate(instance.all_nodes)}
+        instance.num_nodes = len(instance.all_nodes)
 
         print("[ROLAND] Model loaded successfully")
         return instance
