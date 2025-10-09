@@ -201,28 +201,10 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
 
             # 提取边和特征
             edges = g.get_edgelist()
-            
-            # 处理空快照（没有边的情况）
-            if len(edges) == 0:
-                print(f"[snapshot {sidx}] 跳过空快照（无边）")
-                # 即使没有新边，也要保存当前状态作为快照嵌入
-                if self.node_states:
-                    current_states = np.array([self.node_states.get(nid, np.zeros(self.embedding_dim)) 
-                                              for nid in sorted(all_nodes)], dtype=np.float32)
-                    snapshot_emb = current_states.mean(axis=0)
-                else:
-                    snapshot_emb = np.zeros(self.embedding_dim, dtype=np.float32)
-                self.snapshot_embeddings_list.append(snapshot_emb)
-                continue
-                
             types = g.es["actions"]
-            # 假设有 timestamp 属性，若无则用 sidx
-            try:
-                timestamps = g.es["timestamp"]
-            except (KeyError, AttributeError):
-                timestamps = [sidx] * len(edges)
+            timestamps = g.es["timestamp"]
 
-            # 映射到全局节点 ID
+            # 初始化节点状态（首次出现)
             node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
             for nid in node_gids:
                 self._init_node_state(nid)
