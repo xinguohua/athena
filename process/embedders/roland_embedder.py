@@ -224,19 +224,24 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             dst_nodes = [node_id_map[node_gids[v]] for u, v in edges]
             edge_index = torch.LongTensor([src_nodes, dst_nodes]).to(self.device)
 
-            # 节点特征：使用历史状态作为基础,叠加当前快照的结构/属性特征
+            # 节点特征：使用当前快照的原始特征 (properties, degree等)
+            # GNN 会将这些特征转换为高级表示
+            # 历史状态在 _update_node_state 中通过 moving_average/GRU 融合
             node_features_list = []
             
             for nid in sorted(all_nodes):
-                # 使用历史状态作为初始特征 (这是上一步 GNN 学到的表示)
-                hist_state = self.node_states.get(nid, np.zeros(self.embedding_dim, dtype=np.float32))
-                node_feat = hist_state.copy()
+                # 构造当前快照的节点特征向量
+                node_feat = np.zeros(self.embedding_dim, dtype=np.float32)
                 
-                # 如果节点在当前快照中活跃,叠加当前属性特征 (仅作为微调信号)
+                # 如果节点在当前快照中活跃,提取其特征
                 if nid in node_gids:
                     local_idx = node_gids.index(nid)
                     
-                    # 节点属性的 hash 特征 (弱信号,权重小)
+                    # 特征1: 当前度数 (归一化)
+                    degree = len([e for e in edges if node_gids[e[0]] == nid or node_gids[e[1]] == nid])
+                    node_feat[0] = min(degree / 50.0, 1.0)  # 归一化到 [0,1]
+                    
+                    # 特征2-65: 节点属性的 hash 特征
                     try:
                         properties_str = g.vs[local_idx]['properties']
                     except (KeyError, AttributeError):
@@ -244,11 +249,12 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                     
                     if properties_str and len(properties_str) > 2:
                         prop_hash = hash(properties_str)
-                        # 只用前16位,避免覆盖太多历史信息
-                        for i in range(16):
+                        # 使用64位 hash 作为二进制特征
+                        for i in range(min(64, self.embedding_dim - 1)):
                             bit_val = (prop_hash >> i) & 1
-                            node_feat[i] += bit_val * 0.05  # 很小的权重
+                            node_feat[i + 1] = float(bit_val)
                 
+                # 非活跃节点保持零特征 (表示不在当前快照中)
                 node_features_list.append(node_feat)
             
             node_features_np = np.array(node_features_list, dtype=np.float32)
