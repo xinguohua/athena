@@ -194,11 +194,6 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
     
     def _update_node_state(self, node_id, new_embedding, existing_degree=0, new_degree=0):
         """更新节点状态（moving average 或 GRU，支持动态 keep_ratio）"""
-        # 检查 NaN
-        if np.isnan(new_embedding).any():
-            print(f"[WARNING] NaN detected in embedding for node {node_id}, skipping update")
-            return
-        
         old = self.node_states.get(node_id, np.zeros(self.embedding_dim))
         
         if self.update_method == 'moving_average':
@@ -327,26 +322,12 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                     ts_normalized = np.ones_like(ts_array) * 0.5
                 edge_features[:, 15] = torch.from_numpy(ts_normalized).to(self.device)
 
-            # 多层 GNN 传播 (符合 ROLAND 官方实现)
-            # 注意: ResidualEdgeConv 内部已有残差连接,不需要额外的 skip connection
+            # 多层 GNN 传播
             x = node_features
-            nan_detected = False
-            
-            for layer_idx, layer in enumerate(self.gnn_layers):
+            for layer in self.gnn_layers:
                 x = layer(x, edge_index, edge_features)
 
-            
-            # 如果检测到 NaN,使用上一个快照的嵌入或零向量
-            if nan_detected:
-                if self.snapshot_embeddings_list:
-                    snapshot_emb = self.snapshot_embeddings_list[-1].copy()
-                else:
-                    snapshot_emb = np.zeros(self.embedding_dim, dtype=np.float32)
-                self.snapshot_embeddings_list.append(snapshot_emb)
-                print(f"[snapshot {sidx}] Skipped due to NaN, using fallback embedding")
-                continue
-
-            # 更新活跃节点的状态 (CUDA tensor 需要先 .cpu() 再 .numpy())
+            # 更新活跃节点的状态
             # 计算当前快照中每个节点的度数
             node_current_degree = {}
             for u, v in edges:
