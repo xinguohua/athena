@@ -272,26 +272,63 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         return embeddings_dict
 
     def get_snapshot_embeddings(self, snapshot_sequence=None):
-        """返回快照嵌入矩阵（快照级别聚合）"""
-        if not self.snapshot_embeddings_list:
-            raise RuntimeError("还没有快照嵌入，请先调用 train()")
+        """返回快照级别的嵌入矩阵（评估时逐快照前向计算）。
 
+        对每个快照：
+        1) 使用当前训练好的编码器对该快照前向得到节点嵌入；
+        2) 使用度加权对节点嵌入做图级聚合；
+        3) 对聚合后的图向量做 L2 归一化；
+        因此不同快照的图向量由其自身结构与节点表征决定，不会“都一样”。
+        """
         if snapshot_sequence is None:
-            snapshot_sequence = list(range(len(self.snapshot_embeddings_list)))
+            snapshot_sequence = list(range(len(self.snapshots)))
 
-        # 直接返回字典形式的嵌入
+        self.model.eval()
         result = []
-        for i in snapshot_sequence:
-            embeddings = self.snapshot_embeddings_list[i]
-            if embeddings:
-                # 聚合所有节点嵌入：平均值
-                all_embs = np.array(list(embeddings.values()))
-                snapshot_emb = np.mean(all_embs, axis=0)
-            else:
-                snapshot_emb = np.zeros(self.hidden_conv_2)
-            result.append(snapshot_emb)
-        
-        arr = np.array(result, dtype=np.float32)
+        eps = 1e-12
+        with torch.no_grad():
+            for i in snapshot_sequence:
+                g = self.snapshots[i] if i < len(self.snapshots) else None
+                if g is None:
+                    result.append(np.zeros(self.hidden_conv_2, dtype=np.float32))
+                    continue
+
+                # 前向：节点嵌入
+                x, edge_index = self._igraph_to_torch(g)
+                node_emb = self.model(x, edge_index).cpu().numpy()  # (N_all, D)
+
+                # 仅聚合当前快照包含的节点（用度作为权重）
+                node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
+                degrees = g.degree()
+
+                weighted_sum = np.zeros(self.hidden_conv_2, dtype=np.float32)
+                total_w = 0.0
+                for local_idx, nid in enumerate(node_gids):
+                    idx = self.node_id_map.get(nid, None)
+                    if idx is None:
+                        continue
+                    w = float(degrees[local_idx])
+                    if w <= 0:
+                        continue
+                    weighted_sum += (w * node_emb[idx].astype(np.float32))
+                    total_w += w
+
+                if total_w <= 0:
+                    # 退化：无边，回退为简单均值
+                    idxs = [self.node_id_map[nid] for nid in node_gids if nid in self.node_id_map]
+                    if idxs:
+                        snapshot_vec = node_emb[idxs].mean(axis=0).astype(np.float32)
+                    else:
+                        snapshot_vec = np.zeros(self.hidden_conv_2, dtype=np.float32)
+                else:
+                    snapshot_vec = weighted_sum / (total_w + eps)
+
+                # L2 归一化
+                norm = np.linalg.norm(snapshot_vec) + eps
+                snapshot_vec = (snapshot_vec / norm).astype(np.float32)
+                result.append(snapshot_vec)
+
+        arr = np.vstack(result).astype(np.float32) if result else np.zeros((0, self.hidden_conv_2), dtype=np.float32)
         print(f"[ROLAND] Snapshot embeddings: {arr.shape}")
         return arr
 
