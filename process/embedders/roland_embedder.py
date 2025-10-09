@@ -275,8 +275,6 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             edge_index = torch.LongTensor([src_nodes, dst_nodes]).to(self.device)
 
             # 节点特征：使用当前快照的原始特征 (properties, degree等)
-            # GNN 会将这些特征转换为高级表示
-            # 历史状态在 _update_node_state 中通过 moving_average/GRU 融合
             node_features_list = []
             
             for nid in sorted(all_nodes):
@@ -336,17 +334,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             
             for layer_idx, layer in enumerate(self.gnn_layers):
                 x = layer(x, edge_index, edge_features)
-                
-                # 每层后都检查 NaN
-                if torch.isnan(x).any():
-                    print(f"[ERROR] NaN detected in GNN layer {layer_idx} at snapshot {sidx}")
-                    print(f"  - Input features range: [{node_features.min():.4f}, {node_features.max():.4f}]")
-                    nan_detected = True
-                    break
-                
-                # 可选：逐层 L2 归一化 (ROLAND 官方可配置)
-                # if cfg.gnn.l2norm:
-                #     x = F.normalize(x, p=2, dim=-1)
+
             
             # 如果检测到 NaN,使用上一个快照的嵌入或零向量
             if nan_detected:
