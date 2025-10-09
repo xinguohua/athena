@@ -137,8 +137,8 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         features=None, 
         mapp=None,
         embedding_dim=256,
-        hidden_conv_1=64,
-        hidden_conv_2=32,
+        hidden_conv_1=128,
+        hidden_conv_2=256,
         temporal_type="gru",
         num_epochs=1,
         lr=0.001,
@@ -148,8 +148,8 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         Args:
             snapshots: list of igraph.Graph
             embedding_dim: 输入特征维度 (默认256)
-            hidden_conv_1: 第1层GCN输出维度 (默认64)
-            hidden_conv_2: 第2层GCN输出维度 (默认32，最终嵌入维度)
+            hidden_conv_1: 第1层GCN输出维度 (默认128)
+            hidden_conv_2: 第2层GCN输出维度 (默认256，最终嵌入维度，匹配分类器)
             temporal_type: 时序更新类型 (gru/mlp/moving_average)
             num_epochs: 训练轮数
             lr: 学习率
