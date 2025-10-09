@@ -273,17 +273,24 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                     ts_normalized = np.ones_like(ts_array) * 0.5
                 edge_features[:, 15] = torch.from_numpy(ts_normalized).to(self.device)
 
-            # 多层 GNN 传播
+            # 多层 GNN 传播 (符合 ROLAND 官方实现)
+            # 注意: ResidualEdgeConv 内部已有残差连接,不需要额外的 skip connection
             x = node_features
             nan_detected = False
-            for layer in self.gnn_layers:
+            
+            for layer_idx, layer in enumerate(self.gnn_layers):
                 x = layer(x, edge_index, edge_features)
-                # 检查 NaN
+                
+                # 每层后都检查 NaN
                 if torch.isnan(x).any():
-                    print(f"[ERROR] NaN detected in GNN output at snapshot {sidx}")
+                    print(f"[ERROR] NaN detected in GNN layer {layer_idx} at snapshot {sidx}")
                     print(f"  - Input features range: [{node_features.min():.4f}, {node_features.max():.4f}]")
                     nan_detected = True
                     break
+                
+                # 可选：逐层 L2 归一化 (ROLAND 官方可配置)
+                # if cfg.gnn.l2norm:
+                #     x = F.normalize(x, p=2, dim=-1)
             
             # 如果检测到 NaN,使用上一个快照的嵌入或零向量
             if nan_detected:
