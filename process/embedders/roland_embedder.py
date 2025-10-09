@@ -1,129 +1,48 @@
 """
-ROLAND (Graph Learning Framework for Dynamic Graphs) Embedder
-基于 snap-stanford/roland 的无监督时序图嵌入器
+ROLAND Contrastive Embedder
+静态图两层GCN + 对比学习（BPR）损失，用于生成快照嵌入。
 
-架构：
-1. Pre-processing: 2层MLP (input_dim → 256 → 128)
-2. GCN Layers: 简单图卷积 (128→64→32)
-3. Temporal Update: 每层独立GRU/MLP/moving_average更新
-4. 训练: 无监督结构重建 MSE(sigmoid(h@h.T), A_true)
+流程：
+1. 预处理 MLP：input_dim → 256 → 128
+2. 两层图卷积（邻居求和 + 线性变换）
+3. 对比损失：正边 vs 负边的 BPR 排序损失
+4. 每个快照独立训练多个 epoch
 """
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional, Iterable, Union
 
 from process.embedders.base import GraphEmbedderBase
 
 
-class ROLANDUnsupervised(nn.Module):
-    """ROLAND 无监督时序 GNN 模型（基于结构重建）"""
-    
-    def __init__(
-        self, 
-        input_dim: int,
-        num_nodes: int,
-        hidden_conv_1: int = 64,
-        hidden_conv_2: int = 32,
-        temporal_type: str = "gru"  # gru/mlp/moving_average
-    ):
+class ContrastiveGCNEncoder(nn.Module):
+    """两层简单图卷积编码器（无时间依赖）"""
+
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int):
         super().__init__()
-        self.input_dim = input_dim
-        self.num_nodes = num_nodes
-        self.hidden_conv_1 = hidden_conv_1
-        self.hidden_conv_2 = hidden_conv_2
-        self.temporal_type = temporal_type
-        
-        # Pre-processing MLP (256 → 128)
         self.pre1 = nn.Linear(input_dim, 256)
         self.pre2 = nn.Linear(256, 128)
-        
-        # GCN Layers (简单邻接矩阵乘法)
-        self.conv1 = nn.Linear(128, hidden_conv_1)
-        self.conv2 = nn.Linear(hidden_conv_1, hidden_conv_2)
-        
-        # Temporal Update (每层独立)
-        if temporal_type == "gru":
-            self.gru1 = nn.GRUCell(hidden_conv_1, hidden_conv_1)
-            self.gru2 = nn.GRUCell(hidden_conv_2, hidden_conv_2)
-        elif temporal_type == "mlp":
-            self.mlp1 = nn.Sequential(
-                nn.Linear(hidden_conv_1 * 2, hidden_conv_1),
-                nn.LeakyReLU()
-            )
-            self.mlp2 = nn.Sequential(
-                nn.Linear(hidden_conv_2 * 2, hidden_conv_2),
-                nn.LeakyReLU()
-            )
-        # moving_average: alpha * h_new + (1-alpha) * h_old
-        
-        # Previous embeddings (两层独立状态)
-        self.register_buffer('prev_emb_1', torch.zeros(num_nodes, hidden_conv_1))
-        self.register_buffer('prev_emb_2', torch.zeros(num_nodes, hidden_conv_2))
-    
-    def reset_embeddings(self):
-        """重置历史状态（每个epoch开始时调用，防止未来信息泄漏）"""
-        self.prev_emb_1.zero_()
-        self.prev_emb_2.zero_()
-    
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor):
-        """
-        Args:
-            x: 节点特征 (N, input_dim)
-            edge_index: COO格式边索引 (2, E)
-        
-        Returns:
-            final_emb: 最终节点嵌入 (N, hidden_conv_2)
-            new_embeddings: 两层的新状态 [layer1_emb, layer2_emb]
-        """
-        # Pre-processing MLP
+        self.conv1 = nn.Linear(128, hidden_dim)
+        self.conv2 = nn.Linear(hidden_dim, output_dim)
+        self.dropout = nn.Dropout(0.1)
+
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
+        """返回最终节点表示"""
         h = F.leaky_relu(self.pre1(x))
-        h = F.leaky_relu(self.pre2(h))  # (N, 128)
-        
-        # GCN Layer 1: 简单邻接矩阵乘法
-        h = self._gcn_forward(h, edge_index, self.conv1)  # (N, 64)
-        
-        # Temporal Update Layer 1
-        h = self._temporal_update(h, self.prev_emb_1, layer=1)
-        new_emb_1 = h.clone()
-        
-        # GCN Layer 2
-        h = self._gcn_forward(h, edge_index, self.conv2)  # (N, 32)
-        
-        # Temporal Update Layer 2
-        h = self._temporal_update(h, self.prev_emb_2, layer=2)
-        new_emb_2 = h.clone()
-        
-        return h, [new_emb_1, new_emb_2]
-    
-    def _gcn_forward(self, h: torch.Tensor, edge_index: torch.Tensor, linear: nn.Linear):
-        """简单 GCN: A @ H @ W (无自环/归一化版本)"""
-        # 聚合邻居特征: sum_{j in N(i)} h_j
+        h = F.leaky_relu(self.pre2(h))
+        h = self._gcn_forward(h, edge_index, self.conv1)
+        h = self.dropout(h)
+        h = self._gcn_forward(h, edge_index, self.conv2)
+        return F.normalize(h, p=2, dim=-1)
+
+    def _gcn_forward(self, h: torch.Tensor, edge_index: torch.Tensor, linear: nn.Linear) -> torch.Tensor:
         src, dst = edge_index[0], edge_index[1]
         aggr = torch.zeros_like(h)
         aggr.index_add_(0, dst, h[src])
-        
-        # 线性变换
         out = linear(aggr)
-        out = F.leaky_relu(out)
-        
-        return out
-    
-    def _temporal_update(self, h_new: torch.Tensor, h_old: torch.Tensor, layer: int):
-        """时序状态更新（GRU/MLP/moving_average）"""
-        if self.temporal_type == "gru":
-            gru = self.gru1 if layer == 1 else self.gru2
-            return gru(h_new, h_old)
-        
-        elif self.temporal_type == "mlp":
-            mlp = self.mlp1 if layer == 1 else self.mlp2
-            combined = torch.cat([h_new, h_old], dim=-1)
-            return mlp(combined)
-        
-        else:  # moving_average
-            alpha = 0.7  # 新状态权重
-            return alpha * h_new + (1 - alpha) * h_old
+        return F.leaky_relu(out)
 
 
 class ROLANDGraphEmbedder(GraphEmbedderBase):
@@ -132,16 +51,16 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
     _default_path = 'roland_encoder.pth'
 
     def __init__(
-        self, 
-        snapshots, 
-        features=None, 
+        self,
+        snapshots,
+        features=None,
         mapp=None,
         embedding_dim=256,
         hidden_conv_1=128,
         hidden_conv_2=256,
-        temporal_type="gru",
-        num_epochs=1,
+        num_epochs=10,
         lr=0.001,
+        train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
         model_path=None
     ):
         """
@@ -150,19 +69,22 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             embedding_dim: 输入特征维度 (默认256)
             hidden_conv_1: 第1层GCN输出维度 (默认128)
             hidden_conv_2: 第2层GCN输出维度 (默认256，最终嵌入维度，匹配分类器)
-            temporal_type: 时序更新类型 (gru/mlp/moving_average)
             num_epochs: 训练轮数
             lr: 学习率
+            train_indices: 可选，仅训练指定索引的快照（支持 range、列表或(start, end)元组）
         """
         super().__init__(snapshots, features, mapp)
         self.snapshots = self.G
         self.embedding_dim = embedding_dim
         self.hidden_conv_1 = hidden_conv_1
         self.hidden_conv_2 = hidden_conv_2
-        self.temporal_type = temporal_type
         self.num_epochs = num_epochs
         self.lr = lr
         self.model_path = model_path or self._default_path
+
+        # 训练快照筛选（默认全部）
+        self.train_snapshot_indices = self._resolve_train_indices(train_indices)
+        self._train_snapshot_index_set = set(self.train_snapshot_indices)
 
         # 设备
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -178,72 +100,105 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         self.node_id_map = {nid: i for i, nid in enumerate(self.all_nodes)}
         
         # 初始化模型
-        self.model = ROLANDUnsupervised(
+        self.model = ContrastiveGCNEncoder(
             input_dim=embedding_dim,
-            num_nodes=self.num_nodes,
-            hidden_conv_1=hidden_conv_1,
-            hidden_conv_2=hidden_conv_2,
-            temporal_type=temporal_type
+            hidden_dim=hidden_conv_1,
+            output_dim=hidden_conv_2
         ).to(self.device)
         
         # 优化器
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-        self.criterion = nn.MSELoss()
-        
         # 存储最终嵌入
         self.snapshot_embeddings_list = []
 
+    def _resolve_train_indices(
+        self,
+        indices: Optional[Union[Iterable[int], Tuple[int, int], int]]
+    ) -> list[int]:
+        total = len(self.snapshots)
+        if total == 0:
+            return []
+
+        if indices is None:
+            raw = list(range(total))
+        elif isinstance(indices, int):
+            raw = [indices]
+        elif isinstance(indices, tuple) and len(indices) == 2:
+            start, end = indices
+            start_int, end_int = int(start), int(end)
+            if start_int > end_int:
+                start_int, end_int = end_int, start_int
+            raw = list(range(start_int, end_int + 1))
+        else:
+            try:
+                raw = list(indices)  # type: ignore[arg-type]
+            except TypeError as exc:
+                raise TypeError("train_indices 必须是可迭代的索引或(start, end)元组") from exc
+
+        valid = sorted({int(idx) for idx in raw if 0 <= int(idx) < total})
+        if not valid:
+            raise ValueError("train_indices 不包含有效的快照索引")
+        return valid
+
     def train(self):
-        """无监督训练：结构重建损失"""
-        print(f"[ROLAND] Training on {len(self.snapshots)} snapshots, {self.num_nodes} nodes")
-        print(f"[ROLAND] Epochs: {self.num_epochs}, Learning Rate: {self.lr}")
+        """无监督训练：每个 snapshot 反复训练多轮"""
+        if not self.train_snapshot_indices:
+            raise RuntimeError("没有可用于训练的快照。请检查 train_indices 设置。")
+
+        print(
+            f"[ROLAND] Training on {len(self.train_snapshot_indices)}/{len(self.snapshots)} snapshots, {self.num_nodes} nodes"
+        )
+        print(f"[ROLAND] Epochs per snapshot: {self.num_epochs}, Learning Rate: {self.lr}")
         
-        for epoch in range(self.num_epochs):
-            # 每个epoch重置嵌入（防止未来信息泄漏）
-            self.model.reset_embeddings()
+        total_loss = 0.0
+        num_trained = 0
+        
+        for sidx, g in enumerate(self.snapshots):
+            if sidx not in self._train_snapshot_index_set:
+                continue
+            if g is None:
+                continue
             
-            epoch_loss = 0.0
-            for sidx, g in enumerate(self.snapshots):
-                if g is None:
-                    continue
-                
-                # 转换 igraph 到 PyTorch
-                x, edge_index = self._igraph_to_torch(g)
-                
+            # 转换 igraph 到 PyTorch
+            x, edge_index = self._igraph_to_torch(g)
+            
+            # 每个 snapshot 训练多个 epoch
+            snapshot_loss = 0.0
+            for epoch in range(self.num_epochs):
                 # Forward
-                node_emb, new_embeddings = self.model(x, edge_index)
+                node_emb = self.model(x, edge_index)
                 
-                # 边重建损失（只计算边上的点积，避免完整邻接矩阵）
-                # 正边：实际存在的边 (label=1)
+                # BPR 对比学习损失（边预测）
+                # 正边：实际存在的边
                 src, dst = edge_index[0], edge_index[1]
-                pos_scores = torch.sigmoid((node_emb[src] * node_emb[dst]).sum(dim=-1))
-                pos_loss = -torch.log(pos_scores + 1e-8).mean()
+                pos_scores = (node_emb[src] * node_emb[dst]).sum(dim=-1)  # (E,)
                 
-                # 负采样：随机采样不存在的边 (label=0)
-                num_neg = min(edge_index.size(1), 1000)  # 限制负样本数量
-                neg_src = torch.randint(0, self.num_nodes, (num_neg,), device=self.device)
-                neg_dst = torch.randint(0, self.num_nodes, (num_neg,), device=self.device)
-                neg_scores = torch.sigmoid((node_emb[neg_src] * node_emb[neg_dst]).sum(dim=-1))
-                neg_loss = -torch.log(1 - neg_scores + 1e-8).mean()
+                # 负采样：为每条正边采样一条负边
+                num_edges = edge_index.size(1)
+                neg_dst = torch.randint(0, self.num_nodes, (num_edges,), device=self.device)
+                neg_scores = (node_emb[src] * node_emb[neg_dst]).sum(dim=-1)  # (E,)
                 
-                loss = pos_loss + neg_loss
+                # BPR Loss: -log(sigmoid(pos - neg))
+                # 目标：让正边得分高于负边得分
+                loss = -torch.log(torch.sigmoid(pos_scores - neg_scores) + 1e-8).mean()
                 
                 # Backward
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
                 
-                # 更新历史状态（detach）
-                self.model.prev_emb_1 = new_embeddings[0].detach()
-                self.model.prev_emb_2 = new_embeddings[1].detach()
-                
-                epoch_loss += loss.item()
+                snapshot_loss += loss.item()
             
-            avg_loss = epoch_loss / len(self.snapshots)
-            if (epoch + 1) % 5 == 0:
-                print(f"  Epoch {epoch+1}/{self.num_epochs}, Avg Loss: {avg_loss:.6f}")
+            # 更新历史状态（训练完当前 snapshot 后）
+            avg_snapshot_loss = snapshot_loss / self.num_epochs
+            total_loss += avg_snapshot_loss
+            num_trained += 1
+            
+            if (sidx + 1) % 10 == 0:  # 每 10 个 snapshot 打印一次
+                print(f"  Snapshot {sidx+1}/{len(self.snapshots)}, Avg Loss: {avg_snapshot_loss:.6f}")
         
-        print("[ROLAND] Training completed!")
+        avg_total_loss = total_loss / num_trained if num_trained > 0 else 0
+        print(f"[ROLAND] Training completed! Overall Avg Loss: {avg_total_loss:.6f}")
         
         # 生成最终嵌入（推理模式）
         self._generate_final_embeddings()
@@ -254,8 +209,6 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
     def _generate_final_embeddings(self):
         """训练后生成最终嵌入（用于后续任务）"""
         self.model.eval()
-        self.model.reset_embeddings()
-        
         with torch.no_grad():
             for sidx, g in enumerate(self.snapshots):
                 if g is None:
@@ -263,12 +216,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                     continue
                 
                 x, edge_index = self._igraph_to_torch(g)
-                final_emb, new_embeddings = self.model(x, edge_index)
-                
-                # 更新状态
-                self.model.prev_emb_1 = new_embeddings[0]
-                self.model.prev_emb_2 = new_embeddings[1]
-                
+                final_emb = self.model(x, edge_index)
                 # 提取嵌入字典
                 embeddings_dict = self._extract_final_embeddings(g, final_emb)
                 self.snapshot_embeddings_list.append(embeddings_dict)
@@ -366,9 +314,9 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 'embedding_dim': self.embedding_dim,
                 'hidden_conv_1': self.hidden_conv_1,
                 'hidden_conv_2': self.hidden_conv_2,
-                'temporal_type': self.temporal_type,
                 'num_epochs': self.num_epochs,
                 'lr': self.lr,
+                'train_indices': self.train_snapshot_indices,
             },
             'model_state': self.model.state_dict(),
             'snapshot_embeddings': self.snapshot_embeddings_list,
@@ -387,7 +335,8 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         state = torch.load(path, map_location=device)
         
         # 创建实例
-        instance = cls(snapshot_sequence, **state['params'])
+        params = dict(state.get('params', {}))
+        instance = cls(snapshot_sequence, **params)
         
         # 恢复模型权重和嵌入
         instance.model.load_state_dict(state['model_state'])

@@ -33,10 +33,15 @@ def prepare_data(path_map: dict):
     return handler
 
 
-def build_embeddings(snapshots):
-    """构建并训练嵌入器"""
+def build_embeddings(handler):
+    """构建并训练嵌入器，仅使用良性快照训练"""
     embedder_cls = get_embedder_by_name(EMBEDDER_NAME)
-    embedder = embedder_cls(snapshots)
+    if EMBEDDER_NAME.lower() == "roland":
+        benign_range = range(handler.benign_idx_start, handler.benign_idx_end + 1)
+        print(f"[Train] 仅使用良性快照训练编码器: {handler.benign_idx_start}~{handler.benign_idx_end}")
+        embedder = embedder_cls(handler.snapshots, train_indices=benign_range)
+    else:
+        embedder = embedder_cls(handler.snapshots)
     embedder.train()
     snapshot_embeddings = embedder.get_snapshot_embeddings()
     print("\n--- Encoder 过程完成 ---")
@@ -53,7 +58,7 @@ def main():
     handler = prepare_data(path_map)
 
     # 嵌入训练
-    snapshot_embeddings = build_embeddings(handler.snapshots)
+    snapshot_embeddings = build_embeddings(handler)
 
     # 模型训练
     benign_embeddings = snapshot_embeddings[handler.benign_idx_start:handler.benign_idx_end + 1]
