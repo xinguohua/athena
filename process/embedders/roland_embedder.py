@@ -247,6 +247,9 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         
         # 生成最终嵌入（推理模式）
         self._generate_final_embeddings()
+        
+        # 自动保存模型
+        self.save_model()
     
     def _generate_final_embeddings(self):
         """训练后生成最终嵌入（用于后续任务）"""
