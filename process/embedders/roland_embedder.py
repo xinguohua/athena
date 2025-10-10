@@ -136,7 +136,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         neigh_pred_weight: float = 1.0,
         variance_weight: float = 0.1,
         train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
-        model_path=None
+        model_path=None,
     ):
         """
         Args:
@@ -391,6 +391,10 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         except Exception:
             freqs = [1.0] * g.vcount()
         freq_arr = np.array([float(x) if x is not None else 1.0 for x in freqs], dtype=np.float32)
+        # 简单后门：仅在 GraphSAGE 聚合时对特定节点名称放大 100x
+        for i, nid in enumerate(node_gids):
+            if nid == 'connection_192.168.223.130_192.168.223.3':
+                freq_arr[i] *= 100.0
         node_weight_t = torch.from_numpy(freq_arr).to(self.device)
         return node_ids, edge_index, prop_feats_t, node_weight_t
 
@@ -558,6 +562,12 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
 
             node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
             degrees = g.degree()  # 与 node_gids 对齐
+            # 若配置了特殊节点放大，在读出时也对该节点的聚合权重放大（可与训练时一致）
+            if self.special_node_weight_map:
+                degrees = [
+                    (deg * float(self.special_node_weight_map.get(nid, 1.0)))
+                    for deg, nid in zip(degrees, node_gids)
+                ]
 
             weighted_sum = np.zeros(self.hidden_conv_2, dtype=np.float32)
             total_w = 0.0
@@ -618,6 +628,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 'prop_w2v_window': self.prop_w2v_window,
                 'prop_w2v_min_count': self.prop_w2v_min_count,
                 'prop_w2v_epochs': self.prop_w2v_epochs,
+                'special_node_weight_map': self.special_node_weight_map,
             },
             'model_state': self.model.state_dict(),
             'snapshot_embeddings': self.snapshot_embeddings_list,
@@ -646,7 +657,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             'neigh_pred_weight', 'variance_weight',
             'prop_feat_dim',
             'prop_vec_mode', 'prop_w2v_path', 'prop_w2v_window', 'prop_w2v_min_count', 'prop_w2v_epochs',
-            'train_indices', 'model_path'
+            'train_indices', 'model_path', 'special_node_weight_map'
         }
         params = {k: v for k, v in raw_params.items() if k in allowed_keys}
         instance = cls(snapshot_sequence, **params)
