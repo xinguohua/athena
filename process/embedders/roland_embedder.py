@@ -180,30 +180,43 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             for epoch in range(self.num_epochs):
                 # Forward
                 node_emb = self.model(x, edge_index)
-                
+
+                # -----------------------
                 # BPR 对比学习损失（边预测）
-                # 正边：实际存在的边
+                # -----------------------
                 src, dst = edge_index[0], edge_index[1]
                 pos_scores = (node_emb[src] * node_emb[dst]).sum(dim=-1)  # (E,)
-                
+
                 # 多负采样：每条正边采样 K=5 个负样本
                 K = 5
                 num_edges = edge_index.size(1)
                 neg_dst = torch.randint(0, self.num_nodes, (K, num_edges), device=self.device)
-                neg_emb = node_emb[neg_dst]                 # (K, E, D)
-                pos_src_emb = node_emb[src].unsqueeze(0)     # (1, E, D)
+                neg_emb = node_emb[neg_dst]  # (K, E, D)
+                pos_src_emb = node_emb[src].unsqueeze(0)  # (1, E, D)
                 neg_scores = (neg_emb * pos_src_emb).sum(dim=-1)  # (K, E)
                 pos_scores_exp = pos_scores.unsqueeze(0).expand(K, -1)  # (K, E)
+
                 # BPR Loss: -log(sigmoid(pos - neg))，对 K 个负样本平均
                 loss = -torch.log(torch.sigmoid(pos_scores_exp - neg_scores) + 1e-8).mean()
-                
+
+                # -----------------------
+                # ✅ 这里加打印验证模型是否有学习信号
+                # -----------------------
+                if epoch == 0 or epoch == self.num_epochs - 1:  # 只看每个 snapshot 的首尾 epoch
+                    with torch.no_grad():
+                        pos_mean = pos_scores.mean().item()
+                        neg_mean = neg_scores.mean().item()
+                        diff = pos_mean - neg_mean
+                        print(
+                            f"    [Snapshot {sidx} | Epoch {epoch}] "
+                            f"pos_mean={pos_mean:.4f}, neg_mean={neg_mean:.4f}, diff={diff:.4f}, loss={loss.item():.4f}"
+                        )
+
                 # Backward
                 self.optimizer.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
                 self.optimizer.step()
-                
-                snapshot_loss += loss.item()
             
             # 更新历史状态（训练完当前 snapshot 后）
             avg_snapshot_loss = snapshot_loss / self.num_epochs
