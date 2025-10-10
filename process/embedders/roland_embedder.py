@@ -447,7 +447,14 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         state = torch.load(path, map_location=device)
         
         # 创建实例
-        params = dict(state.get('params', {}))
+        raw_params = dict(state.get('params', {}))
+        # 过滤掉 __init__ 不接受的键，避免 TypeError（例如 'objective'）
+        allowed_keys = {
+            'embedding_dim', 'hidden_conv_1', 'hidden_conv_2',
+            'num_epochs', 'lr', 'tau', 'edge_drop_rate', 'feat_drop_rate',
+            'train_indices', 'model_path'
+        }
+        params = {k: v for k, v in raw_params.items() if k in allowed_keys}
         instance = cls(snapshot_sequence, **params)
         
         # 恢复模型权重和嵌入
