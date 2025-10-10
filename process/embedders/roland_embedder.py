@@ -628,7 +628,6 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 'prop_w2v_window': self.prop_w2v_window,
                 'prop_w2v_min_count': self.prop_w2v_min_count,
                 'prop_w2v_epochs': self.prop_w2v_epochs,
-                'special_node_weight_map': self.special_node_weight_map,
             },
             'model_state': self.model.state_dict(),
             'snapshot_embeddings': self.snapshot_embeddings_list,
@@ -657,7 +656,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             'neigh_pred_weight', 'variance_weight',
             'prop_feat_dim',
             'prop_vec_mode', 'prop_w2v_path', 'prop_w2v_window', 'prop_w2v_min_count', 'prop_w2v_epochs',
-            'train_indices', 'model_path', 'special_node_weight_map'
+            'train_indices', 'model_path'
         }
         params = {k: v for k, v in raw_params.items() if k in allowed_keys}
         instance = cls(snapshot_sequence, **params)
