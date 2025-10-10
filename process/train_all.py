@@ -63,8 +63,14 @@ def plot_tsne_embeddings(arr: np.ndarray, benign_start: int, benign_end: int, an
     if (~mask_benign).any():
         plt.scatter(xs[~mask_benign], ys[~mask_benign], c="#d62728", label="Others", s=40, alpha=0.85, edgecolors="white")
     if annotate:
-        for i in range(T):
-            plt.annotate(str(i), (xs[i], ys[i]), fontsize=8, alpha=0.7)
+        # 绿色（良性）编号从 0 开始，前缀 B
+        benign_indices = np.where(mask_benign)[0]
+        for rank, idx in enumerate(benign_indices):
+            plt.annotate(f"B{rank}", (xs[idx], ys[idx]), fontsize=12, alpha=0.9)
+        # 红色（其它）编号从 0 开始，前缀 M
+        other_indices = np.where(~mask_benign)[0]
+        for rank, idx in enumerate(other_indices):
+            plt.annotate(f"M{rank}", (xs[idx], ys[idx]), fontsize=12, alpha=0.9)
     plt.title("Snapshot Embeddings (t-SNE 2D)")
     plt.xlabel("Dim 1")
     plt.ylabel("Dim 2")
