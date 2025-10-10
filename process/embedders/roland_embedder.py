@@ -363,10 +363,14 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
 
     def _get_node_prop_vec(self, g, local_idx: int) -> np.ndarray:
         """取节点属性字符串，按模式生成向量（缓存按属性文本）。"""
+        # igraph Vertex 不一定有 dict.get 方法，这里用更稳健的方式取属性
         try:
-            prop_str = g.vs[local_idx].get('properties', '') or ''
+            prop_str = g.vs[local_idx]['properties']
         except Exception:
-            prop_str = ''
+            try:
+                prop_str = g.vs[local_idx].attributes().get('properties', '')
+            except Exception:
+                prop_str = ''
         key = str(prop_str)
         if key in self._prop_cache:
             return self._prop_cache[key]
@@ -415,9 +419,12 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 continue
             for i in range(g.vcount()):
                 try:
-                    prop_str = g.vs[i].get('properties', '') or ''
+                    prop_str = g.vs[i]['properties']
                 except Exception:
-                    prop_str = ''
+                    try:
+                        prop_str = g.vs[i].attributes().get('properties', '')
+                    except Exception:
+                        prop_str = ''
                 tokens = [t for t in re.split(r'[^A-Za-z0-9]+', str(prop_str).lower()) if t]
                 if tokens:
                     corpus.append(tokens)
