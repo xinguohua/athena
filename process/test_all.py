@@ -21,7 +21,7 @@ from process.embedders import get_embedder_by_name
 # ========================================================================
 # 全局配置
 # ========================================================================
-EMBEDDER_NAME = "roland"
+EMBEDDER_NAME = "prographer"
 CLASSIFY_NAME = "prographer"
 # EMBEDDER_NAME = "unicorn"
 # CLASSIFY_NAME = "unicorn"
