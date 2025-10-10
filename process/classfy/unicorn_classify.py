@@ -215,7 +215,7 @@ class UnicornClassify(BaseClassify):
 
             scores[i] = np.mean([d["d"] for d in distances])
             if threshold is not None and scores[i] > threshold:
-                abnormal = True  
+                abnormal = True
             pred_labels[i] = 1 if abnormal else 0
 
             if abnormal:
