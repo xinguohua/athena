@@ -211,6 +211,8 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 loss_ab = F.cross_entropy(logits_ab, targets)
                 loss_ba = F.cross_entropy(logits_ba, targets)
                 loss = 0.5 * (loss_ab + loss_ba)
+                # 累计该快照内的损失，用于之后计算平均损失
+                snapshot_loss += loss.item()
 
                 # 训练可视化：首/末 epoch 打印学习信号
                 if epoch == 0 or epoch == self.num_epochs - 1:
