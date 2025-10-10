@@ -39,8 +39,19 @@ class ContrastiveGCNEncoder(nn.Module):
 
     def _gcn_forward(self, h: torch.Tensor, edge_index: torch.Tensor, linear: nn.Linear) -> torch.Tensor:
         src, dst = edge_index[0], edge_index[1]
+        num_nodes = h.size(0)
+        # 加自环并做对称归一化聚合 D^{-1/2} A D^{-1/2}
+        loop = torch.arange(num_nodes, device=h.device)
+        src = torch.cat([src, loop], dim=0)
+        dst = torch.cat([dst, loop], dim=0)
+
+        deg = torch.bincount(dst, minlength=num_nodes).float()
+        deg_src = deg[src]
+        deg_dst = deg[dst]
+        norm = 1.0 / torch.sqrt(torch.clamp(deg_src * deg_dst, min=1.0))
+
         aggr = torch.zeros_like(h)
-        aggr.index_add_(0, dst, h[src])
+        aggr.index_add_(0, dst, h[src] * norm.unsqueeze(-1))
         out = linear(aggr)
         return F.leaky_relu(out)
 
@@ -58,8 +69,8 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         embedding_dim=256,
         hidden_conv_1=128,
         hidden_conv_2=256,
-        num_epochs=10,
-        lr=0.001,
+    num_epochs=50,
+    lr=0.0005,
         train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
         model_path=None
     ):
@@ -107,7 +118,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         ).to(self.device)
         
         # 优化器
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=1e-4)
         # 存储最终嵌入
         self.snapshot_embeddings_list = []
 
@@ -148,7 +159,9 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         print(
             f"[ROLAND] Training on {len(self.train_snapshot_indices)}/{len(self.snapshots)} snapshots, {self.num_nodes} nodes"
         )
-        print(f"[ROLAND] Epochs per snapshot: {self.num_epochs}, Learning Rate: {self.lr}")
+        print(
+            f"[ROLAND] Epochs/snapshot: {self.num_epochs}, LR: {self.lr}, Neg-K: 5, WD: 1e-4"
+        )
         
         total_loss = 0.0
         num_trained = 0
@@ -173,18 +186,21 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 src, dst = edge_index[0], edge_index[1]
                 pos_scores = (node_emb[src] * node_emb[dst]).sum(dim=-1)  # (E,)
                 
-                # 负采样：为每条正边采样一条负边
+                # 多负采样：每条正边采样 K=5 个负样本
+                K = 5
                 num_edges = edge_index.size(1)
-                neg_dst = torch.randint(0, self.num_nodes, (num_edges,), device=self.device)
-                neg_scores = (node_emb[src] * node_emb[neg_dst]).sum(dim=-1)  # (E,)
-                
-                # BPR Loss: -log(sigmoid(pos - neg))
-                # 目标：让正边得分高于负边得分
-                loss = -torch.log(torch.sigmoid(pos_scores - neg_scores) + 1e-8).mean()
+                neg_dst = torch.randint(0, self.num_nodes, (K, num_edges), device=self.device)
+                neg_emb = node_emb[neg_dst]                 # (K, E, D)
+                pos_src_emb = node_emb[src].unsqueeze(0)     # (1, E, D)
+                neg_scores = (neg_emb * pos_src_emb).sum(dim=-1)  # (K, E)
+                pos_scores_exp = pos_scores.unsqueeze(0).expand(K, -1)  # (K, E)
+                # BPR Loss: -log(sigmoid(pos - neg))，对 K 个负样本平均
+                loss = -torch.log(torch.sigmoid(pos_scores_exp - neg_scores) + 1e-8).mean()
                 
                 # Backward
                 self.optimizer.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
                 self.optimizer.step()
                 
                 snapshot_loss += loss.item()
@@ -272,61 +288,54 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         return embeddings_dict
 
     def get_snapshot_embeddings(self, snapshot_sequence=None):
-        """返回快照级别的嵌入矩阵（评估时逐快照前向计算）。
+        """返回快照级别的嵌入矩阵（使用已缓存的节点嵌入做聚合）。
 
-        对每个快照：
-        1) 使用当前训练好的编码器对该快照前向得到节点嵌入；
-        2) 使用度加权对节点嵌入做图级聚合；
-        3) 对聚合后的图向量做 L2 归一化；
-        因此不同快照的图向量由其自身结构与节点表征决定，不会“都一样”。
+        训练结束后，_generate_final_embeddings 已为每个快照缓存了节点嵌入字典。
+        这里直接对缓存的节点嵌入做“度加权聚合 + L2 归一化”，避免重复前向计算，
+        同时保留结构判别性，效率更高。
         """
-        if snapshot_sequence is None:
-            snapshot_sequence = list(range(len(self.snapshots)))
+        if not self.snapshot_embeddings_list:
+            raise RuntimeError("还没有快照嵌入，请先调用 train()")
 
-        self.model.eval()
+        if snapshot_sequence is None:
+            snapshot_sequence = list(range(len(self.snapshot_embeddings_list)))
+
         result = []
         eps = 1e-12
-        with torch.no_grad():
-            for i in snapshot_sequence:
-                g = self.snapshots[i] if i < len(self.snapshots) else None
-                if g is None:
-                    result.append(np.zeros(self.hidden_conv_2, dtype=np.float32))
+        for i in snapshot_sequence:
+            emb_dict = self.snapshot_embeddings_list[i] if i < len(self.snapshot_embeddings_list) else None
+            g = self.snapshots[i] if i < len(self.snapshots) else None
+
+            if not emb_dict or g is None:
+                result.append(np.zeros(self.hidden_conv_2, dtype=np.float32))
+                continue
+
+            node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
+            degrees = g.degree()  # 与 node_gids 对齐
+
+            weighted_sum = np.zeros(self.hidden_conv_2, dtype=np.float32)
+            total_w = 0.0
+            for local_idx, nid in enumerate(node_gids):
+                vec = emb_dict.get(nid)
+                if vec is None:
                     continue
+                w = float(degrees[local_idx])
+                if w <= 0:
+                    continue
+                weighted_sum += (w * vec.astype(np.float32))
+                total_w += w
 
-                # 前向：节点嵌入
-                x, edge_index = self._igraph_to_torch(g)
-                node_emb = self.model(x, edge_index).cpu().numpy()  # (N_all, D)
+            if total_w <= 0:
+                # 退化：无边，回退为简单均值
+                all_embs = np.array(list(emb_dict.values()), dtype=np.float32)
+                snapshot_vec = all_embs.mean(axis=0) if all_embs.size > 0 else np.zeros(self.hidden_conv_2, dtype=np.float32)
+            else:
+                snapshot_vec = weighted_sum / (total_w + eps)
 
-                # 仅聚合当前快照包含的节点（用度作为权重）
-                node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
-                degrees = g.degree()
-
-                weighted_sum = np.zeros(self.hidden_conv_2, dtype=np.float32)
-                total_w = 0.0
-                for local_idx, nid in enumerate(node_gids):
-                    idx = self.node_id_map.get(nid, None)
-                    if idx is None:
-                        continue
-                    w = float(degrees[local_idx])
-                    if w <= 0:
-                        continue
-                    weighted_sum += (w * node_emb[idx].astype(np.float32))
-                    total_w += w
-
-                if total_w <= 0:
-                    # 退化：无边，回退为简单均值
-                    idxs = [self.node_id_map[nid] for nid in node_gids if nid in self.node_id_map]
-                    if idxs:
-                        snapshot_vec = node_emb[idxs].mean(axis=0).astype(np.float32)
-                    else:
-                        snapshot_vec = np.zeros(self.hidden_conv_2, dtype=np.float32)
-                else:
-                    snapshot_vec = weighted_sum / (total_w + eps)
-
-                # L2 归一化
-                norm = np.linalg.norm(snapshot_vec) + eps
-                snapshot_vec = (snapshot_vec / norm).astype(np.float32)
-                result.append(snapshot_vec)
+            # L2 归一化
+            norm = np.linalg.norm(snapshot_vec) + eps
+            snapshot_vec = (snapshot_vec / norm).astype(np.float32)
+            result.append(snapshot_vec)
 
         arr = np.vstack(result).astype(np.float32) if result else np.zeros((0, self.hidden_conv_2), dtype=np.float32)
         print(f"[ROLAND] Snapshot embeddings: {arr.shape}")
