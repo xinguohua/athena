@@ -391,10 +391,10 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         except Exception:
             freqs = [1.0] * g.vcount()
         freq_arr = np.array([float(x) if x is not None else 1.0 for x in freqs], dtype=np.float32)
-        # 简单后门：仅在 GraphSAGE 聚合时对特定节点名称放大 100x
-        for i, nid in enumerate(node_gids):
-            if nid == 'connection_192.168.223.130_192.168.223.3':
-                freq_arr[i] *= 100.0
+        # # 简单后门：仅在 GraphSAGE 聚合时对特定节点名称放大 100x
+        # for i, nid in enumerate(node_gids):
+        #     if nid == 'connection_192.168.223.130_192.168.223.3':
+        #         freq_arr[i] *= 100.0
         node_weight_t = torch.from_numpy(freq_arr).to(self.device)
         return node_ids, edge_index, prop_feats_t, node_weight_t
 
