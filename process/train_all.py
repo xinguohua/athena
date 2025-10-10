@@ -128,7 +128,7 @@ def main():
             snapshot_embeddings,
             handler.benign_idx_start,
             handler.benign_idx_end,
-            annotate=False,
+            annotate=True,
             save_path="snapshot_embeddings_tsne.png",
         )
     except Exception as ex:
