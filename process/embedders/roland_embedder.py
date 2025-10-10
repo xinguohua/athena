@@ -29,16 +29,28 @@ class GraphSAGEConv(nn.Module):
         self.lin = nn.Linear(in_channels * 2, out_channels, bias=bias)
         self.l2_norm = l2_norm
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, node_weight: Optional[torch.Tensor] = None) -> torch.Tensor:
         if x.numel() == 0:
             return x
         src, dst = edge_index[0], edge_index[1]
         N = x.size(0)
-        deg = torch.bincount(dst, minlength=N).float()
-        nei_sum = torch.zeros_like(x)
-        if src.numel() > 0:
-            nei_sum.index_add_(0, dst, x[src])
-        nei_mean = nei_sum / torch.clamp(deg, min=1.0).unsqueeze(-1)
+        if node_weight is not None:
+            # 频率加权的邻居均值
+            w = node_weight[src].unsqueeze(1) if src.numel() > 0 else None
+            nei_sum = torch.zeros_like(x)
+            if src.numel() > 0:
+                nei_sum.index_add_(0, dst, x[src] * w)
+            wdeg = torch.zeros(N, device=x.device, dtype=x.dtype)
+            if src.numel() > 0:
+                wdeg.index_add_(0, dst, node_weight[src])
+            nei_mean = nei_sum / torch.clamp(wdeg, min=1e-8).unsqueeze(-1)
+        else:
+            # 普通均值
+            deg = torch.bincount(dst, minlength=N).float()
+            nei_sum = torch.zeros_like(x)
+            if src.numel() > 0:
+                nei_sum.index_add_(0, dst, x[src])
+            nei_mean = nei_sum / torch.clamp(deg, min=1.0).unsqueeze(-1)
         h_cat = torch.cat([x, nei_mean], dim=-1)
         out = F.relu(self.lin(h_cat))
         if self.l2_norm:
@@ -83,13 +95,13 @@ class GNNCL(nn.Module):
             nn.Linear(hidden_dim, output_dim + 3),
         )
 
-    def forward(self, node_indices: torch.Tensor, edge_index: torch.Tensor, prop_feats: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, node_indices: torch.Tensor, edge_index: torch.Tensor, prop_feats: Optional[torch.Tensor] = None, node_weight: Optional[torch.Tensor] = None) -> torch.Tensor:
         x0 = self.node_embedding(node_indices)  # (N, embedding_dim)
         if self.use_props and prop_feats is not None and prop_feats.numel() > 0:
             x0 = x0 + self.prop_proj(prop_feats)
-        h1 = self.sage1(x0, edge_index)         # (N, hidden)
+        h1 = self.sage1(x0, edge_index, node_weight)         # (N, hidden)
         h2_in = self.dropout(h1)
-        h2 = self.sage2(h2_in, edge_index)      # (N, hidden)
+        h2 = self.sage2(h2_in, edge_index, node_weight)      # (N, hidden)
         # 残差：形状一致时相加
         if h2.shape == h1.shape:
             h2 = h2 + h1
@@ -256,19 +268,30 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                     continue
 
                 # 转换为本地张量：节点全局ID (N_local,) 与本地边索引 (2, E)
-                node_ids, edge_index, prop_feats = self._igraph_to_torch(g)
+                node_ids, edge_index, prop_feats, node_weight = self._igraph_to_torch(g)
 
                 # 前向：得到本快照节点的表示 h_i (N_local, d)
-                z = self.model(node_ids, edge_index, prop_feats)
+                z = self.model(node_ids, edge_index, prop_feats, node_weight)
 
                 # 基于本地边计算邻居平均向量
                 src, dst = edge_index[0], edge_index[1]
                 N_local = z.size(0)
-                deg = torch.bincount(dst, minlength=N_local).float()
-                neigh_sum = torch.zeros_like(z)
-                if src.numel() > 0:
-                    neigh_sum.index_add_(0, dst, z[src])
-                neigh_mean = neigh_sum / torch.clamp(deg, min=1.0).unsqueeze(-1)
+                if node_weight is not None:
+                    w = node_weight[src].unsqueeze(1) if src.numel() > 0 else None
+                    neigh_sum = torch.zeros_like(z)
+                    if src.numel() > 0:
+                        neigh_sum.index_add_(0, dst, z[src] * w)
+                    wdeg = torch.zeros(N_local, device=z.device, dtype=z.dtype)
+                    if src.numel() > 0:
+                        wdeg.index_add_(0, dst, node_weight[src])
+                    neigh_mean = neigh_sum / torch.clamp(wdeg, min=1e-8).unsqueeze(-1)
+                    deg = wdeg  # 用加权度来做 mask
+                else:
+                    deg = torch.bincount(dst, minlength=N_local).float()
+                    neigh_sum = torch.zeros_like(z)
+                    if src.numel() > 0:
+                        neigh_sum.index_add_(0, dst, z[src])
+                    neigh_mean = neigh_sum / torch.clamp(deg, min=1.0).unsqueeze(-1)
 
                 # 仅对有邻居的节点计算损失
                 mask = deg > 0
@@ -329,19 +352,20 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                     self.snapshot_embeddings_list.append({})
                     continue
                 
-                node_ids, edge_index, prop_feats = self._igraph_to_torch(g)
-                final_emb = self.model(node_ids, edge_index, prop_feats)
+                node_ids, edge_index, prop_feats, node_weight = self._igraph_to_torch(g)
+                final_emb = self.model(node_ids, edge_index, prop_feats, node_weight)
                 # 提取嵌入字典
                 embeddings_dict = self._extract_final_embeddings(g, final_emb)
                 self.snapshot_embeddings_list.append(embeddings_dict)
     
-    def _igraph_to_torch(self, g) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    def _igraph_to_torch(self, g) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         """将 igraph 转为 (节点全局ID, 本地边索引, 属性特征) 以适配 GNNCL 前向。
 
         Returns:
             node_ids: (N_local,) 当前快照节点对应的全局ID（顺序与 g.vs 对齐）
             edge_index: (2, E) 使用本地索引(0..N_local-1) 的 COO 边
             prop_feats: (N_local, prop_feat_dim) 若启用属性特征，否则为 None
+            node_weight: (N_local,) 节点频率权重（用于加权聚合），缺失则为 1.0
         """
         node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
         node_ids = torch.tensor([self.node_id_map[nid] for nid in node_gids], dtype=torch.long, device=self.device)
@@ -354,12 +378,21 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             edge_index = torch.tensor([src, dst], dtype=torch.long, device=self.device)
         # 属性特征（可选）
         prop_feats_t: Optional[torch.Tensor] = None
+        # 节点频率权重（可选）
+        node_weight_t: Optional[torch.Tensor] = None
         if self.prop_feat_dim > 0:
             mat = np.zeros((len(node_gids), self.prop_feat_dim), dtype=np.float32)
             for i, nid in enumerate(node_gids):
                 mat[i] = self._get_node_prop_vec(g, i)
             prop_feats_t = torch.from_numpy(mat).to(self.device)
-        return node_ids, edge_index, prop_feats_t
+        # 读取频率作为权重，缺失则为 1.0
+        try:
+            freqs = g.vs['frequency'] if 'frequency' in g.vs.attributes() else [1.0] * g.vcount()
+        except Exception:
+            freqs = [1.0] * g.vcount()
+        freq_arr = np.array([float(x) if x is not None else 1.0 for x in freqs], dtype=np.float32)
+        node_weight_t = torch.from_numpy(freq_arr).to(self.device)
+        return node_ids, edge_index, prop_feats_t, node_weight_t
 
     def _get_node_prop_vec(self, g, local_idx: int) -> np.ndarray:
         """取节点属性字符串，按模式生成向量（缓存按属性文本）。"""
