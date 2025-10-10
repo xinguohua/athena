@@ -74,6 +74,8 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         tau: float = 0.2,
         edge_drop_rate: float = 0.2,
         feat_drop_rate: float = 0.2,
+        neg_edge_drop_rate: float = 0.3,
+        neg_edge_add_ratio: float = 0.1,
         train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
         model_path=None
     ):
@@ -100,6 +102,8 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         self.tau = float(tau)
         self.edge_drop_rate = float(edge_drop_rate)
         self.feat_drop_rate = float(feat_drop_rate)
+        self.neg_edge_drop_rate = float(neg_edge_drop_rate)
+        self.neg_edge_add_ratio = float(neg_edge_add_ratio)
         self.model_path = model_path or self._default_path
 
         # 训练快照筛选（默认全部）
@@ -175,7 +179,8 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             f"[ROLAND] Training on {len(self.train_snapshot_indices)}/{len(self.snapshots)} snapshots, {self.num_nodes} nodes"
         )
         print(
-            f"[ROLAND] Objective: DGI (Graph InfoMax) | Epochs/snapshot: {self.num_epochs}, LR: {self.lr}, WD: 1e-4"
+            f"[ROLAND] Objective: DGI (Graph InfoMax) | Epochs/snapshot: {self.num_epochs}, LR: {self.lr}, WD: 1e-4, "
+            f"neg_edge_drop: {self.neg_edge_drop_rate}, neg_edge_add: {self.neg_edge_add_ratio}"
         )
         
         total_loss = 0.0
@@ -210,7 +215,10 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 x_corrupt = x.clone()
                 perm = torch.randperm(K, device=self.device)
                 x_corrupt[present_idx] = x[present_idx[perm]]
-                z_corrupt = self.model(x_corrupt, edge_index)
+                # 结构扰动：在负样上进行删边+随机加边
+                e_corrupt = self._edge_dropout(edge_index, self.neg_edge_drop_rate)
+                e_corrupt = self._edge_random_add(e_corrupt, present_idx, add_ratio=self.neg_edge_add_ratio)
+                z_corrupt = self.model(x_corrupt, e_corrupt)
 
                 # D(h_i, s) = h_i^T W s，对正样打高分，对负样打低分
                 pos_logits = (z[present_idx] * Ws.unsqueeze(0)).sum(dim=1)  # (K,)
@@ -285,6 +293,35 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         D = x.size(1)
         keep_mask = (torch.rand(D, device=x.device) > drop_rate).float()  # (D,)
         return x * keep_mask.unsqueeze(0)
+
+    def _edge_random_add(self, edge_index: torch.Tensor, present_idx: torch.Tensor, add_ratio: float) -> torch.Tensor:
+        """在给定边集基础上随机添加一部分边（仅在当前快照参与节点之间）。
+
+        Args:
+            edge_index: 原始 COO (2, E)
+            present_idx: 当前快照的节点全局索引 (K,)
+            add_ratio: 按现有边数的比例添加新边数目（可为0）
+        """
+        if add_ratio <= 0 or present_idx.numel() < 2:
+            return edge_index
+        E = edge_index.size(1)
+        add_E = int(E * add_ratio)
+        if add_E <= 0:
+            return edge_index
+        K = present_idx.numel()
+        device = edge_index.device
+        # 随机采样若干对 (u,v) 且 u!=v
+        src_sel = present_idx[torch.randint(0, K, (add_E,), device=device)]
+        dst_sel = present_idx[torch.randint(0, K, (add_E,), device=device)]
+        mask = src_sel != dst_sel
+        if mask.sum() == 0:
+            return edge_index
+        src_sel = src_sel[mask]
+        dst_sel = dst_sel[mask]
+        if src_sel.numel() == 0:
+            return edge_index
+        new_edges = torch.stack([src_sel.long(), dst_sel.long()], dim=0)
+        return torch.cat([edge_index, new_edges], dim=1)
     
     def _generate_final_embeddings(self):
         """训练后生成最终嵌入（用于后续任务）"""
@@ -428,6 +465,11 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 'lr': self.lr,
                 'train_indices': self.train_snapshot_indices,
                 'objective': 'dgi',
+                'tau': self.tau,
+                'edge_drop_rate': self.edge_drop_rate,
+                'feat_drop_rate': self.feat_drop_rate,
+                'neg_edge_drop_rate': self.neg_edge_drop_rate,
+                'neg_edge_add_ratio': self.neg_edge_add_ratio,
             },
             'model_state': self.model.state_dict(),
             'disc_state': self.disc_W.state_dict(),
@@ -452,6 +494,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         allowed_keys = {
             'embedding_dim', 'hidden_conv_1', 'hidden_conv_2',
             'num_epochs', 'lr', 'tau', 'edge_drop_rate', 'feat_drop_rate',
+            'neg_edge_drop_rate', 'neg_edge_add_ratio',
             'train_indices', 'model_path'
         }
         params = {k: v for k, v in raw_params.items() if k in allowed_keys}
