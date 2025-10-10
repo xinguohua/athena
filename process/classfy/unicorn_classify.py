@@ -32,7 +32,7 @@ class UnicornConfig:
     num_stds: float = 1.0
     metric: str = "both"
     model_save_path: str = "unicorn_model.json"
-    threshold: float = 0.016
+    threshold: float = 0.9
 
 
 # ======================================================
@@ -212,8 +212,12 @@ class UnicornClassify(BaseClassify):
                     abnormal = False
                     break
 
-            pred_labels[i] = 1 if abnormal else 0
+
             scores[i] = np.mean([d["d"] for d in distances])
+            if threshold is not None and scores[i] > threshold:
+                abnormal = True  
+            pred_labels[i] = 1 if abnormal else 0
+
             if abnormal:
                 diff_vectors[i] = {
                     "position": i,
