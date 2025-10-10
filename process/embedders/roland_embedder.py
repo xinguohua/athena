@@ -183,83 +183,76 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             f"neg_edge_drop: {self.neg_edge_drop_rate}, neg_edge_add: {self.neg_edge_add_ratio}"
         )
         
-        total_loss = 0.0
-        num_trained = 0
-        
-        for sidx, g in enumerate(self.snapshots):
-            if sidx not in self._train_snapshot_index_set:
-                continue
-            if g is None:
-                continue
-            
-            # 转换 igraph 到 PyTorch
-            x, edge_index = self._igraph_to_torch(g)
-            
-            # 每个 snapshot 训练多个 epoch（DGI 风格：最大化节点-全局摘要互信息）
-            snapshot_loss = 0.0
-            for epoch in range(self.num_epochs):
-                # 前向（正样）：原图
-                z = self.model(x, edge_index)  # (N, d)
+        # 外层按 epoch 训练，内层遍历所有参与训练的快照
+        overall_loss = 0.0
+        epoch_count = 0
+        for epoch in range(self.num_epochs):
+            epoch_loss = 0.0
+            trained_cnt = 0
+            for sidx, g in enumerate(self.snapshots):
+                if sidx not in self._train_snapshot_index_set:
+                    continue
+                if g is None:
+                    continue
 
-                # 当前快照的节点索引；DGI 仅在这些节点上施加监督
+                # 转换 igraph 到 PyTorch（每个快照一次）
+                x, edge_index = self._igraph_to_torch(g)
+
+                # 当前快照节点索引
                 present_idx = self._present_node_indices(g)
                 K = present_idx.numel()
                 if K < 1:
                     continue
 
-                # 摘要向量 s（仅基于当前快照节点表示）
+                # 正样前向
+                z = self.model(x, edge_index)  # (N, d)
                 s = torch.sigmoid(z[present_idx].mean(dim=0))  # (d,)
                 Ws = self.disc_W(s)  # (d,)
 
-                # 负样：打乱当前快照节点的特征（结构不变）
+                # 负样：特征打乱 + 结构扰动
                 x_corrupt = x.clone()
                 perm = torch.randperm(K, device=self.device)
                 x_corrupt[present_idx] = x[present_idx[perm]]
-                # 结构扰动：在负样上进行删边+随机加边
                 e_corrupt = self._edge_dropout(edge_index, self.neg_edge_drop_rate)
                 e_corrupt = self._edge_random_add(e_corrupt, present_idx, add_ratio=self.neg_edge_add_ratio)
                 z_corrupt = self.model(x_corrupt, e_corrupt)
 
-                # D(h_i, s) = h_i^T W s，对正样打高分，对负样打低分
-                pos_logits = (z[present_idx] * Ws.unsqueeze(0)).sum(dim=1)  # (K,)
-                neg_logits = (z_corrupt[present_idx] * Ws.unsqueeze(0)).sum(dim=1)  # (K,)
-
-                # 二分类交叉熵（带 Logits）
+                # 判别打分与损失
+                pos_logits = (z[present_idx] * Ws.unsqueeze(0)).sum(dim=1)
+                neg_logits = (z_corrupt[present_idx] * Ws.unsqueeze(0)).sum(dim=1)
                 pos_labels = torch.ones_like(pos_logits)
                 neg_labels = torch.zeros_like(neg_logits)
                 loss_pos = F.binary_cross_entropy_with_logits(pos_logits, pos_labels)
                 loss_neg = F.binary_cross_entropy_with_logits(neg_logits, neg_labels)
                 loss = 0.5 * (loss_pos + loss_neg)
-                # 累计该快照内的损失，用于之后计算平均损失
-                snapshot_loss += loss.item()
 
-                # 训练可视化：每个 epoch 打印 DGI 学习信号（pos_prob↑, neg_prob↓ 为佳）
-                with torch.no_grad():
-                    pos_prob = torch.sigmoid(pos_logits).mean().item()
-                    neg_prob = torch.sigmoid(neg_logits).mean().item()
-                    margin = pos_prob - neg_prob
-                    print(
-                        f"    [Snap {sidx} | Epoch {epoch}] loss={loss.item():.4f} "
-                        f"pos_prob={pos_prob:.4f} neg_prob={neg_prob:.4f} margin={margin:.4f} K={int(K)}"
-                    )
-
-                # Backward
+                # 反向与更新
                 self.optimizer.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(
                     list(self.model.parameters()) + list(self.disc_W.parameters()), max_norm=5.0
                 )
                 self.optimizer.step()
-            
-            # 更新历史状态（训练完当前 snapshot 后）
-            avg_snapshot_loss = snapshot_loss / self.num_epochs
-            total_loss += avg_snapshot_loss
-            num_trained += 1
-            
-            if (sidx + 1) % 10 == 0:  # 每 10 个 snapshot 打印一次
-                print(f"  Snapshot {sidx+1}/{len(self.snapshots)}, Avg Loss: {avg_snapshot_loss:.6f}")
-        
-        avg_total_loss = total_loss / num_trained if num_trained > 0 else 0
+
+                # 日志（每个快照一行）
+                with torch.no_grad():
+                    pos_prob = torch.sigmoid(pos_logits).mean().item()
+                    neg_prob = torch.sigmoid(neg_logits).mean().item()
+                    margin = pos_prob - neg_prob
+                    print(
+                        f"    [Epoch {epoch} | Snap {sidx}] loss={loss.item():.4f} "
+                        f"pos_prob={pos_prob:.4f} neg_prob={neg_prob:.4f} margin={margin:.4f} K={int(K)}"
+                    )
+
+                epoch_loss += loss.item()
+                trained_cnt += 1
+
+            avg_epoch_loss = epoch_loss / trained_cnt if trained_cnt > 0 else 0.0
+            overall_loss += avg_epoch_loss
+            epoch_count += 1
+            print(f"[ROLAND] Epoch {epoch+1}/{self.num_epochs} Avg Loss: {avg_epoch_loss:.6f} on {trained_cnt} snapshots")
+
+        avg_total_loss = overall_loss / epoch_count if epoch_count > 0 else 0.0
         print(f"[ROLAND] Training completed! Overall Avg Loss: {avg_total_loss:.6f}")
         
         # 生成最终嵌入（推理模式）
