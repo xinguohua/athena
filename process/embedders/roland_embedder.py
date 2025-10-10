@@ -125,9 +125,15 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             hidden_dim=hidden_conv_1,
             output_dim=hidden_conv_2
         ).to(self.device)
+        # DGI 判别器参数 W（用于 h^T W s 打分）
+        self.disc_W = nn.Linear(hidden_conv_2, hidden_conv_2, bias=False).to(self.device)
         
         # 优化器
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=1e-4)
+        self.optimizer = torch.optim.Adam(
+            list(self.model.parameters()) + list(self.disc_W.parameters()),
+            lr=lr,
+            weight_decay=1e-4,
+        )
         # 存储最终嵌入
         self.snapshot_embeddings_list = []
 
@@ -169,7 +175,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             f"[ROLAND] Training on {len(self.train_snapshot_indices)}/{len(self.snapshots)} snapshots, {self.num_nodes} nodes"
         )
         print(
-            f"[ROLAND] Epochs/snapshot: {self.num_epochs}, LR: {self.lr}, InfoNCE τ: {self.tau}, edge_drop: {self.edge_drop_rate}, feat_drop: {self.feat_drop_rate}, WD: 1e-4"
+            f"[ROLAND] Objective: DGI (Graph InfoMax) | Epochs/snapshot: {self.num_epochs}, LR: {self.lr}, WD: 1e-4"
         )
         
         total_loss = 0.0
@@ -184,57 +190,57 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             # 转换 igraph 到 PyTorch
             x, edge_index = self._igraph_to_torch(g)
             
-            # 每个 snapshot 训练多个 epoch（InfoNCE / GraphCL 风格）
+            # 每个 snapshot 训练多个 epoch（DGI 风格：最大化节点-全局摘要互信息）
             snapshot_loss = 0.0
             for epoch in range(self.num_epochs):
-                # 视图增强（删边+特征屏蔽）
-                e1 = self._edge_dropout(edge_index, self.edge_drop_rate)
-                e2 = self._edge_dropout(edge_index, self.edge_drop_rate)
-                x1 = self._feature_dropout(x, self.feat_drop_rate)
-                x2 = self._feature_dropout(x, self.feat_drop_rate)
+                # 前向（正样）：原图
+                z = self.model(x, edge_index)  # (N, d)
 
-                # 前向得到两视图节点嵌入
-                z1 = self.model(x1, e1)
-                z2 = self.model(x2, e2)
-
-                # 仅用当前快照包含的节点进行对比（避免无关节点噪声）
+                # 当前快照的节点索引；DGI 仅在这些节点上施加监督
                 present_idx = self._present_node_indices(g)
-                if present_idx.numel() < 2:
+                K = present_idx.numel()
+                if K < 1:
                     continue
-                a = z1[present_idx]
-                b = z2[present_idx]
 
-                # InfoNCE（对称）
-                logits_ab = (a @ b.T) / self.tau
-                logits_ba = (b @ a.T) / self.tau
-                targets = torch.arange(logits_ab.size(0), device=self.device)
-                loss_ab = F.cross_entropy(logits_ab, targets)
-                loss_ba = F.cross_entropy(logits_ba, targets)
-                loss = 0.5 * (loss_ab + loss_ba)
+                # 摘要向量 s（仅基于当前快照节点表示）
+                s = torch.sigmoid(z[present_idx].mean(dim=0))  # (d,)
+                Ws = self.disc_W(s)  # (d,)
+
+                # 负样：打乱当前快照节点的特征（结构不变）
+                x_corrupt = x.clone()
+                perm = torch.randperm(K, device=self.device)
+                x_corrupt[present_idx] = x[present_idx[perm]]
+                z_corrupt = self.model(x_corrupt, edge_index)
+
+                # D(h_i, s) = h_i^T W s，对正样打高分，对负样打低分
+                pos_logits = (z[present_idx] * Ws.unsqueeze(0)).sum(dim=1)  # (K,)
+                neg_logits = (z_corrupt[present_idx] * Ws.unsqueeze(0)).sum(dim=1)  # (K,)
+
+                # 二分类交叉熵（带 Logits）
+                pos_labels = torch.ones_like(pos_logits)
+                neg_labels = torch.zeros_like(neg_logits)
+                loss_pos = F.binary_cross_entropy_with_logits(pos_logits, pos_labels)
+                loss_neg = F.binary_cross_entropy_with_logits(neg_logits, neg_labels)
+                loss = 0.5 * (loss_pos + loss_neg)
                 # 累计该快照内的损失，用于之后计算平均损失
                 snapshot_loss += loss.item()
 
-                # 训练可视化：首/末 epoch 打印学习信号
+                # 训练可视化：首/末 epoch 打印学习信号（DGI 打分统计）
                 if epoch == 0 or epoch == self.num_epochs - 1:
                     with torch.no_grad():
-                        sim = (a @ b.T).clamp(min=-1.0, max=1.0)
-                        N = sim.size(0)
-                        diag = sim.diag()
-                        pos_sim = diag.mean().item() if N > 0 else 0.0
-                        neg_sum = (sim.sum() - diag.sum()).item()
-                        neg_den = max(1, (N * N - N))
-                        neg_sim = neg_sum / neg_den
-                        acc_ab = (logits_ab.argmax(dim=1) == targets).float().mean().item()
-                        acc_ba = (logits_ba.argmax(dim=1) == targets).float().mean().item()
+                        pos_prob = torch.sigmoid(pos_logits).mean().item()
+                        neg_prob = torch.sigmoid(neg_logits).mean().item()
                         print(
                             f"    [Snap {sidx} | Epoch {epoch}] loss={loss.item():.4f} "
-                            f"pos_sim={pos_sim:.4f} neg_sim={neg_sim:.4f} acc_ab={acc_ab:.3f} acc_ba={acc_ba:.3f}"
+                            f"pos_prob={pos_prob:.4f} neg_prob={neg_prob:.4f} K={int(K)}"
                         )
 
                 # Backward
                 self.optimizer.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
+                torch.nn.utils.clip_grad_norm_(
+                    list(self.model.parameters()) + list(self.disc_W.parameters()), max_norm=5.0
+                )
                 self.optimizer.step()
             
             # 更新历史状态（训练完当前 snapshot 后）
@@ -421,8 +427,10 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 'num_epochs': self.num_epochs,
                 'lr': self.lr,
                 'train_indices': self.train_snapshot_indices,
+                'objective': 'dgi',
             },
             'model_state': self.model.state_dict(),
+            'disc_state': self.disc_W.state_dict(),
             'snapshot_embeddings': self.snapshot_embeddings_list,
             'all_nodes': self.all_nodes,  # 保存节点列表（load时重建node_id_map）
         }
@@ -444,6 +452,8 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         
         # 恢复模型权重和嵌入
         instance.model.load_state_dict(state['model_state'])
+        if 'disc_state' in state:
+            instance.disc_W.load_state_dict(state['disc_state'])
         instance.snapshot_embeddings_list = state['snapshot_embeddings']
         instance.all_nodes = state['all_nodes']
         
