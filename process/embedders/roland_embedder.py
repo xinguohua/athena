@@ -69,8 +69,11 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         embedding_dim=256,
         hidden_conv_1=128,
         hidden_conv_2=256,
-    num_epochs=50,
-    lr=0.0005,
+        num_epochs=50,
+        lr=0.0005,
+        tau: float = 0.2,
+        edge_drop_rate: float = 0.2,
+        feat_drop_rate: float = 0.2,
         train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
         model_path=None
     ):
@@ -82,6 +85,9 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             hidden_conv_2: 第2层GCN输出维度 (默认256，最终嵌入维度，匹配分类器)
             num_epochs: 训练轮数
             lr: 学习率
+            tau: InfoNCE 温度参数
+            edge_drop_rate: 视图增强的随机删边比例
+            feat_drop_rate: 视图增强的随机特征掩码比例
             train_indices: 可选，仅训练指定索引的快照（支持 range、列表或(start, end)元组）
         """
         super().__init__(snapshots, features, mapp)
@@ -91,6 +97,9 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         self.hidden_conv_2 = hidden_conv_2
         self.num_epochs = num_epochs
         self.lr = lr
+        self.tau = float(tau)
+        self.edge_drop_rate = float(edge_drop_rate)
+        self.feat_drop_rate = float(feat_drop_rate)
         self.model_path = model_path or self._default_path
 
         # 训练快照筛选（默认全部）
@@ -160,7 +169,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             f"[ROLAND] Training on {len(self.train_snapshot_indices)}/{len(self.snapshots)} snapshots, {self.num_nodes} nodes"
         )
         print(
-            f"[ROLAND] Epochs/snapshot: {self.num_epochs}, LR: {self.lr}, Neg-K: 5, WD: 1e-4"
+            f"[ROLAND] Epochs/snapshot: {self.num_epochs}, LR: {self.lr}, InfoNCE τ: {self.tau}, edge_drop: {self.edge_drop_rate}, feat_drop: {self.feat_drop_rate}, WD: 1e-4"
         )
         
         total_loss = 0.0
@@ -175,41 +184,49 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             # 转换 igraph 到 PyTorch
             x, edge_index = self._igraph_to_torch(g)
             
-            # 每个 snapshot 训练多个 epoch
+            # 每个 snapshot 训练多个 epoch（InfoNCE / GraphCL 风格）
             snapshot_loss = 0.0
             for epoch in range(self.num_epochs):
-                # Forward
-                node_emb = self.model(x, edge_index)
+                # 视图增强（删边+特征屏蔽）
+                e1 = self._edge_dropout(edge_index, self.edge_drop_rate)
+                e2 = self._edge_dropout(edge_index, self.edge_drop_rate)
+                x1 = self._feature_dropout(x, self.feat_drop_rate)
+                x2 = self._feature_dropout(x, self.feat_drop_rate)
 
-                # -----------------------
-                # BPR 对比学习损失（边预测）
-                # -----------------------
-                src, dst = edge_index[0], edge_index[1]
-                pos_scores = (node_emb[src] * node_emb[dst]).sum(dim=-1)  # (E,)
+                # 前向得到两视图节点嵌入
+                z1 = self.model(x1, e1)
+                z2 = self.model(x2, e2)
 
-                # 多负采样：每条正边采样 K=5 个负样本
-                K = 5
-                num_edges = edge_index.size(1)
-                neg_dst = torch.randint(0, self.num_nodes, (K, num_edges), device=self.device)
-                neg_emb = node_emb[neg_dst]  # (K, E, D)
-                pos_src_emb = node_emb[src].unsqueeze(0)  # (1, E, D)
-                neg_scores = (neg_emb * pos_src_emb).sum(dim=-1)  # (K, E)
-                pos_scores_exp = pos_scores.unsqueeze(0).expand(K, -1)  # (K, E)
+                # 仅用当前快照包含的节点进行对比（避免无关节点噪声）
+                present_idx = self._present_node_indices(g)
+                if present_idx.numel() < 2:
+                    continue
+                a = z1[present_idx]
+                b = z2[present_idx]
 
-                # BPR Loss: -log(sigmoid(pos - neg))，对 K 个负样本平均
-                loss = -torch.log(torch.sigmoid(pos_scores_exp - neg_scores) + 1e-8).mean()
+                # InfoNCE（对称）
+                logits_ab = (a @ b.T) / self.tau
+                logits_ba = (b @ a.T) / self.tau
+                targets = torch.arange(logits_ab.size(0), device=self.device)
+                loss_ab = F.cross_entropy(logits_ab, targets)
+                loss_ba = F.cross_entropy(logits_ba, targets)
+                loss = 0.5 * (loss_ab + loss_ba)
 
-                # -----------------------
-                # ✅ 这里加打印验证模型是否有学习信号
-                # -----------------------
-                if epoch == 0 or epoch == self.num_epochs - 1:  # 只看每个 snapshot 的首尾 epoch
+                # 训练可视化：首/末 epoch 打印学习信号
+                if epoch == 0 or epoch == self.num_epochs - 1:
                     with torch.no_grad():
-                        pos_mean = pos_scores.mean().item()
-                        neg_mean = neg_scores.mean().item()
-                        diff = pos_mean - neg_mean
+                        sim = (a @ b.T).clamp(min=-1.0, max=1.0)
+                        N = sim.size(0)
+                        diag = sim.diag()
+                        pos_sim = diag.mean().item() if N > 0 else 0.0
+                        neg_sum = (sim.sum() - diag.sum()).item()
+                        neg_den = max(1, (N * N - N))
+                        neg_sim = neg_sum / neg_den
+                        acc_ab = (logits_ab.argmax(dim=1) == targets).float().mean().item()
+                        acc_ba = (logits_ba.argmax(dim=1) == targets).float().mean().item()
                         print(
-                            f"    [Snapshot {sidx} | Epoch {epoch}] "
-                            f"pos_mean={pos_mean:.4f}, neg_mean={neg_mean:.4f}, diff={diff:.4f}, loss={loss.item():.4f}"
+                            f"    [Snap {sidx} | Epoch {epoch}] loss={loss.item():.4f} "
+                            f"pos_sim={pos_sim:.4f} neg_sim={neg_sim:.4f} acc_ab={acc_ab:.3f} acc_ba={acc_ba:.3f}"
                         )
 
                 # Backward
@@ -234,6 +251,32 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         
         # 自动保存模型
         self.save_model()
+
+    def _present_node_indices(self, g) -> torch.Tensor:
+        """返回当前快照在全局节点表中的索引（tensor）。"""
+        node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
+        idxs = [self.node_id_map[nid] for nid in node_gids if nid in self.node_id_map]
+        if not idxs:
+            return torch.zeros(0, dtype=torch.long, device=self.device)
+        return torch.tensor(idxs, dtype=torch.long, device=self.device)
+
+    def _edge_dropout(self, edge_index: torch.Tensor, drop_rate: float) -> torch.Tensor:
+        """按比例随机丢弃边（COO格式）。"""
+        if edge_index.numel() == 0 or drop_rate <= 0:
+            return edge_index
+        E = edge_index.size(1)
+        keep = torch.rand(E, device=self.device) > drop_rate
+        if keep.sum() == 0:
+            return edge_index  # 保底
+        return edge_index[:, keep]
+
+    def _feature_dropout(self, x: torch.Tensor, drop_rate: float) -> torch.Tensor:
+        """掩蔽一部分特征维度（GraphCL/GRACE风格，全局共享mask）。"""
+        if drop_rate <= 0:
+            return x
+        D = x.size(1)
+        keep_mask = (torch.rand(D, device=x.device) > drop_rate).float()  # (D,)
+        return x * keep_mask.unsqueeze(0)
     
     def _generate_final_embeddings(self):
         """训练后生成最终嵌入（用于后续任务）"""
