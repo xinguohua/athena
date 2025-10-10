@@ -48,33 +48,11 @@ class ProGrapherEmbedder(GraphEmbedderBase):
         return edge.source
 
     # ATLATS
-    # @staticmethod
-    # def generate_rsg(graph, node_idx, depth):
-    #     if depth == 0:
-    #         # print(f"name: {graph.vs[node_idx]['name']} properties: {graph.vs[node_idx]['properties']}")
-    #         return str(graph.vs[node_idx]['name'] )
-    #     prev_rsg = ProGrapherEmbedder.generate_rsg(graph, node_idx, depth - 1)
-    #     incident_edges = graph.es[graph.incident(node_idx, mode="all")]
-    #     if not incident_edges:
-    #         return prev_rsg
-    #     neighbor_info_parts = []
-    #     for edge in incident_edges:
-    #         try:
-    #             edge_type = str(edge['actions'])
-    #         except (KeyError, TypeError):
-    #             edge_type = "UNKNOWN"
-    #         neighbor_idx = ProGrapherEmbedder._get_neighbor_info(graph, edge, node_idx)
-    #         neighbor_rsg = ProGrapherEmbedder.generate_rsg(graph, neighbor_idx, depth - 1)
-    #         neighbor_info_parts.append(f"{edge_type}:{neighbor_rsg}")
-    #     sorted_neighbor_info = sorted(neighbor_info_parts)
-    #     return f"{prev_rsg}-({'_'.join(sorted_neighbor_info)})"
-
-
     @staticmethod
     def generate_rsg(graph, node_idx, depth):
         if depth == 0:
             # print(f"name: {graph.vs[node_idx]['name']} properties: {graph.vs[node_idx]['properties']}")
-            return str(graph.vs[node_idx]['properties'] )
+            return str(graph.vs[node_idx]['name'] )
         prev_rsg = ProGrapherEmbedder.generate_rsg(graph, node_idx, depth - 1)
         incident_edges = graph.es[graph.incident(node_idx, mode="all")]
         if not incident_edges:
@@ -90,6 +68,28 @@ class ProGrapherEmbedder(GraphEmbedderBase):
             neighbor_info_parts.append(f"{edge_type}:{neighbor_rsg}")
         sorted_neighbor_info = sorted(neighbor_info_parts)
         return f"{prev_rsg}-({'_'.join(sorted_neighbor_info)})"
+
+    # Dapara
+    # @staticmethod
+    # def generate_rsg(graph, node_idx, depth):
+    #     if depth == 0:
+    #         # print(f"name: {graph.vs[node_idx]['name']} properties: {graph.vs[node_idx]['properties']}")
+    #         return str(graph.vs[node_idx]['properties'] )
+    #     prev_rsg = ProGrapherEmbedder.generate_rsg(graph, node_idx, depth - 1)
+    #     incident_edges = graph.es[graph.incident(node_idx, mode="all")]
+    #     if not incident_edges:
+    #         return prev_rsg
+    #     neighbor_info_parts = []
+    #     for edge in incident_edges:
+    #         try:
+    #             edge_type = str(edge['actions'])
+    #         except (KeyError, TypeError):
+    #             edge_type = "UNKNOWN"
+    #         neighbor_idx = ProGrapherEmbedder._get_neighbor_info(graph, edge, node_idx)
+    #         neighbor_rsg = ProGrapherEmbedder.generate_rsg(graph, neighbor_idx, depth - 1)
+    #         neighbor_info_parts.append(f"{edge_type}:{neighbor_rsg}")
+    #     sorted_neighbor_info = sorted(neighbor_info_parts)
+    #     return f"{prev_rsg}-({'_'.join(sorted_neighbor_info)})"
 
     def _build_vocabulary(self):
         print("Building RSG vocabulary from all snapshots...")
