@@ -1,59 +1,69 @@
 """
-ROLAND Contrastive Embedder
-静态图两层GCN + 对比学习（BPR）损失，用于生成快照嵌入。
+ROLAND Embedder (GNNCL 风格)
+改为“邻居预测自己”训练范式：
+- 节点初始向量：nn.Embedding(num_nodes, embedding_dim)
+- 轻量 GraphSAGE 卷积（自实现，避免外部依赖）
+- MLP 产出节点表示（output_dim = hidden_conv_2）
+- f_phi 预测头：用邻居均值去回归中心节点的 (h, tag)
 
-流程：
-1. 预处理 MLP：input_dim → 256 → 128
-2. 两层图卷积（邻居求和 + 线性变换）
-3. 对比损失：正边 vs 负边的 BPR 排序损失
-4. 每个快照独立训练多个 epoch
+目标：用结构邻域信息约束表示学习，去除原 DGI/对比学习逻辑。
 """
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, Tuple, Optional, Iterable, Union
+from typing import Dict, Tuple, Optional, Iterable, Union, List
 
 from process.embedders.base import GraphEmbedderBase
 
 
-class ContrastiveGCNEncoder(nn.Module):
-    """两层简单图卷积编码器（无时间依赖）"""
+class SimpleSAGEConv(nn.Module):
+    """轻量 GraphSAGE 卷积：h' = ReLU(W_self·h + W_nei·mean_neigh(h))"""
 
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int):
+    def __init__(self, in_channels: int, out_channels: int, bias: bool = True):
         super().__init__()
-        self.pre1 = nn.Linear(input_dim, 256)
-        self.pre2 = nn.Linear(256, 128)
-        self.conv1 = nn.Linear(128, hidden_dim)
-        self.conv2 = nn.Linear(hidden_dim, output_dim)
-        self.dropout = nn.Dropout(0.1)
+        self.lin_self = nn.Linear(in_channels, out_channels, bias=bias)
+        self.lin_nei = nn.Linear(in_channels, out_channels, bias=bias)
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
-        """返回最终节点表示"""
-        h = F.leaky_relu(self.pre1(x))
-        h = F.leaky_relu(self.pre2(h))
-        h = self._gcn_forward(h, edge_index, self.conv1)
-        h = self.dropout(h)
-        h = self._gcn_forward(h, edge_index, self.conv2)
-        return F.normalize(h, p=2, dim=-1)
-
-    def _gcn_forward(self, h: torch.Tensor, edge_index: torch.Tensor, linear: nn.Linear) -> torch.Tensor:
+        if x.numel() == 0:
+            return x
         src, dst = edge_index[0], edge_index[1]
-        num_nodes = h.size(0)
-        # 加自环并做对称归一化聚合 D^{-1/2} A D^{-1/2}
-        loop = torch.arange(num_nodes, device=h.device)
-        src = torch.cat([src, loop], dim=0)
-        dst = torch.cat([dst, loop], dim=0)
+        N = x.size(0)
+        deg = torch.bincount(dst, minlength=N).float()
+        nei_sum = torch.zeros_like(x)
+        if src.numel() > 0:
+            nei_sum.index_add_(0, dst, x[src])
+        nei_mean = nei_sum / torch.clamp(deg, min=1.0).unsqueeze(-1)
+        out = self.lin_self(x) + self.lin_nei(nei_mean)
+        return F.relu(out)
 
-        deg = torch.bincount(dst, minlength=num_nodes).float()
-        deg_src = deg[src]
-        deg_dst = deg[dst]
-        norm = 1.0 / torch.sqrt(torch.clamp(deg_src * deg_dst, min=1.0))
 
-        aggr = torch.zeros_like(h)
-        aggr.index_add_(0, dst, h[src] * norm.unsqueeze(-1))
-        out = linear(aggr)
-        return F.leaky_relu(out)
+class GNNCL(nn.Module):
+    """节点嵌入 + SAGE + MLP + f_phi 预测头"""
+
+    def __init__(self, num_nodes: int, embedding_dim: int, hidden_dim: int, output_dim: int, num_mlp_layers: int = 2):
+        super().__init__()
+        self.node_embedding = nn.Embedding(num_embeddings=num_nodes, embedding_dim=embedding_dim)
+        self.sage_conv = SimpleSAGEConv(embedding_dim, hidden_dim)
+        mlp_layers: List[nn.Module] = []
+        for _ in range(num_mlp_layers):
+            mlp_layers.append(nn.Linear(hidden_dim, hidden_dim))
+            mlp_layers.append(nn.ReLU())
+        mlp_layers.append(nn.Linear(hidden_dim, output_dim))
+        self.mlp = nn.Sequential(*mlp_layers)
+        # 预测头：从邻居均值预测 (h, tag[3])
+        self.f_phi = nn.Sequential(
+            nn.Linear(output_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, output_dim + 3),
+        )
+
+    def forward(self, node_indices: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
+        x0 = self.node_embedding(node_indices)  # (N, embedding_dim)
+        x1 = self.sage_conv(x0, edge_index)    # (N, hidden_dim)
+        h = self.mlp(x1)                       # (N, output_dim)
+        return h
 
 
 class ROLANDGraphEmbedder(GraphEmbedderBase):
@@ -76,6 +86,8 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         feat_drop_rate: float = 0.2,
         neg_edge_drop_rate: float = 0.3,
         neg_edge_add_ratio: float = 0.1,
+        neigh_pred_weight: float = 1.0,
+        variance_weight: float = 0.1,
         train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
         model_path=None
     ):
@@ -104,6 +116,8 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         self.feat_drop_rate = float(feat_drop_rate)
         self.neg_edge_drop_rate = float(neg_edge_drop_rate)
         self.neg_edge_add_ratio = float(neg_edge_add_ratio)
+        self.neigh_pred_weight = float(neigh_pred_weight)
+        self.variance_weight = float(variance_weight)
         self.model_path = model_path or self._default_path
 
         # 训练快照筛选（默认全部）
@@ -124,20 +138,14 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         self.node_id_map = {nid: i for i, nid in enumerate(self.all_nodes)}
         
         # 初始化模型
-        self.model = ContrastiveGCNEncoder(
-            input_dim=embedding_dim,
-            hidden_dim=hidden_conv_1,
-            output_dim=hidden_conv_2
+        # 模型（GNNCL 风格）与优化器
+        self.model = GNNCL(
+            num_nodes=self.num_nodes,
+            embedding_dim=self.embedding_dim,
+            hidden_dim=self.hidden_conv_1,
+            output_dim=self.hidden_conv_2,
         ).to(self.device)
-        # DGI 判别器参数 W（用于 h^T W s 打分）
-        self.disc_W = nn.Linear(hidden_conv_2, hidden_conv_2, bias=False).to(self.device)
-        
-        # 优化器
-        self.optimizer = torch.optim.Adam(
-            list(self.model.parameters()) + list(self.disc_W.parameters()),
-            lr=lr,
-            weight_decay=1e-4,
-        )
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=1e-4)
         # 存储最终嵌入
         self.snapshot_embeddings_list = []
 
@@ -179,8 +187,8 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             f"[ROLAND] Training on {len(self.train_snapshot_indices)}/{len(self.snapshots)} snapshots, {self.num_nodes} nodes"
         )
         print(
-            f"[ROLAND] Objective: DGI (Graph InfoMax) | Epochs/snapshot: {self.num_epochs}, LR: {self.lr}, WD: 1e-4, "
-            f"neg_edge_drop: {self.neg_edge_drop_rate}, neg_edge_add: {self.neg_edge_add_ratio}"
+            f"[ROLAND] Objective: NeighborPredictOnly (GNNCL) | Epochs/snapshot: {self.num_epochs}, LR: {self.lr}, WD: 1e-4, "
+            f"neigh_w: {self.neigh_pred_weight}, var_w: {self.variance_weight}"
         )
         
         # 外层按 epoch 训练，内层遍历所有参与训练的快照
@@ -195,56 +203,53 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 if g is None:
                     continue
 
-                # 转换 igraph 到 PyTorch（每个快照一次）
-                x, edge_index = self._igraph_to_torch(g)
+                # 转换为本地张量：节点全局ID (N_local,) 与本地边索引 (2, E)
+                node_ids, edge_index = self._igraph_to_torch(g)
 
-                # 当前快照节点索引
-                present_idx = self._present_node_indices(g)
-                K = present_idx.numel()
-                if K < 1:
-                    continue
+                # 前向：得到本快照节点的表示 h_i (N_local, d)
+                z = self.model(node_ids, edge_index)
 
-                # 正样前向
-                z = self.model(x, edge_index)  # (N, d)
-                s = torch.sigmoid(z[present_idx].mean(dim=0))  # (d,)
-                Ws = self.disc_W(s)  # (d,)
+                # 基于本地边计算邻居平均向量
+                src, dst = edge_index[0], edge_index[1]
+                N_local = z.size(0)
+                deg = torch.bincount(dst, minlength=N_local).float()
+                neigh_sum = torch.zeros_like(z)
+                if src.numel() > 0:
+                    neigh_sum.index_add_(0, dst, z[src])
+                neigh_mean = neigh_sum / torch.clamp(deg, min=1.0).unsqueeze(-1)
 
-                # 负样：特征打乱 + 结构扰动
-                x_corrupt = x.clone()
-                perm = torch.randperm(K, device=self.device)
-                x_corrupt[present_idx] = x[present_idx[perm]]
-                e_corrupt = self._edge_dropout(edge_index, self.neg_edge_drop_rate)
-                e_corrupt = self._edge_random_add(e_corrupt, present_idx, add_ratio=self.neg_edge_add_ratio)
-                z_corrupt = self.model(x_corrupt, e_corrupt)
+                # 仅对有邻居的节点计算损失
+                mask = deg > 0
+                if mask.any():
+                    pred = self.model.f_phi(neigh_mean[mask])
+                    pred_h = pred[:, : self.hidden_conv_2]
+                    # stop-gradient on target to避免双边同时塌缩
+                    target_h = z[mask].detach()
+                    neigh_loss = F.mse_loss(pred_h, target_h)
+                    # variance regularization (VICReg 风格，仅抑制塌缩)
+                    eps = 1e-4
+                    std = z[mask].std(dim=0) + eps
+                    var_loss = torch.mean(F.relu(1.0 - std))
+                else:
+                    neigh_loss = torch.tensor(0.0, device=self.device)
+                    var_loss = torch.tensor(0.0, device=self.device)
 
-                # 判别打分与损失
-                pos_logits = (z[present_idx] * Ws.unsqueeze(0)).sum(dim=1)
-                neg_logits = (z_corrupt[present_idx] * Ws.unsqueeze(0)).sum(dim=1)
-                pos_labels = torch.ones_like(pos_logits)
-                neg_labels = torch.zeros_like(neg_logits)
-                loss_pos = F.binary_cross_entropy_with_logits(pos_logits, pos_labels)
-                loss_neg = F.binary_cross_entropy_with_logits(neg_logits, neg_labels)
-                loss = 0.5 * (loss_pos + loss_neg)
+                total_loss = self.neigh_pred_weight * neigh_loss + self.variance_weight * var_loss
 
                 # 反向与更新
                 self.optimizer.zero_grad()
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(
-                    list(self.model.parameters()) + list(self.disc_W.parameters()), max_norm=5.0
-                )
+                total_loss.backward()
+                torch.nn.utils.clip_grad_norm_(list(self.model.parameters()), max_norm=5.0)
                 self.optimizer.step()
 
                 # 日志（每个快照一行）
                 with torch.no_grad():
-                    pos_prob = torch.sigmoid(pos_logits).mean().item()
-                    neg_prob = torch.sigmoid(neg_logits).mean().item()
-                    margin = pos_prob - neg_prob
-                    print(
-                        f"    [Epoch {epoch} | Snap {sidx}] loss={loss.item():.4f} "
-                        f"pos_prob={pos_prob:.4f} neg_prob={neg_prob:.4f} margin={margin:.4f} K={int(K)}"
-                    )
+                    tl = total_loss.item()
+                    nl = neigh_loss.item() if torch.is_tensor(neigh_loss) else float(neigh_loss)
+                    vl = var_loss.item() if torch.is_tensor(var_loss) else float(var_loss)
+                    print(f"    [Epoch {epoch} | Snap {sidx}] total={tl:.4f} neigh={nl:.4f} var={vl:.4f} N={int(N_local)}")
 
-                epoch_loss += loss.item()
+                epoch_loss += total_loss.item()
                 trained_cnt += 1
 
             avg_epoch_loss = epoch_loss / trained_cnt if trained_cnt > 0 else 0.0
@@ -255,7 +260,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         avg_total_loss = overall_loss / epoch_count if epoch_count > 0 else 0.0
         print(f"[ROLAND] Training completed! Overall Avg Loss: {avg_total_loss:.6f}")
         
-        # 生成最终嵌入（推理模式）
+    # 生成最终嵌入（推理模式）：逐快照按当前模型重算并缓存
         self._generate_final_embeddings()
         
         # 自动保存模型
@@ -269,53 +274,6 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             return torch.zeros(0, dtype=torch.long, device=self.device)
         return torch.tensor(idxs, dtype=torch.long, device=self.device)
 
-    def _edge_dropout(self, edge_index: torch.Tensor, drop_rate: float) -> torch.Tensor:
-        """按比例随机丢弃边（COO格式）。"""
-        if edge_index.numel() == 0 or drop_rate <= 0:
-            return edge_index
-        E = edge_index.size(1)
-        keep = torch.rand(E, device=self.device) > drop_rate
-        if keep.sum() == 0:
-            return edge_index  # 保底
-        return edge_index[:, keep]
-
-    def _feature_dropout(self, x: torch.Tensor, drop_rate: float) -> torch.Tensor:
-        """掩蔽一部分特征维度（GraphCL/GRACE风格，全局共享mask）。"""
-        if drop_rate <= 0:
-            return x
-        D = x.size(1)
-        keep_mask = (torch.rand(D, device=x.device) > drop_rate).float()  # (D,)
-        return x * keep_mask.unsqueeze(0)
-
-    def _edge_random_add(self, edge_index: torch.Tensor, present_idx: torch.Tensor, add_ratio: float) -> torch.Tensor:
-        """在给定边集基础上随机添加一部分边（仅在当前快照参与节点之间）。
-
-        Args:
-            edge_index: 原始 COO (2, E)
-            present_idx: 当前快照的节点全局索引 (K,)
-            add_ratio: 按现有边数的比例添加新边数目（可为0）
-        """
-        if add_ratio <= 0 or present_idx.numel() < 2:
-            return edge_index
-        E = edge_index.size(1)
-        add_E = int(E * add_ratio)
-        if add_E <= 0:
-            return edge_index
-        K = present_idx.numel()
-        device = edge_index.device
-        # 随机采样若干对 (u,v) 且 u!=v
-        src_sel = present_idx[torch.randint(0, K, (add_E,), device=device)]
-        dst_sel = present_idx[torch.randint(0, K, (add_E,), device=device)]
-        mask = src_sel != dst_sel
-        if mask.sum() == 0:
-            return edge_index
-        src_sel = src_sel[mask]
-        dst_sel = dst_sel[mask]
-        if src_sel.numel() == 0:
-            return edge_index
-        new_edges = torch.stack([src_sel.long(), dst_sel.long()], dim=0)
-        return torch.cat([edge_index, new_edges], dim=1)
-    
     def _generate_final_embeddings(self):
         """训练后生成最终嵌入（用于后续任务）"""
         self.model.eval()
@@ -325,60 +283,37 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                     self.snapshot_embeddings_list.append({})
                     continue
                 
-                x, edge_index = self._igraph_to_torch(g)
-                final_emb = self.model(x, edge_index)
+                node_ids, edge_index = self._igraph_to_torch(g)
+                final_emb = self.model(node_ids, edge_index)
                 # 提取嵌入字典
                 embeddings_dict = self._extract_final_embeddings(g, final_emb)
                 self.snapshot_embeddings_list.append(embeddings_dict)
     
     def _igraph_to_torch(self, g) -> Tuple[torch.Tensor, torch.Tensor]:
-        """将 igraph 转换为 PyTorch 张量
-        
+        """将 igraph 转为 (节点全局ID, 本地边索引) 以适配 GNNCL 前向。
+
         Returns:
-            x: 节点特征 (num_nodes, embedding_dim)
-            edge_index: COO边索引 (2, num_edges)
+            node_ids: (N_local,) 当前快照节点对应的全局ID（顺序与 g.vs 对齐）
+            edge_index: (2, E) 使用本地索引(0..N_local-1) 的 COO 边
         """
-        # 节点特征：使用 properties 哈希
         node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
-        node_features_list = []
-        
-        for nid in self.all_nodes:
-            feat = np.zeros(self.embedding_dim, dtype=np.float32)
-            
-            if nid in node_gids:
-                local_idx = node_gids.index(nid)
-                try:
-                    properties_str = g.vs[local_idx]['properties']
-                except (KeyError, AttributeError):
-                    properties_str = ''
-                
-                if properties_str:
-                    import hashlib
-                    prop_hash = int(hashlib.md5(properties_str.encode()).hexdigest()[:16], 16)
-                    for i in range(min(64, self.embedding_dim)):
-                        feat[i] = float((prop_hash >> i) & 1)
-            
-            node_features_list.append(feat)
-        
-        x = torch.from_numpy(np.array(node_features_list)).to(self.device)
-        
-        # 边索引
-        edges = g.get_edgelist()
-        src = [self.node_id_map[node_gids[u]] for u, v in edges]
-        dst = [self.node_id_map[node_gids[v]] for u, v in edges]
-        edge_index = torch.LongTensor([src, dst]).to(self.device)
-        
-        return x, edge_index
+        node_ids = torch.tensor([self.node_id_map[nid] for nid in node_gids], dtype=torch.long, device=self.device)
+        edges = g.get_edgelist()  # 本地索引
+        if len(edges) == 0:
+            edge_index = torch.zeros((2, 0), dtype=torch.long, device=self.device)
+        else:
+            src = [u for (u, v) in edges]
+            dst = [v for (u, v) in edges]
+            edge_index = torch.tensor([src, dst], dtype=torch.long, device=self.device)
+        return node_ids, edge_index
     
     def _extract_final_embeddings(self, g, final_emb: torch.Tensor) -> Dict[str, np.ndarray]:
-        """提取节点嵌入字典"""
+        """提取节点嵌入字典（使用本地索引对齐 final_emb 行）。"""
         node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
-        embeddings_dict = {}
-        
-        for nid in node_gids:
-            idx = self.node_id_map[nid]
-            embeddings_dict[nid] = final_emb[idx].cpu().numpy()
-        
+        embeddings_dict: Dict[str, np.ndarray] = {}
+        for local_idx, nid in enumerate(node_gids):
+            if local_idx < final_emb.size(0):
+                embeddings_dict[nid] = final_emb[local_idx].detach().cpu().numpy()
         return embeddings_dict
 
     def get_snapshot_embeddings(self, snapshot_sequence=None):
@@ -457,15 +392,16 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 'num_epochs': self.num_epochs,
                 'lr': self.lr,
                 'train_indices': self.train_snapshot_indices,
-                'objective': 'dgi',
+                'objective': 'neighbor_predict',
                 'tau': self.tau,
                 'edge_drop_rate': self.edge_drop_rate,
                 'feat_drop_rate': self.feat_drop_rate,
                 'neg_edge_drop_rate': self.neg_edge_drop_rate,
                 'neg_edge_add_ratio': self.neg_edge_add_ratio,
+                'neigh_pred_weight': self.neigh_pred_weight,
+                'variance_weight': self.variance_weight,
             },
             'model_state': self.model.state_dict(),
-            'disc_state': self.disc_W.state_dict(),
             'snapshot_embeddings': self.snapshot_embeddings_list,
             'all_nodes': self.all_nodes,  # 保存节点列表（load时重建node_id_map）
         }
@@ -488,6 +424,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             'embedding_dim', 'hidden_conv_1', 'hidden_conv_2',
             'num_epochs', 'lr', 'tau', 'edge_drop_rate', 'feat_drop_rate',
             'neg_edge_drop_rate', 'neg_edge_add_ratio',
+            'neigh_pred_weight', 'variance_weight',
             'train_indices', 'model_path'
         }
         params = {k: v for k, v in raw_params.items() if k in allowed_keys}
@@ -495,8 +432,6 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         
         # 恢复模型权重和嵌入
         instance.model.load_state_dict(state['model_state'])
-        if 'disc_state' in state:
-            instance.disc_W.load_state_dict(state['disc_state'])
         instance.snapshot_embeddings_list = state['snapshot_embeddings']
         instance.all_nodes = state['all_nodes']
         
