@@ -562,12 +562,6 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
 
             node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
             degrees = g.degree()  # 与 node_gids 对齐
-            # 若配置了特殊节点放大，在读出时也对该节点的聚合权重放大（可与训练时一致）
-            if self.special_node_weight_map:
-                degrees = [
-                    (deg * float(self.special_node_weight_map.get(nid, 1.0)))
-                    for deg, nid in zip(degrees, node_gids)
-                ]
 
             weighted_sum = np.zeros(self.hidden_conv_2, dtype=np.float32)
             total_w = 0.0
