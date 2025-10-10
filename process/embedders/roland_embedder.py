@@ -13,6 +13,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Dict, Tuple, Optional, Iterable, Union, List
+import re
+import hashlib
 
 from process.embedders.base import GraphEmbedderBase
 
@@ -47,9 +49,23 @@ class GraphSAGEConv(nn.Module):
 class GNNCL(nn.Module):
     """节点嵌入 + SAGE + MLP + f_phi 预测头"""
 
-    def __init__(self, num_nodes: int, embedding_dim: int, hidden_dim: int, output_dim: int, num_mlp_layers: int = 2, dropout: float = 0.1):
+    def __init__(
+        self,
+        num_nodes: int,
+        embedding_dim: int,
+        hidden_dim: int,
+        output_dim: int,
+        num_mlp_layers: int = 2,
+        dropout: float = 0.1,
+        prop_dim: int = 0,
+    ):
         super().__init__()
         self.node_embedding = nn.Embedding(num_embeddings=num_nodes, embedding_dim=embedding_dim)
+        self.prop_dim = int(prop_dim)
+        self.use_props = self.prop_dim > 0
+        if self.use_props:
+            # 将属性向量投影到 embedding_dim，并与 ID embedding 相加
+            self.prop_proj = nn.Linear(self.prop_dim, embedding_dim)
         # 两层 GraphSAGE：embed→hidden，hidden→hidden
         self.sage1 = GraphSAGEConv(embedding_dim, hidden_dim, l2_norm=False)
         self.sage2 = GraphSAGEConv(hidden_dim, hidden_dim, l2_norm=False)
@@ -67,8 +83,10 @@ class GNNCL(nn.Module):
             nn.Linear(hidden_dim, output_dim + 3),
         )
 
-    def forward(self, node_indices: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
+    def forward(self, node_indices: torch.Tensor, edge_index: torch.Tensor, prop_feats: Optional[torch.Tensor] = None) -> torch.Tensor:
         x0 = self.node_embedding(node_indices)  # (N, embedding_dim)
+        if self.use_props and prop_feats is not None and prop_feats.numel() > 0:
+            x0 = x0 + self.prop_proj(prop_feats)
         h1 = self.sage1(x0, edge_index)         # (N, hidden)
         h2_in = self.dropout(h1)
         h2 = self.sage2(h2_in, edge_index)      # (N, hidden)
@@ -94,6 +112,15 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         hidden_conv_2=256,
         num_epochs=50,
         lr=0.0005,
+        prop_feat_dim: int = 128,
+        # 属性向量模式：'word2vec' 或 'hash'（默认 word2vec）
+        prop_vec_mode: str = 'word2vec',
+        # 预训练或缓存的 KeyedVectors 路径（.kv 或 .bin），为空则基于属性语料训练
+        prop_w2v_path: Optional[str] = None,
+        # 训练 W2V 的超参（仅在未提供路径时生效）
+        prop_w2v_window: int = 5,
+        prop_w2v_min_count: int = 1,
+        prop_w2v_epochs: int = 10,
         neigh_pred_weight: float = 1.0,
         variance_weight: float = 0.1,
         train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
@@ -122,6 +149,19 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         self.neigh_pred_weight = float(neigh_pred_weight)
         self.variance_weight = float(variance_weight)
         self.model_path = model_path or self._default_path
+        self.prop_feat_dim = int(prop_feat_dim)
+        # 属性向量模式与 W2V 选项
+        self.prop_vec_mode = str(prop_vec_mode or 'word2vec').lower()
+        if self.prop_vec_mode not in ('word2vec', 'hash'):
+            self.prop_vec_mode = 'word2vec'
+        self.prop_w2v_path = prop_w2v_path
+        self.prop_w2v_window = int(prop_w2v_window)
+        self.prop_w2v_min_count = int(prop_w2v_min_count)
+        self.prop_w2v_epochs = int(prop_w2v_epochs)
+        # 文本属性缓存：属性文本 -> 向量（避免重复计算；快照间属性不同也能区分）
+        self._prop_cache: Dict[str, np.ndarray] = {}
+        # 运行期 W2V 词向量（KeyedVectors），仅在训练期需要；load 后推理可直接使用 prop_cache
+        self._w2v_kv = None  # 延迟初始化，避免导入 gensim 报错
 
         # 训练快照筛选（默认全部）
         self.train_snapshot_indices = self._resolve_train_indices(train_indices)
@@ -147,10 +187,19 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             embedding_dim=self.embedding_dim,
             hidden_dim=self.hidden_conv_1,
             output_dim=self.hidden_conv_2,
+            prop_dim=self.prop_feat_dim,
         ).to(self.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=1e-4)
         # 存储最终嵌入
         self.snapshot_embeddings_list = []
+        
+        # 若使用 Word2Vec，则准备语料并训练/加载词向量（仅训练阶段用；推理期依赖 prop_cache）
+        if self.prop_feat_dim > 0 and self.prop_vec_mode == 'word2vec':
+            try:
+                self._prepare_word2vec()
+            except Exception as ex:
+                print(f"[ROLAND] Word2Vec 初始化失败，将回退为零向量属性：{ex}")
+                self._w2v_kv = None
 
     def _resolve_train_indices(
         self,
@@ -207,10 +256,10 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                     continue
 
                 # 转换为本地张量：节点全局ID (N_local,) 与本地边索引 (2, E)
-                node_ids, edge_index = self._igraph_to_torch(g)
+                node_ids, edge_index, prop_feats = self._igraph_to_torch(g)
 
                 # 前向：得到本快照节点的表示 h_i (N_local, d)
-                z = self.model(node_ids, edge_index)
+                z = self.model(node_ids, edge_index, prop_feats)
 
                 # 基于本地边计算邻居平均向量
                 src, dst = edge_index[0], edge_index[1]
@@ -280,18 +329,19 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                     self.snapshot_embeddings_list.append({})
                     continue
                 
-                node_ids, edge_index = self._igraph_to_torch(g)
-                final_emb = self.model(node_ids, edge_index)
+                node_ids, edge_index, prop_feats = self._igraph_to_torch(g)
+                final_emb = self.model(node_ids, edge_index, prop_feats)
                 # 提取嵌入字典
                 embeddings_dict = self._extract_final_embeddings(g, final_emb)
                 self.snapshot_embeddings_list.append(embeddings_dict)
     
-    def _igraph_to_torch(self, g) -> Tuple[torch.Tensor, torch.Tensor]:
-        """将 igraph 转为 (节点全局ID, 本地边索引) 以适配 GNNCL 前向。
+    def _igraph_to_torch(self, g) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        """将 igraph 转为 (节点全局ID, 本地边索引, 属性特征) 以适配 GNNCL 前向。
 
         Returns:
             node_ids: (N_local,) 当前快照节点对应的全局ID（顺序与 g.vs 对齐）
             edge_index: (2, E) 使用本地索引(0..N_local-1) 的 COO 边
+            prop_feats: (N_local, prop_feat_dim) 若启用属性特征，否则为 None
         """
         node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
         node_ids = torch.tensor([self.node_id_map[nid] for nid in node_gids], dtype=torch.long, device=self.device)
@@ -302,7 +352,137 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             src = [u for (u, v) in edges]
             dst = [v for (u, v) in edges]
             edge_index = torch.tensor([src, dst], dtype=torch.long, device=self.device)
-        return node_ids, edge_index
+        # 属性特征（可选）
+        prop_feats_t: Optional[torch.Tensor] = None
+        if self.prop_feat_dim > 0:
+            mat = np.zeros((len(node_gids), self.prop_feat_dim), dtype=np.float32)
+            for i, nid in enumerate(node_gids):
+                mat[i] = self._get_node_prop_vec(g, i)
+            prop_feats_t = torch.from_numpy(mat).to(self.device)
+        return node_ids, edge_index, prop_feats_t
+
+    def _get_node_prop_vec(self, g, local_idx: int) -> np.ndarray:
+        """取节点属性字符串，按模式生成向量（缓存按属性文本）。"""
+        try:
+            prop_str = g.vs[local_idx].get('properties', '') or ''
+        except Exception:
+            prop_str = ''
+        key = str(prop_str)
+        if key in self._prop_cache:
+            return self._prop_cache[key]
+        if self.prop_feat_dim <= 0:
+            vec = np.zeros((0,), dtype=np.float32)
+        elif self.prop_vec_mode == 'word2vec':
+            vec = self._text_w2v_vector(key, self.prop_feat_dim)
+        else:
+            vec = self._text_hash_vector(key, self.prop_feat_dim)
+        self._prop_cache[key] = vec
+        return vec
+
+    @staticmethod
+    def _text_hash_vector(text: str, dim: int) -> np.ndarray:
+        """将文本转成固定维度的哈希计数向量（L2 归一化）。"""
+        if dim <= 0:
+            return np.zeros(0, dtype=np.float32)
+        v = np.zeros(dim, dtype=np.float32)
+        if not text:
+            return v
+        # 简单分词：按非字母数字切分
+        tokens = [t for t in re.split(r'[^A-Za-z0-9]+', str(text).lower()) if t]
+        for tok in tokens:
+            h = int(hashlib.md5(tok.encode('utf-8')).hexdigest(), 16) % dim
+            v[h] += 1.0
+        # L2 归一化，防止长度差异干扰
+        n = np.linalg.norm(v) + 1e-12
+        return (v / n).astype(np.float32)
+
+    # ===== Word2Vec 支持 =====
+    def _prepare_word2vec(self):
+        """构建属性语料并训练/加载 Word2Vec（KeyedVectors 保存在内存）。"""
+        # 动态导入，避免环境未装 gensim 时顶层报错
+        try:
+            from gensim.models import Word2Vec, KeyedVectors  # type: ignore
+        except Exception as ex:  # pragma: no cover - 环境问题
+            raise RuntimeError("需要安装 gensim 才能使用 word2vec 属性特征: pip install gensim") from ex
+
+        corpus: List[List[str]] = []
+        # 仅使用训练快照（通常是良性集）构建语料，避免泄漏
+        for sidx in self.train_snapshot_indices:
+            if sidx < 0 or sidx >= len(self.snapshots):
+                continue
+            g = self.snapshots[sidx]
+            if g is None:
+                continue
+            for i in range(g.vcount()):
+                try:
+                    prop_str = g.vs[i].get('properties', '') or ''
+                except Exception:
+                    prop_str = ''
+                tokens = [t for t in re.split(r'[^A-Za-z0-9]+', str(prop_str).lower()) if t]
+                if tokens:
+                    corpus.append(tokens)
+
+        if self.prop_w2v_path:
+            try:
+                kv = KeyedVectors.load(self.prop_w2v_path)
+            except Exception:
+                # 兼容常见的二进制格式（如 GoogleNews 或自保存 .kv）
+                try:
+                    kv = KeyedVectors.load_word2vec_format(self.prop_w2v_path, binary=True)
+                except Exception as ex:
+                    raise RuntimeError(f"无法从 {self.prop_w2v_path} 加载 KeyedVectors: {ex}")
+            if kv.vector_size != self.prop_feat_dim:
+                print(f"[ROLAND] 注意：加载的词向量维度 {kv.vector_size} 与 prop_feat_dim={self.prop_feat_dim} 不一致，将截断/填零对齐。")
+            self._w2v_kv = kv
+        else:
+            if not corpus:
+                print("[ROLAND] 属性语料为空，Word2Vec 将退化为零向量。")
+                self._w2v_kv = None
+                return
+            # 训练一个轻量 Skip-gram 模型
+            sg = 1  # skip-gram 通常对小语料更稳健
+            model = Word2Vec(
+                sentences=corpus,
+                vector_size=self.prop_feat_dim,
+                window=self.prop_w2v_window,
+                min_count=self.prop_w2v_min_count,
+                sg=sg,
+                epochs=self.prop_w2v_epochs,
+                workers=1,
+            )
+            self._w2v_kv = model.wv
+
+    def _text_w2v_vector(self, text: str, dim: int) -> np.ndarray:
+        """用 Word2Vec 对文本分词后取词向量平均；若无可用词则返回零向量。"""
+        if dim <= 0:
+            return np.zeros(0, dtype=np.float32)
+        if not text:
+            return np.zeros(dim, dtype=np.float32)
+        if self._w2v_kv is None:
+            # 没有可用的词向量（比如未成功初始化），返回零向量
+            return np.zeros(dim, dtype=np.float32)
+        tokens = [t for t in re.split(r'[^A-Za-z0-9]+', str(text).lower()) if t]
+        if not tokens:
+            return np.zeros(dim, dtype=np.float32)
+        vecs = []
+        for tkn in tokens:
+            if tkn in self._w2v_kv.key_to_index:
+                v = self._w2v_kv[tkn]
+                if v.shape[0] != dim:
+                    # 对齐维度（截断或补零）
+                    if v.shape[0] > dim:
+                        v = v[:dim]
+                    else:
+                        pad = np.zeros(dim, dtype=np.float32)
+                        pad[: v.shape[0]] = v
+                        v = pad
+                vecs.append(v.astype(np.float32))
+        if not vecs:
+            return np.zeros(dim, dtype=np.float32)
+        m = np.mean(np.stack(vecs, axis=0), axis=0)
+        # L2 归一化
+        n = np.linalg.norm(m) + 1e-12
+        return (m / n).astype(np.float32)
     
     def _extract_final_embeddings(self, g, final_emb: torch.Tensor) -> Dict[str, np.ndarray]:
         """提取节点嵌入字典（使用本地索引对齐 final_emb 行）。"""
@@ -392,10 +572,18 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 'objective': 'neighbor_predict',
                 'neigh_pred_weight': self.neigh_pred_weight,
                 'variance_weight': self.variance_weight,
+                'prop_feat_dim': self.prop_feat_dim,
+                'prop_vec_mode': self.prop_vec_mode,
+                'prop_w2v_path': self.prop_w2v_path,
+                'prop_w2v_window': self.prop_w2v_window,
+                'prop_w2v_min_count': self.prop_w2v_min_count,
+                'prop_w2v_epochs': self.prop_w2v_epochs,
             },
             'model_state': self.model.state_dict(),
             'snapshot_embeddings': self.snapshot_embeddings_list,
             'all_nodes': self.all_nodes,  # 保存节点列表（load时重建node_id_map）
+            # 属性缓存（以属性字符串为键），避免推理时依赖 gensim
+            'prop_cache': self._prop_cache,
         }
         torch.save(state, path)
         print(f"[ROLAND] Model saved to {path}")
@@ -416,6 +604,8 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             'embedding_dim', 'hidden_conv_1', 'hidden_conv_2',
             'num_epochs', 'lr',
             'neigh_pred_weight', 'variance_weight',
+            'prop_feat_dim',
+            'prop_vec_mode', 'prop_w2v_path', 'prop_w2v_window', 'prop_w2v_min_count', 'prop_w2v_epochs',
             'train_indices', 'model_path'
         }
         params = {k: v for k, v in raw_params.items() if k in allowed_keys}
@@ -425,6 +615,9 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         instance.model.load_state_dict(state['model_state'])
         instance.snapshot_embeddings_list = state['snapshot_embeddings']
         instance.all_nodes = state['all_nodes']
+        # 恢复属性缓存（若存在）
+        if 'prop_cache' in state and isinstance(state['prop_cache'], dict):
+            instance._prop_cache = state['prop_cache']
         
         # 重建 node_id_map
         instance.node_id_map = {nid: i for i, nid in enumerate(instance.all_nodes)}
