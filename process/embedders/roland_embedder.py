@@ -225,15 +225,15 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 # 累计该快照内的损失，用于之后计算平均损失
                 snapshot_loss += loss.item()
 
-                # 训练可视化：首/末 epoch 打印学习信号（DGI 打分统计）
-                if epoch == 0 or epoch == self.num_epochs - 1:
-                    with torch.no_grad():
-                        pos_prob = torch.sigmoid(pos_logits).mean().item()
-                        neg_prob = torch.sigmoid(neg_logits).mean().item()
-                        print(
-                            f"    [Snap {sidx} | Epoch {epoch}] loss={loss.item():.4f} "
-                            f"pos_prob={pos_prob:.4f} neg_prob={neg_prob:.4f} K={int(K)}"
-                        )
+                # 训练可视化：每个 epoch 打印 DGI 学习信号（pos_prob↑, neg_prob↓ 为佳）
+                with torch.no_grad():
+                    pos_prob = torch.sigmoid(pos_logits).mean().item()
+                    neg_prob = torch.sigmoid(neg_logits).mean().item()
+                    margin = pos_prob - neg_prob
+                    print(
+                        f"    [Snap {sidx} | Epoch {epoch}] loss={loss.item():.4f} "
+                        f"pos_prob={pos_prob:.4f} neg_prob={neg_prob:.4f} margin={margin:.4f} K={int(K)}"
+                    )
 
                 # Backward
                 self.optimizer.zero_grad()
