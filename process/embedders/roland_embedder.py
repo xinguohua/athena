@@ -6,7 +6,7 @@ ROLAND Embedder (GNNCL 风格)
 - MLP 产出节点表示（output_dim = hidden_conv_2）
 - f_phi 预测头：用邻居均值去回归中心节点的 (h, tag)
 
-目标：用结构邻域信息约束表示学习，去除原 DGI/对比学习逻辑。
+目标：用结构邻域信息约束表示学习，移除 DGI/负样本等复杂逻辑，保持接口简洁。
 """
 import numpy as np
 import torch
@@ -17,13 +17,15 @@ from typing import Dict, Tuple, Optional, Iterable, Union, List
 from process.embedders.base import GraphEmbedderBase
 
 
-class SimpleSAGEConv(nn.Module):
-    """轻量 GraphSAGE 卷积：h' = ReLU(W_self·h + W_nei·mean_neigh(h))"""
+class GraphSAGEConv(nn.Module):
+    """标准 GraphSAGE (mean) 聚合：
+    h' = ReLU( W · concat( h, mean_{u∈N(v)} h_u ) )
+    """
 
-    def __init__(self, in_channels: int, out_channels: int, bias: bool = True):
+    def __init__(self, in_channels: int, out_channels: int, bias: bool = True, l2_norm: bool = False):
         super().__init__()
-        self.lin_self = nn.Linear(in_channels, out_channels, bias=bias)
-        self.lin_nei = nn.Linear(in_channels, out_channels, bias=bias)
+        self.lin = nn.Linear(in_channels * 2, out_channels, bias=bias)
+        self.l2_norm = l2_norm
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         if x.numel() == 0:
@@ -35,17 +37,23 @@ class SimpleSAGEConv(nn.Module):
         if src.numel() > 0:
             nei_sum.index_add_(0, dst, x[src])
         nei_mean = nei_sum / torch.clamp(deg, min=1.0).unsqueeze(-1)
-        out = self.lin_self(x) + self.lin_nei(nei_mean)
-        return F.relu(out)
+        h_cat = torch.cat([x, nei_mean], dim=-1)
+        out = F.relu(self.lin(h_cat))
+        if self.l2_norm:
+            out = F.normalize(out, p=2, dim=-1)
+        return out
 
 
 class GNNCL(nn.Module):
     """节点嵌入 + SAGE + MLP + f_phi 预测头"""
 
-    def __init__(self, num_nodes: int, embedding_dim: int, hidden_dim: int, output_dim: int, num_mlp_layers: int = 2):
+    def __init__(self, num_nodes: int, embedding_dim: int, hidden_dim: int, output_dim: int, num_mlp_layers: int = 2, dropout: float = 0.1):
         super().__init__()
         self.node_embedding = nn.Embedding(num_embeddings=num_nodes, embedding_dim=embedding_dim)
-        self.sage_conv = SimpleSAGEConv(embedding_dim, hidden_dim)
+        # 两层 GraphSAGE：embed→hidden，hidden→hidden
+        self.sage1 = GraphSAGEConv(embedding_dim, hidden_dim, l2_norm=False)
+        self.sage2 = GraphSAGEConv(hidden_dim, hidden_dim, l2_norm=False)
+        self.dropout = nn.Dropout(dropout)
         mlp_layers: List[nn.Module] = []
         for _ in range(num_mlp_layers):
             mlp_layers.append(nn.Linear(hidden_dim, hidden_dim))
@@ -61,8 +69,13 @@ class GNNCL(nn.Module):
 
     def forward(self, node_indices: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         x0 = self.node_embedding(node_indices)  # (N, embedding_dim)
-        x1 = self.sage_conv(x0, edge_index)    # (N, hidden_dim)
-        h = self.mlp(x1)                       # (N, output_dim)
+        h1 = self.sage1(x0, edge_index)         # (N, hidden)
+        h2_in = self.dropout(h1)
+        h2 = self.sage2(h2_in, edge_index)      # (N, hidden)
+        # 残差：形状一致时相加
+        if h2.shape == h1.shape:
+            h2 = h2 + h1
+        h = self.mlp(h2)                        # (N, output)
         return h
 
 
@@ -81,11 +94,6 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         hidden_conv_2=256,
         num_epochs=50,
         lr=0.0005,
-        tau: float = 0.2,
-        edge_drop_rate: float = 0.2,
-        feat_drop_rate: float = 0.2,
-        neg_edge_drop_rate: float = 0.3,
-        neg_edge_add_ratio: float = 0.1,
         neigh_pred_weight: float = 1.0,
         variance_weight: float = 0.1,
         train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
@@ -94,15 +102,15 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         """
         Args:
             snapshots: list of igraph.Graph
-            embedding_dim: 输入特征维度 (默认256)
-            hidden_conv_1: 第1层GCN输出维度 (默认128)
-            hidden_conv_2: 第2层GCN输出维度 (默认256，最终嵌入维度，匹配分类器)
+            embedding_dim: 节点初始嵌入维度（nn.Embedding）
+            hidden_conv_1: SAGE 隐层维度
+            hidden_conv_2: 最终节点表示维度（也是下游读出维度）
             num_epochs: 训练轮数
             lr: 学习率
-            tau: InfoNCE 温度参数
-            edge_drop_rate: 视图增强的随机删边比例
-            feat_drop_rate: 视图增强的随机特征掩码比例
-            train_indices: 可选，仅训练指定索引的快照（支持 range、列表或(start, end)元组）
+            neigh_pred_weight: 邻居预测损失权重
+            variance_weight: 方差正则权重（抑制表示塌缩）
+            train_indices: 仅训练给定范围/集合内的快照（range、列表或 (start, end)）
+            model_path: 保存/加载路径
         """
         super().__init__(snapshots, features, mapp)
         self.snapshots = self.G
@@ -111,11 +119,6 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         self.hidden_conv_2 = hidden_conv_2
         self.num_epochs = num_epochs
         self.lr = lr
-        self.tau = float(tau)
-        self.edge_drop_rate = float(edge_drop_rate)
-        self.feat_drop_rate = float(feat_drop_rate)
-        self.neg_edge_drop_rate = float(neg_edge_drop_rate)
-        self.neg_edge_add_ratio = float(neg_edge_add_ratio)
         self.neigh_pred_weight = float(neigh_pred_weight)
         self.variance_weight = float(variance_weight)
         self.model_path = model_path or self._default_path
@@ -187,7 +190,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
             f"[ROLAND] Training on {len(self.train_snapshot_indices)}/{len(self.snapshots)} snapshots, {self.num_nodes} nodes"
         )
         print(
-            f"[ROLAND] Objective: NeighborPredictOnly (GNNCL) | Epochs/snapshot: {self.num_epochs}, LR: {self.lr}, WD: 1e-4, "
+            f"[ROLAND] Objective: NeighborPredictOnly | Epochs: {self.num_epochs}, LR: {self.lr}, WD: 1e-4, "
             f"neigh_w: {self.neigh_pred_weight}, var_w: {self.variance_weight}"
         )
         
@@ -266,13 +269,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         # 自动保存模型
         self.save_model()
 
-    def _present_node_indices(self, g) -> torch.Tensor:
-        """返回当前快照在全局节点表中的索引（tensor）。"""
-        node_gids = [g.vs[vid]['name'] for vid in range(g.vcount())]
-        idxs = [self.node_id_map[nid] for nid in node_gids if nid in self.node_id_map]
-        if not idxs:
-            return torch.zeros(0, dtype=torch.long, device=self.device)
-        return torch.tensor(idxs, dtype=torch.long, device=self.device)
+    # 已不需要 present 索引辅助（仅用本地节点顺序与本地边）
 
     def _generate_final_embeddings(self):
         """训练后生成最终嵌入（用于后续任务）"""
@@ -393,11 +390,6 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
                 'lr': self.lr,
                 'train_indices': self.train_snapshot_indices,
                 'objective': 'neighbor_predict',
-                'tau': self.tau,
-                'edge_drop_rate': self.edge_drop_rate,
-                'feat_drop_rate': self.feat_drop_rate,
-                'neg_edge_drop_rate': self.neg_edge_drop_rate,
-                'neg_edge_add_ratio': self.neg_edge_add_ratio,
                 'neigh_pred_weight': self.neigh_pred_weight,
                 'variance_weight': self.variance_weight,
             },
@@ -422,8 +414,7 @@ class ROLANDGraphEmbedder(GraphEmbedderBase):
         # 过滤掉 __init__ 不接受的键，避免 TypeError（例如 'objective'）
         allowed_keys = {
             'embedding_dim', 'hidden_conv_1', 'hidden_conv_2',
-            'num_epochs', 'lr', 'tau', 'edge_drop_rate', 'feat_drop_rate',
-            'neg_edge_drop_rate', 'neg_edge_add_ratio',
+            'num_epochs', 'lr',
             'neigh_pred_weight', 'variance_weight',
             'train_indices', 'model_path'
         }
