@@ -11,8 +11,8 @@ from process.classfy import get_classfy
 CONFIG_PATH = "config.yaml"
 DATASET_NAME = "atlas"          # 可切换数据集
 # DATASET_NAME = "cadets"          # 可切换数据集
-EMBEDDER_NAME = "roland"    # 嵌入器
-# EMBEDDER_NAME = "prographer"
+# EMBEDDER_NAME = "roland"    # 嵌入器
+EMBEDDER_NAME = "prographer"
 CLASSIFY_NAME = "prographer"     # 训练器
 # EMBEDDER_NAME = "unicorn"    # 嵌入器
 # CLASSIFY_NAME = "unicorn"
@@ -48,7 +48,7 @@ def plot_tsne_embeddings(
     benign_start: int,
     benign_end: int,
     annotate: bool = True,
-    mode: str = "topk",           # "topk" 或 "all"
+    mode: str = "all",           # "topk" 或 "all"
     top_k: int = 10,
     group: str = "per-group",      # "per-group" 或 "global"
     metric: str = "cosine",        # "cosine" 或 "l2"
@@ -212,7 +212,7 @@ def main():
             handler.benign_idx_start,
             handler.benign_idx_end,
             annotate=True,
-            mode="topk",       # 只标注 Top-K
+            mode="all",       # 只标注 Top-K
             top_k=5,          # 每组取 K 个
             group="per-group", # 每组独立 Top-K
             metric="cosine",  # 用 cosine 偏离
