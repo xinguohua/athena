@@ -65,11 +65,14 @@ def plot_tsne_embeddings(
     benign_start: int,
     benign_end: int,
     annotate: bool = True,
-    mode: str = "topk",           # "topk" 或 "all"
+    mode: str = "topk",            # "topk" 或 "all"
     top_k: int = 10,
-    group: str = "per-group",      # "per-group" 或 "global"
-    metric: str = "cosine",        # "cosine" 或 "l2"
+    group: str = "per-group",       # "per-group" 或 "global"
+    metric: str = "cosine",         # "cosine" 或 "l2"
     save_path: str = "snapshot_embeddings_tsne.png",
+    which: str = "all",             # "all" | "benign" | "malicious"
+    malicious_start: int | None = None,
+    malicious_end: int | None = None,
 ):
     """仅使用 t-SNE 可视化快照嵌入二维分布，标记良性区间。"""
     if arr is None or getattr(arr, "size", 0) == 0:
@@ -101,10 +104,38 @@ def plot_tsne_embeddings(
     if lo <= hi:
         mask_benign[lo:hi + 1] = True
 
+    # 恶意掩码：优先使用显式传入的恶意区间；否则使用良性交集的补集
+    if malicious_start is not None and malicious_end is not None:
+        m_lo, m_hi = min(malicious_start, malicious_end), max(malicious_start, malicious_end)
+        m_lo = max(0, min(m_lo, T - 1))
+        m_hi = max(0, min(m_hi, T - 1))
+        mask_mal = np.zeros(T, dtype=bool)
+        if m_lo <= m_hi:
+            mask_mal[m_lo:m_hi + 1] = True
+    else:
+        mask_mal = ~mask_benign
+
+    which_l = (which or "all").lower()
+
     plt.figure(figsize=(8, 6))
-    plt.scatter(xs[mask_benign], ys[mask_benign], c="#2ca02c", label=f"Benign [{lo}-{hi}]", s=40, alpha=0.85, edgecolors="white")
-    if (~mask_benign).any():
-        plt.scatter(xs[~mask_benign], ys[~mask_benign], c="#d62728", label="Others", s=40, alpha=0.85, edgecolors="white")
+    drew_any = False
+    if which_l in ("all", "benign") and mask_benign.any():
+        plt.scatter(
+            xs[mask_benign], ys[mask_benign], c="#2ca02c",
+            label=f"Benign [{lo}-{hi}]", s=40, alpha=0.85, edgecolors="white"
+        )
+        drew_any = True
+    if which_l in ("all", "malicious") and mask_mal.any():
+        plt.scatter(
+            xs[mask_mal], ys[mask_mal], c="#d62728",
+            label="Malicious", s=40, alpha=0.85, edgecolors="white"
+        )
+        drew_any = True
+
+    if not drew_any:
+        print("[Viz] 所选类别无点可画，跳过绘图。")
+        return
+
     if annotate:
         indices_to_annotate: list[int] = []
         labels_for_indices: dict[int, str] = {}
@@ -112,46 +143,83 @@ def plot_tsne_embeddings(
         group_l = (group or "per-group").lower()
         metric_l = (metric or "cosine").lower()
 
-        if mode_l == "all":
-            b_all = list(np.where(mask_benign)[0])
-            m_all = list(np.where(~mask_benign)[0])
-            for r, idx in enumerate(b_all):
-                indices_to_annotate.append(int(idx))
-                labels_for_indices[int(idx)] = f"B{r}"
-            for r, idx in enumerate(m_all):
-                indices_to_annotate.append(int(idx))
-                labels_for_indices[int(idx)] = f"M{r}"
-        else:
-            dev = _compute_deviation(X, lo, hi, metric=metric_l)
-            if group_l == "per-group":
-                b_all = np.where(mask_benign)[0]
-                m_all = np.where(~mask_benign)[0]
+        if which_l == "benign":
+            target_mask = mask_benign
+            if mode_l == "all":
+                b_all = list(np.where(target_mask)[0])
+                for r, idx in enumerate(b_all):
+                    idx = int(idx)
+                    indices_to_annotate.append(idx)
+                    labels_for_indices[idx] = f"B{r}"
+            else:
+                dev = _compute_deviation(X, lo, hi, metric=metric_l)
+                b_all = np.where(target_mask)[0]
                 k_b = int(min(top_k, len(b_all)))
-                k_m = int(min(top_k, len(m_all)))
                 if k_b > 0:
                     order_b = b_all[np.argsort(-dev[b_all])[:k_b]]
                     for r, idx in enumerate(order_b):
-                        indices_to_annotate.append(int(idx))
-                        labels_for_indices[int(idx)] = f"B{r}"
+                        idx = int(idx)
+                        indices_to_annotate.append(idx)
+                        labels_for_indices[idx] = f"B{r}"
+        elif which_l == "malicious":
+            target_mask = mask_mal
+            if mode_l == "all":
+                m_all = list(np.where(target_mask)[0])
+                for r, idx in enumerate(m_all):
+                    idx = int(idx)
+                    indices_to_annotate.append(idx)
+                    labels_for_indices[idx] = f"M{r}"
+            else:
+                dev = _compute_deviation(X, lo, hi, metric=metric_l)
+                m_all = np.where(target_mask)[0]
+                k_m = int(min(top_k, len(m_all)))
                 if k_m > 0:
                     order_m = m_all[np.argsort(-dev[m_all])[:k_m]]
                     for r, idx in enumerate(order_m):
-                        indices_to_annotate.append(int(idx))
-                        labels_for_indices[int(idx)] = f"M{r}"
+                        idx = int(idx)
+                        indices_to_annotate.append(idx)
+                        labels_for_indices[idx] = f"M{r}"
+        else:  # which_l == "all"
+            if mode_l == "all":
+                b_all = list(np.where(mask_benign)[0])
+                m_all = list(np.where(mask_mal)[0])
+                for r, idx in enumerate(b_all):
+                    indices_to_annotate.append(int(idx))
+                    labels_for_indices[int(idx)] = f"B{r}"
+                for r, idx in enumerate(m_all):
+                    indices_to_annotate.append(int(idx))
+                    labels_for_indices[int(idx)] = f"M{r}"
             else:
-                k = int(min(max(1, top_k), T))
-                order = np.argsort(-dev)[:k]
-                b_count = 0
-                m_count = 0
-                for idx in order:
-                    idx = int(idx)
-                    indices_to_annotate.append(idx)
-                    if mask_benign[idx]:
-                        labels_for_indices[idx] = f"B{b_count}"
-                        b_count += 1
-                    else:
-                        labels_for_indices[idx] = f"M{m_count}"
-                        m_count += 1
+                dev = _compute_deviation(X, lo, hi, metric=metric_l)
+                if group_l == "per-group":
+                    b_all = np.where(mask_benign)[0]
+                    m_all = np.where(mask_mal)[0]
+                    k_b = int(min(top_k, len(b_all)))
+                    k_m = int(min(top_k, len(m_all)))
+                    if k_b > 0:
+                        order_b = b_all[np.argsort(-dev[b_all])[:k_b]]
+                        for r, idx in enumerate(order_b):
+                            indices_to_annotate.append(int(idx))
+                            labels_for_indices[int(idx)] = f"B{r}"
+                    if k_m > 0:
+                        order_m = m_all[np.argsort(-dev[m_all])[:k_m]]
+                        for r, idx in enumerate(order_m):
+                            indices_to_annotate.append(int(idx))
+                            labels_for_indices[int(idx)] = f"M{r}"
+                else:
+                    k = int(min(max(1, top_k), T))
+                    order = np.argsort(-dev)[:k]
+                    b_count = 0
+                    m_count = 0
+                    for idx in order:
+                        idx = int(idx)
+                        indices_to_annotate.append(idx)
+                        if mask_benign[idx]:
+                            labels_for_indices[idx] = f"B{b_count}"
+                            b_count += 1
+                        elif mask_mal[idx]:
+                            labels_for_indices[idx] = f"M{m_count}"
+                            m_count += 1
 
         for idx in indices_to_annotate:
             lbl = labels_for_indices.get(idx, str(idx))
@@ -466,6 +534,9 @@ def run_evaluation(path_map: dict) -> None:
             group="per-group",
             metric="cosine",
             save_path="snapshot_embeddings_tsne.png",
+            which="all",
+            malicious_start=malicious_idx_start,
+            malicious_end=malicious_idx_end,
         )
     except Exception as ex:
         print(f"[Viz] t-SNE 可视化失败：{ex}")
