@@ -21,8 +21,8 @@ from process.embedders import get_embedder_by_name
 # ========================================================================
 # 全局配置
 # ========================================================================
-# EMBEDDER_NAME = "prographer"
-EMBEDDER_NAME = "roland"
+EMBEDDER_NAME = "prographer"
+# EMBEDDER_NAME = "roland"
 CLASSIFY_NAME = "prographer"
 # EMBEDDER_NAME = "unicorn"
 # CLASSIFY_NAME = "unicorn"
@@ -461,7 +461,7 @@ def run_evaluation(path_map: dict) -> None:
             benign_idx_start,
             benign_idx_end,
             annotate=True,
-            mode="topk",
+            mode="all",
             top_k=5,
             group="per-group",
             metric="cosine",
