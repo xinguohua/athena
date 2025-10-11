@@ -349,15 +349,18 @@ def plot_deviation_changes(
     # 偏离的定义："step" 基于相邻快照，"center" 相对良性中心
     deviation_mode: str = "step",
 ):
-    """可视化每个快照相对良性中心的偏离变化曲线。
+    """可视化每个快照的偏离变化曲线。
 
-    - 偏离定义：见 _compute_deviation（cosine 或 L2）
-    - 视觉元素：
-      * 绿色区域标出良性区间 [benign_start, benign_end]
-      * 若提供恶意范围，则淡红色区域标出 [malicious_start, malicious_end]
-      * 用均值±σ 阈值线辅助判断异常（计算于良性区间）
-      * 标注 Top-K 偏离点
-    """
+        - 偏离定义：
+            * deviation_mode="center" 时：相对“当前绘制范围（focus）”内的中心向量
+            * deviation_mode="step" 时：相邻快照变化量（默认）
+            * 距离度量：cosine 或 L2
+        - 视觉元素：
+            * 绿色区域标出良性区间 [benign_start, benign_end]
+            * 若提供恶意范围，则淡红色区域标出 [malicious_start, malicious_end]
+            * 用均值±σ 阈值线辅助判断异常（默认基于良性段，或根据 recompute_stats 改为 focus）
+            * 标注 Top-K 偏离点（或全部/不标注，受 annotate_mode 控制）
+        """
     if arr is None or getattr(arr, "size", 0) == 0:
         print("[Viz] 空的快照嵌入，跳过偏离曲线可视化。")
         return
@@ -373,24 +376,6 @@ def plot_deviation_changes(
     lo, hi = min(benign_start, benign_end), max(benign_start, benign_end)
     lo = max(0, min(lo, T - 1))
     hi = max(0, min(hi, T - 1))
-
-    # 计算偏离
-    if (deviation_mode or "step").lower() == "center":
-        dev = _compute_deviation(X, lo, hi, metric=(metric or "cosine").lower())
-    else:
-        dev = _compute_step_deviation(X, metric=(metric or "cosine").lower())
-
-    # 平滑（可选）
-    if smooth_k and smooth_k > 1:
-        k = int(smooth_k)
-        k = max(1, min(k, T))
-        if k > 1:
-            kernel = np.ones(k, dtype=np.float32) / float(k)
-            dev_sm = np.convolve(dev, kernel, mode="same").astype(np.float32)
-        else:
-            dev_sm = dev
-    else:
-        dev_sm = dev
 
     # 选择绘制的子区间（focus）。若显式提供 focus_* 则优先；否则根据 which 推断。
     if focus_start is not None and focus_end is not None:
@@ -413,6 +398,26 @@ def plot_deviation_changes(
         focus_mask = np.zeros(T, dtype=bool)
         if f_lo <= f_hi:
             focus_mask[f_lo:f_hi + 1] = True
+
+    # 计算偏离：center 基于 focus 范围的中心；step 基于相邻快照
+    if (deviation_mode or "step").lower() == "center":
+        # 若 focus 无效（f_lo>f_hi），退化为使用全局范围
+        _c_lo, _c_hi = (f_lo, f_hi) if f_lo <= f_hi else (0, T - 1)
+        dev = _compute_deviation(X, _c_lo, _c_hi, metric=(metric or "cosine").lower())
+    else:
+        dev = _compute_step_deviation(X, metric=(metric or "cosine").lower())
+
+    # 平滑（可选）
+    if smooth_k and smooth_k > 1:
+        k = int(smooth_k)
+        k = max(1, min(k, T))
+        if k > 1:
+            kernel = np.ones(k, dtype=np.float32) / float(k)
+            dev_sm = np.convolve(dev, kernel, mode="same").astype(np.float32)
+        else:
+            dev_sm = dev
+    else:
+        dev_sm = dev
 
     # 阈值参考：默认用良性区；若要求在子区间上重算，则改用子区间
     if recompute_stats:
