@@ -289,6 +289,252 @@ def plot_tsne_embeddings(
         print(f"[Viz] 保存 t-SNE 图片失败：{ex}")
     finally:
         plt.close()
+
+
+def plot_deviation_changes(
+    arr: np.ndarray,
+    benign_start: int,
+    benign_end: int,
+    metric: str = "cosine",           # "cosine" 或 "l2"
+    smooth_k: int = 1,                 # 移动平均窗口，>1 时启用平滑
+    save_path: str = "snapshot_deviation_curve.png",
+    malicious_start: Optional[int] = None,
+    malicious_end: Optional[int] = None,
+    annotate_top_k: int = 10,          # 标注偏离最大的前 K 个点
+    which: str = "all",               # "all" | "benign" | "malicious"
+    # 仅绘制某个子区间（例如只看恶意段）：提供 focus_start/focus_end 即可
+    focus_start: Optional[int] = None,
+    focus_end: Optional[int] = None,
+    # 是否在子区间上重算 μ/σ（默认 False：仍以良性段为基准）
+    recompute_stats: bool = False,
+):
+    """可视化每个快照相对良性中心的偏离变化曲线。
+
+    - 偏离定义：见 _compute_deviation（cosine 或 L2）
+    - 视觉元素：
+      * 绿色区域标出良性区间 [benign_start, benign_end]
+      * 若提供恶意范围，则淡红色区域标出 [malicious_start, malicious_end]
+      * 用均值±σ 阈值线辅助判断异常（计算于良性区间）
+      * 标注 Top-K 偏离点
+    """
+    if arr is None or getattr(arr, "size", 0) == 0:
+        print("[Viz] 空的快照嵌入，跳过偏离曲线可视化。")
+        return
+
+    try:
+        import matplotlib.pyplot as plt  # type: ignore
+    except Exception as ex:
+        print(f"[Viz] 未安装 matplotlib，无法绘图：{ex}")
+        return
+
+    X = np.asarray(arr, dtype=np.float32)
+    T = X.shape[0]
+    lo, hi = min(benign_start, benign_end), max(benign_start, benign_end)
+    lo = max(0, min(lo, T - 1))
+    hi = max(0, min(hi, T - 1))
+
+    dev = _compute_deviation(X, lo, hi, metric=(metric or "cosine").lower())  # shape (T,)
+
+    # 平滑（可选）
+    if smooth_k and smooth_k > 1:
+        k = int(smooth_k)
+        k = max(1, min(k, T))
+        if k > 1:
+            kernel = np.ones(k, dtype=np.float32) / float(k)
+            dev_sm = np.convolve(dev, kernel, mode="same").astype(np.float32)
+        else:
+            dev_sm = dev
+    else:
+        dev_sm = dev
+
+    # 选择绘制的子区间（focus）。若显式提供 focus_* 则优先；否则根据 which 推断。
+    if focus_start is not None and focus_end is not None:
+        f_lo, f_hi = min(int(focus_start), int(focus_end)), max(int(focus_start), int(focus_end))
+        f_lo = max(0, min(f_lo, T - 1))
+        f_hi = max(0, min(f_hi, T - 1))
+        focus_mask = np.zeros(T, dtype=bool)
+        if f_lo <= f_hi:
+            focus_mask[f_lo:f_hi + 1] = True
+    else:
+        which_l = (which or "all").lower()
+        if which_l == "benign":
+            f_lo, f_hi = lo, hi
+        elif which_l == "malicious" and (malicious_start is not None and malicious_end is not None):
+            f_lo, f_hi = min(int(malicious_start), int(malicious_end)), max(int(malicious_start), int(malicious_end))
+            f_lo = max(0, min(f_lo, T - 1))
+            f_hi = max(0, min(f_hi, T - 1))
+        else:
+            f_lo, f_hi = 0, T - 1
+        focus_mask = np.zeros(T, dtype=bool)
+        if f_lo <= f_hi:
+            focus_mask[f_lo:f_hi + 1] = True
+
+    # 阈值参考：默认用良性区；若要求在子区间上重算，则改用子区间
+    if recompute_stats:
+        ref_seg = dev[focus_mask]
+    else:
+        ref_seg = dev[lo: hi + 1] if lo <= hi else dev
+    mu = float(np.mean(ref_seg)) if ref_seg.size > 0 else float(np.mean(dev))
+    sd = float(np.std(ref_seg)) if ref_seg.size > 0 else float(np.std(dev))
+    thr1 = mu + sd
+    thr2 = mu + 2 * sd
+
+    xs = np.arange(T)
+    xs_plot = xs[focus_mask]
+    dev_plot = dev_sm[focus_mask]
+    plt.figure(figsize=(10, 4.5))
+    plt.plot(xs_plot, dev_plot, color="#1f77b4", lw=2.0, label=f"Deviation ({metric})")
+
+    # 良性区高亮（与 focus 取交集提高可读性）
+    if lo <= hi:
+        b_lo = max(lo, f_lo)
+        b_hi = min(hi, f_hi)
+        if b_lo <= b_hi:
+            plt.axvspan(b_lo, b_hi, color="#2ca02c", alpha=0.10, label=f"Benign [{lo}-{hi}]")
+
+    # 恶意区高亮（可选）
+    if malicious_start is not None and malicious_end is not None:
+        m_lo, m_hi = min(malicious_start, malicious_end), max(malicious_start, malicious_end)
+        m_lo = max(0, min(m_lo, T - 1))
+        m_hi = max(0, min(m_hi, T - 1))
+        if m_lo <= m_hi:
+            mm_lo = max(m_lo, f_lo)
+            mm_hi = min(m_hi, f_hi)
+            if mm_lo <= mm_hi:
+                plt.axvspan(mm_lo, mm_hi, color="#d62728", alpha=0.08, label=f"Malicious [{m_lo}-{m_hi}]")
+
+    # 阈值线
+    plt.axhline(thr1, color="#ff7f0e", lw=1.4, ls="--", label="μ + 1σ")
+    plt.axhline(thr2, color="#d62728", lw=1.4, ls=":", label="μ + 2σ")
+
+    # 高亮超过 2σ 的点
+    over_mask = (dev > thr2) & focus_mask
+    if over_mask.any():
+        plt.scatter(xs[over_mask], dev_sm[over_mask], c="#d62728", s=28, zorder=3, label="> μ+2σ")
+
+    # 标注 Top-K 偏离点
+    k = int(min(max(0, annotate_top_k), int(focus_mask.sum())))
+    if k > 0:
+        cand = np.where(focus_mask)[0]
+        order = cand[np.argsort(-dev[cand])[:k]]
+        for idx in order:
+            yi = float(dev_sm[int(idx)])
+            plt.annotate(
+                f"{int(idx)}",
+                (int(idx), yi),
+                xytext=(0, 8),
+                textcoords="offset points",
+                ha="center",
+                fontsize=10,
+                color="#333333",
+            )
+
+    title_suffix = ""
+    if focus_start is not None and focus_end is not None:
+        title_suffix = f" [focus {f_lo}-{f_hi}]"
+    else:
+        wl = (which or "all").lower()
+        if wl in ("benign", "malicious"):
+            title_suffix = f" [{wl}]"
+    plt.title(f"Snapshot Deviation Curve{title_suffix}")
+    plt.xlabel("Snapshot Index")
+    plt.ylabel(f"Deviation ({metric})")
+    plt.legend(loc="best")
+    plt.tight_layout()
+    try:
+        plt.savefig(save_path, dpi=150)
+        print(f"[Viz] 偏离曲线图已保存: {save_path}")
+        # 简要统计
+        over1 = int((dev > thr1).sum())
+        over2 = int((dev > thr2).sum())
+        print(f"[Viz] 超过 μ+1σ 的快照: {over1} / {T}; 超过 μ+2σ 的快照: {over2} / {T}")
+    except Exception as ex:
+        print(f"[Viz] 保存偏离曲线失败：{ex}")
+    finally:
+        plt.close()
+
+
+def plot_deviation(
+    arr: np.ndarray,
+    benign_start: int,
+    benign_end: int,
+    *,
+    mode: str = "all",                 # all | benign | malicious | range
+    malicious_start: Optional[int] = None,
+    malicious_end: Optional[int] = None,
+    range_start: Optional[int] = None,
+    range_end: Optional[int] = None,
+    metric: str = "cosine",
+    smooth_k: int = 5,
+    save_path: str = "snapshot_deviation_curve.png",
+    annotate_top_k: int = 10,
+    recompute_stats: bool = False,
+):
+    """简化版偏离曲线接口：
+    - mode=all：全段
+    - mode=benign：只看良性区间
+    - mode=malicious：只看恶意区间（需提供 malicious_start/end）
+    - mode=range：只看任意区间（需提供 range_start/end）
+    其他参数直接透传给底层绘制函数。
+    """
+    mode_l = (mode or "all").lower()
+    if mode_l == "benign":
+        return plot_deviation_changes(
+            arr,
+            benign_start,
+            benign_end,
+            metric=metric,
+            smooth_k=smooth_k,
+            save_path=save_path,
+            malicious_start=malicious_start,
+            malicious_end=malicious_end,
+            annotate_top_k=annotate_top_k,
+            which="benign",
+            recompute_stats=recompute_stats,
+        )
+    elif mode_l == "malicious":
+        return plot_deviation_changes(
+            arr,
+            benign_start,
+            benign_end,
+            metric=metric,
+            smooth_k=smooth_k,
+            save_path=save_path,
+            malicious_start=malicious_start,
+            malicious_end=malicious_end,
+            annotate_top_k=annotate_top_k,
+            which="malicious",
+            recompute_stats=recompute_stats,
+        )
+    elif mode_l == "range":
+        return plot_deviation_changes(
+            arr,
+            benign_start,
+            benign_end,
+            metric=metric,
+            smooth_k=smooth_k,
+            save_path=save_path,
+            malicious_start=malicious_start,
+            malicious_end=malicious_end,
+            annotate_top_k=annotate_top_k,
+            focus_start=range_start,
+            focus_end=range_end,
+            recompute_stats=recompute_stats,
+        )
+    else:  # all
+        return plot_deviation_changes(
+            arr,
+            benign_start,
+            benign_end,
+            metric=metric,
+            smooth_k=smooth_k,
+            save_path=save_path,
+            malicious_start=malicious_start,
+            malicious_end=malicious_end,
+            annotate_top_k=annotate_top_k,
+            which="all",
+            recompute_stats=recompute_stats,
+        )
 def save_snapshot_nodes(all_snapshots, output_file: Path = Path("test_snapshot.txt")) -> Optional[Path]:
     """保存快照节点信息到文件"""
     print(f"[INFO] 保存快照节点信息到: {output_file}")
@@ -593,6 +839,25 @@ def run_evaluation(path_map: dict) -> None:
         )
     except Exception as ex:
         print(f"[Viz] t-SNE 可视化失败：{ex}")
+
+    # 偏离变化曲线可视化
+    try:
+        # 简化接口：默认画“恶意区间”的变化；改为 mode="benign"/"all"/"range" 可自由切换
+        plot_deviation(
+            snapshot_embeddings,
+            benign_idx_start,
+            benign_idx_end,
+            mode="malicious",
+            malicious_start=malicious_idx_start,
+            malicious_end=malicious_idx_end,
+            metric="cosine",
+            smooth_k=5,
+            save_path="snapshot_deviation_curve.png",
+            annotate_top_k=10,
+            recompute_stats=False,
+        )
+    except Exception as ex:
+        print(f"[Viz] 偏离曲线可视化失败：{ex}")
 
     pred_labels, diff_vectors = predict_snapshots(
         snapshot_embeddings[malicious_idx_start: malicious_idx_end + 1]
