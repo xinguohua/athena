@@ -5,6 +5,7 @@ from .unicorn_embedder import UnicornGraphEmbedder
 from .roland_embedder1 import ROLANDGraphEmbedder
 from .roland_embedder import ROLANDSeparationEmbedder
 from .gcc_embedder import GCCEmbedder
+from .gcc_embedder_dev import GCCEmbedderDev
 
 def get_embedder_by_name(name: str):
     name = name.lower()
@@ -22,5 +23,7 @@ def get_embedder_by_name(name: str):
         return ROLANDSeparationEmbedder
     elif name in ("gcc", "gcc-pretrain"):
         return GCCEmbedder
+    elif name in ("gcc-dev", "gcc_dev", "gccdev"):
+        return GCCEmbedderDev
     else:
         raise ValueError(f"未知编码器类型: {name}")
