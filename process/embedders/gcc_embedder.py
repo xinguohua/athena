@@ -230,6 +230,10 @@ class GCCEmbedder(GraphEmbedderBase):
             if not emb_dict:
                 result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
                 continue
+            try:
+                freqs = g.vs['frequency'] if 'frequency' in g.vs.attributes() else None
+            except Exception:
+                freqs = None
             degrees = g.degree()
             weighted = np.zeros(self.enc_out_dim, dtype=np.float32)
             total_w = 0.0
@@ -238,7 +242,15 @@ class GCCEmbedder(GraphEmbedderBase):
                 vec = emb_dict.get(nid)
                 if vec is None:
                     continue
-                w = float(degrees[local_idx])
+                if freqs is not None:
+                    try:
+                        w = float(freqs[local_idx])
+                    except Exception:
+                        w = 0.0
+                    if not np.isfinite(w) or w < 0:
+                        w = 0.0
+                else:
+                    w = float(degrees[local_idx])
                 if w <= 0:
                     continue
                 weighted += (w * vec)
