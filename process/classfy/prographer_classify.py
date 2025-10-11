@@ -185,7 +185,7 @@ class PrographerClassify(BaseClassify):
         return history
 
     # float = 0.016
-    def predict(self, embeddings: np.ndarray, threshold: float = 0.007) -> Tuple[np.ndarray, Dict]:
+    def predict(self, embeddings: np.ndarray, threshold: float = 0.0022) -> Tuple[np.ndarray, Dict]:
         """
         用训练好的模型预测快照是否异常
         """
