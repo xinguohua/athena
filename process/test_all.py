@@ -32,6 +32,78 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # ========================================================================
 # 工具函数
 # ========================================================================
+import numpy as np
+import matplotlib.pyplot as plt
+
+def cosine(a, b, eps=1e-12):
+    na = np.linalg.norm(a) + eps
+    nb = np.linalg.norm(b) + eps
+    return np.dot(a, b) / (na * nb)
+
+def deviation_from_center(vec, center):
+    return 1.0 - cosine(vec, center)
+
+def inject_snapshots_deviation(
+    embeddings: np.ndarray,
+    target_idxs: list[int],
+    mode: str = "away",
+    alpha: float = 3.0,
+    renormalize: bool = True,
+    rng_seed: int = 0
+):
+    """
+    同时对多个 snapshot 嵌入施加偏离（方法1: 图级拉开）
+
+    embeddings: (T, D) 原始快照嵌入矩阵
+    target_idxs: 要偏离的快照索引列表（如 [71, 73, 80]）
+    mode:
+      - "away": 沿远离中心的方向拉开
+      - "random": 使用随机方向
+    alpha: 偏移强度
+    renormalize: 是否重新 L2 归一化
+    rng_seed: 随机数种子，保证可复现
+    """
+    np.random.seed(rng_seed)
+    T, D = embeddings.shape
+    emb = embeddings.copy()
+    center = emb.mean(axis=0)
+
+    info_list = []
+
+    for idx in target_idxs:
+        if not (0 <= idx < T):
+            print(f"⚠️ 跳过非法索引 {idx}")
+            continue
+
+        before_dev = deviation_from_center(emb[idx], center)
+
+        if mode == "away":
+            direction = emb[idx] - center
+            if np.linalg.norm(direction) < 1e-12:
+                direction = np.random.randn(D)
+        elif mode == "random":
+            direction = np.random.randn(D)
+        else:
+            raise ValueError("mode must be 'away' or 'random'")
+
+        direction = direction / (np.linalg.norm(direction) + 1e-12)
+        emb[idx] = emb[idx] + alpha * direction
+
+        if renormalize:
+            emb[idx] = emb[idx] / (np.linalg.norm(emb[idx]) + 1e-12)
+
+        after_dev = deviation_from_center(emb[idx], center)
+
+        info_list.append({
+            "target_idx": idx,
+            "before_dev": float(before_dev),
+            "after_dev": float(after_dev),
+            "alpha": alpha,
+            "mode": mode
+        })
+
+    return emb, info_list
+
 def _compute_deviation(arr: np.ndarray, benign_start: int, benign_end: int, metric: str = "cosine") -> np.ndarray:
     """计算每个快照相对良性中心的偏离（cosine 或 L2）。返回 shape (T,)。
 
@@ -893,6 +965,7 @@ def run_evaluation(path_map: dict) -> None:
     embedder_cls = get_embedder_by_name(EMBEDDER_NAME)
     embedder = embedder_cls.load(snapshot_sequence=all_snapshots)
     snapshot_embeddings = embedder.get_snapshot_embeddings()
+    # snapshot_embeddings, info = inject_snapshots_deviation(snapshot_embeddings, target_idxs=[43, 70, 71, 72, 73], mode="away", alpha=3.0)
 
     # 在测试阶段进行 t-SNE 可视化（Top-K 标注，默认每组各取 5 个，cosine 偏离）
     try:
@@ -930,7 +1003,7 @@ def run_evaluation(path_map: dict) -> None:
             annotate_top_k=10,
             annotate_mode="all",  # 开关："none" | "topk" | "all"
             recompute_stats=False,
-            deviation_mode="step",
+            deviation_mode="center",# “step | center ”
         )
     except Exception as ex:
         print(f"[Viz] 偏离曲线可视化失败：{ex}")
