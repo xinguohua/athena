@@ -141,7 +141,7 @@ def plot_tsne_embeddings(
 
     # 若提供了 selected_mal_ids_in_slice，则构建全局索引 -> 片段内索引 的映射，用于标注显示 M<slice_id>
     slice_id_map: Dict[int, int] = {}
-    if which_l == "malicious" and selected_mal_ids_in_slice is not None and malicious_start is not None:
+    if selected_mal_ids_in_slice is not None and malicious_start is not None and which_l in ("malicious", "all"):
         for sid in selected_mal_ids_in_slice:
             try:
                 gi = int(malicious_start + int(sid))
@@ -203,9 +203,11 @@ def plot_tsne_embeddings(
                 for r, idx in enumerate(m_all):
                     idx = int(idx)
                     indices_to_annotate.append(idx)
-                    # 优先使用提供的片段内索引映射，否则退化为顺序编号
+                    # 优先使用提供的片段内索引映射；否则若提供恶意起点，则用片段内索引；再否则退化为顺序编号
                     if idx in slice_id_map:
                         labels_for_indices[idx] = f"M{slice_id_map[idx]}"
+                    elif malicious_start is not None:
+                        labels_for_indices[idx] = f"M{idx - int(malicious_start)}"
                     else:
                         labels_for_indices[idx] = f"M{r}"
             else:
@@ -219,6 +221,8 @@ def plot_tsne_embeddings(
                         indices_to_annotate.append(idx)
                         if idx in slice_id_map:
                             labels_for_indices[idx] = f"M{slice_id_map[idx]}"
+                        elif malicious_start is not None:
+                            labels_for_indices[idx] = f"M{idx - int(malicious_start)}"
                         else:
                             labels_for_indices[idx] = f"M{r}"
         else:  # which_l == "all"
@@ -230,8 +234,10 @@ def plot_tsne_embeddings(
                     labels_for_indices[int(idx)] = f"B{r}"
                 for r, idx in enumerate(m_all):
                     indices_to_annotate.append(int(idx))
-                    if idx in slice_id_map:
+                    if int(idx) in slice_id_map:
                         labels_for_indices[int(idx)] = f"M{slice_id_map[int(idx)]}"
+                    elif malicious_start is not None:
+                        labels_for_indices[int(idx)] = f"M{int(idx) - int(malicious_start)}"
                     else:
                         labels_for_indices[int(idx)] = f"M{r}"
             else:
@@ -250,8 +256,10 @@ def plot_tsne_embeddings(
                         order_m = m_all[np.argsort(-dev[m_all])[:k_m]]
                         for r, idx in enumerate(order_m):
                             indices_to_annotate.append(int(idx))
-                            if idx in slice_id_map:
+                            if int(idx) in slice_id_map:
                                 labels_for_indices[int(idx)] = f"M{slice_id_map[int(idx)]}"
+                            elif malicious_start is not None:
+                                labels_for_indices[int(idx)] = f"M{int(idx) - int(malicious_start)}"
                             else:
                                 labels_for_indices[int(idx)] = f"M{r}"
                 else:
@@ -268,6 +276,8 @@ def plot_tsne_embeddings(
                         elif mask_mal[idx]:
                             if idx in slice_id_map:
                                 labels_for_indices[idx] = f"M{slice_id_map[idx]}"
+                            elif malicious_start is not None:
+                                labels_for_indices[idx] = f"M{idx - int(malicious_start)}"
                             else:
                                 labels_for_indices[idx] = f"M{m_count}"
                             m_count += 1
@@ -412,15 +422,25 @@ def plot_deviation_changes(
     if over_mask.any():
         plt.scatter(xs[over_mask], dev_sm[over_mask], c="#d62728", s=28, zorder=3, label="> μ+2σ")
 
-    # 标注 Top-K 偏离点
+    # 标注 Top-K 偏离点（优先展示片段内索引：恶意 M<idx - malicious_start> / 良性 B<idx - benign_start>）
     k = int(min(max(0, annotate_top_k), int(focus_mask.sum())))
     if k > 0:
         cand = np.where(focus_mask)[0]
         order = cand[np.argsort(-dev[cand])[:k]]
         for idx in order:
             yi = float(dev_sm[int(idx)])
+            # 计算片段内显示标签
+            lbl = None
+            if malicious_start is not None and malicious_end is not None:
+                _mlo, _mhi = min(int(malicious_start), int(malicious_end)), max(int(malicious_start), int(malicious_end))
+                if _mlo <= int(idx) <= _mhi:
+                    lbl = f"M{int(idx) - int(malicious_start)}"
+            if lbl is None and (lo <= int(idx) <= hi):
+                lbl = f"B{int(idx) - int(lo)}"
+            if lbl is None:
+                lbl = f"{int(idx)}"
             plt.annotate(
-                f"{int(idx)}",
+                lbl,
                 (int(idx), yi),
                 xytext=(0, 8),
                 textcoords="offset points",
