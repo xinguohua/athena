@@ -213,7 +213,7 @@ def main():
             handler.benign_idx_end,
             annotate=True,
             mode="topk",       # 只标注 Top-K
-            top_k=10,          # 每组取 K 个
+            top_k=5,          # 每组取 K 个
             group="per-group", # 每组独立 Top-K
             metric="cosine",  # 用 cosine 偏离
             save_path="snapshot_embeddings_tsne.png",
