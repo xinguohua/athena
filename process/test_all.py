@@ -14,7 +14,6 @@ from process.classfy import get_classfy
 
 # --- 项目模块 ---
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from process.datahandlers import get_handler
 from process.embedders import get_embedder_by_name
 
 
@@ -140,6 +139,17 @@ def plot_tsne_embeddings(
                     mal_sel_mask[gi] = True
             mask_mal_plot = mask_mal & mal_sel_mask
 
+    # 若提供了 selected_mal_ids_in_slice，则构建全局索引 -> 片段内索引 的映射，用于标注显示 M<slice_id>
+    slice_id_map: Dict[int, int] = {}
+    if which_l == "malicious" and selected_mal_ids_in_slice is not None and malicious_start is not None:
+        for sid in selected_mal_ids_in_slice:
+            try:
+                gi = int(malicious_start + int(sid))
+            except Exception:
+                continue
+            if 0 <= gi < T:
+                slice_id_map[gi] = int(sid)
+
     plt.figure(figsize=(8, 6))
     drew_any = False
     if which_l in ("all", "benign") and mask_benign.any():
@@ -193,7 +203,11 @@ def plot_tsne_embeddings(
                 for r, idx in enumerate(m_all):
                     idx = int(idx)
                     indices_to_annotate.append(idx)
-                    labels_for_indices[idx] = f"M{r}"
+                    # 优先使用提供的片段内索引映射，否则退化为顺序编号
+                    if idx in slice_id_map:
+                        labels_for_indices[idx] = f"M{slice_id_map[idx]}"
+                    else:
+                        labels_for_indices[idx] = f"M{r}"
             else:
                 dev = _compute_deviation(X, lo, hi, metric=metric_l)
                 m_all = np.where(target_mask)[0]
@@ -203,7 +217,10 @@ def plot_tsne_embeddings(
                     for r, idx in enumerate(order_m):
                         idx = int(idx)
                         indices_to_annotate.append(idx)
-                        labels_for_indices[idx] = f"M{r}"
+                        if idx in slice_id_map:
+                            labels_for_indices[idx] = f"M{slice_id_map[idx]}"
+                        else:
+                            labels_for_indices[idx] = f"M{r}"
         else:  # which_l == "all"
             if mode_l == "all":
                 b_all = list(np.where(mask_benign)[0])
@@ -213,7 +230,10 @@ def plot_tsne_embeddings(
                     labels_for_indices[int(idx)] = f"B{r}"
                 for r, idx in enumerate(m_all):
                     indices_to_annotate.append(int(idx))
-                    labels_for_indices[int(idx)] = f"M{r}"
+                    if idx in slice_id_map:
+                        labels_for_indices[int(idx)] = f"M{slice_id_map[int(idx)]}"
+                    else:
+                        labels_for_indices[int(idx)] = f"M{r}"
             else:
                 dev = _compute_deviation(X, lo, hi, metric=metric_l)
                 if group_l == "per-group":
@@ -230,7 +250,10 @@ def plot_tsne_embeddings(
                         order_m = m_all[np.argsort(-dev[m_all])[:k_m]]
                         for r, idx in enumerate(order_m):
                             indices_to_annotate.append(int(idx))
-                            labels_for_indices[int(idx)] = f"M{r}"
+                            if idx in slice_id_map:
+                                labels_for_indices[int(idx)] = f"M{slice_id_map[int(idx)]}"
+                            else:
+                                labels_for_indices[int(idx)] = f"M{r}"
                 else:
                     k = int(min(max(1, top_k), T))
                     order = np.argsort(-dev)[:k]
@@ -243,7 +266,10 @@ def plot_tsne_embeddings(
                             labels_for_indices[idx] = f"B{b_count}"
                             b_count += 1
                         elif mask_mal[idx]:
-                            labels_for_indices[idx] = f"M{m_count}"
+                            if idx in slice_id_map:
+                                labels_for_indices[idx] = f"M{slice_id_map[idx]}"
+                            else:
+                                labels_for_indices[idx] = f"M{m_count}"
                             m_count += 1
 
         # 直接在点上标注（不做重叠避让）
@@ -563,7 +589,7 @@ def run_evaluation(path_map: dict) -> None:
             which="malicious",
             malicious_start=malicious_idx_start,
             malicious_end=malicious_idx_end,
-            selected_mal_ids_in_slice=[0,1]
+            selected_mal_ids_in_slice=mal_idx_in_slice.tolist()
         )
     except Exception as ex:
         print(f"[Viz] t-SNE 可视化失败：{ex}")
