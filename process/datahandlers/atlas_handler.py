@@ -93,8 +93,10 @@ class ATLASHandler(BaseProcessor):
         node_timestamps = {}
         cache_graph = ig.Graph(directed=True)
         first_flag = True
-        snapshot_size = 300
-        forgetting_rate = 0.3
+        # snapshot_size = 300
+        # forgetting_rate = 0.3
+        snapshot_size = 100
+        forgetting_rate = 1
         # --- 排序 ---
         sorted_df = df.sort_values(by='timestamp') if 'timestamp' in df.columns else df
 
