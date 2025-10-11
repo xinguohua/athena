@@ -96,7 +96,13 @@ def plot_tsne_embeddings(
     hi = max(0, min(hi, T - 1))
 
     perplexity = int(min(30, max(5, T // 3)))
-    tsne = TSNE(n_components=2, perplexity=perplexity, n_iter=1000, init="pca", random_state=42)
+    tsne = TSNE(
+        n_components=2,
+        perplexity=perplexity,
+        max_iter=1000,
+        init="pca",
+        random_state=42,
+    )
     coords = tsne.fit_transform(X)
 
     xs, ys = coords[:, 0], coords[:, 1]
