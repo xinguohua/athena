@@ -33,6 +33,142 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # ========================================================================
 # 工具函数
 # ========================================================================
+def _compute_deviation(arr: np.ndarray, benign_start: int, benign_end: int, metric: str = "cosine") -> np.ndarray:
+    """计算每个快照相对良性中心的偏离（cosine 或 L2）。返回 shape (T,)。
+
+    注意：仅用于可视化标注 Top-K 偏离用。
+    """
+    if arr is None or getattr(arr, "size", 0) == 0:
+        return np.zeros(0, dtype=np.float32)
+    X = np.asarray(arr, dtype=np.float32)
+    T = X.shape[0]
+    lo, hi = min(benign_start, benign_end), max(benign_start, benign_end)
+    lo = max(0, min(lo, T - 1))
+    hi = max(0, min(hi, T - 1))
+    benign = X[lo:hi + 1] if lo <= hi else X
+    center = benign.mean(axis=0)
+    metric_l = (metric or "cosine").lower()
+    if metric_l == "l2":
+        dev = np.linalg.norm(X - center.reshape(1, -1), axis=1)
+    else:
+        eps = 1e-12
+        center = center / (np.linalg.norm(center) + eps)
+        norms = np.linalg.norm(X, axis=1, keepdims=True) + eps
+        unit_x = X / norms
+        cos = (unit_x @ center.reshape(-1, 1)).reshape(-1)
+        dev = 1.0 - cos
+    return dev.astype(np.float32)
+
+
+def plot_tsne_embeddings(
+    arr: np.ndarray,
+    benign_start: int,
+    benign_end: int,
+    annotate: bool = True,
+    mode: str = "topk",           # "topk" 或 "all"
+    top_k: int = 10,
+    group: str = "per-group",      # "per-group" 或 "global"
+    metric: str = "cosine",        # "cosine" 或 "l2"
+    save_path: str = "snapshot_embeddings_tsne.png",
+):
+    """仅使用 t-SNE 可视化快照嵌入二维分布，标记良性区间。"""
+    if arr is None or getattr(arr, "size", 0) == 0:
+        print("[Viz] 空的快照嵌入，跳过 t-SNE 可视化。")
+        return
+    try:
+        from sklearn.manifold import TSNE  # type: ignore
+    except Exception as ex:
+        print(f"[Viz] 未安装 scikit-learn，无法运行 t-SNE：{ex}")
+        return
+    try:
+        import matplotlib.pyplot as plt  # type: ignore
+    except Exception as ex:
+        print(f"[Viz] 未安装 matplotlib，无法绘图：{ex}")
+        return
+
+    X = np.asarray(arr, dtype=np.float32)
+    T = X.shape[0]
+    lo, hi = min(benign_start, benign_end), max(benign_start, benign_end)
+    lo = max(0, min(lo, T - 1))
+    hi = max(0, min(hi, T - 1))
+
+    perplexity = int(min(30, max(5, T // 3)))
+    tsne = TSNE(n_components=2, perplexity=perplexity, n_iter=1000, init="pca", random_state=42)
+    coords = tsne.fit_transform(X)
+
+    xs, ys = coords[:, 0], coords[:, 1]
+    mask_benign = np.zeros(T, dtype=bool)
+    if lo <= hi:
+        mask_benign[lo:hi + 1] = True
+
+    plt.figure(figsize=(8, 6))
+    plt.scatter(xs[mask_benign], ys[mask_benign], c="#2ca02c", label=f"Benign [{lo}-{hi}]", s=40, alpha=0.85, edgecolors="white")
+    if (~mask_benign).any():
+        plt.scatter(xs[~mask_benign], ys[~mask_benign], c="#d62728", label="Others", s=40, alpha=0.85, edgecolors="white")
+    if annotate:
+        indices_to_annotate: list[int] = []
+        labels_for_indices: dict[int, str] = {}
+        mode_l = (mode or "topk").lower()
+        group_l = (group or "per-group").lower()
+        metric_l = (metric or "cosine").lower()
+
+        if mode_l == "all":
+            b_all = list(np.where(mask_benign)[0])
+            m_all = list(np.where(~mask_benign)[0])
+            for r, idx in enumerate(b_all):
+                indices_to_annotate.append(int(idx))
+                labels_for_indices[int(idx)] = f"B{r}"
+            for r, idx in enumerate(m_all):
+                indices_to_annotate.append(int(idx))
+                labels_for_indices[int(idx)] = f"M{r}"
+        else:
+            dev = _compute_deviation(X, lo, hi, metric=metric_l)
+            if group_l == "per-group":
+                b_all = np.where(mask_benign)[0]
+                m_all = np.where(~mask_benign)[0]
+                k_b = int(min(top_k, len(b_all)))
+                k_m = int(min(top_k, len(m_all)))
+                if k_b > 0:
+                    order_b = b_all[np.argsort(-dev[b_all])[:k_b]]
+                    for r, idx in enumerate(order_b):
+                        indices_to_annotate.append(int(idx))
+                        labels_for_indices[int(idx)] = f"B{r}"
+                if k_m > 0:
+                    order_m = m_all[np.argsort(-dev[m_all])[:k_m]]
+                    for r, idx in enumerate(order_m):
+                        indices_to_annotate.append(int(idx))
+                        labels_for_indices[int(idx)] = f"M{r}"
+            else:
+                k = int(min(max(1, top_k), T))
+                order = np.argsort(-dev)[:k]
+                b_count = 0
+                m_count = 0
+                for idx in order:
+                    idx = int(idx)
+                    indices_to_annotate.append(idx)
+                    if mask_benign[idx]:
+                        labels_for_indices[idx] = f"B{b_count}"
+                        b_count += 1
+                    else:
+                        labels_for_indices[idx] = f"M{m_count}"
+                        m_count += 1
+
+        for idx in indices_to_annotate:
+            lbl = labels_for_indices.get(idx, str(idx))
+            color = "#2ca02c" if mask_benign[idx] else "#d62728"
+            plt.annotate(lbl, (xs[idx], ys[idx]), fontsize=14, fontweight="bold", color=color, alpha=0.95)
+    plt.title("Snapshot Embeddings (t-SNE 2D)")
+    plt.xlabel("Dim 1")
+    plt.ylabel("Dim 2")
+    plt.legend(loc="best")
+    plt.tight_layout()
+    try:
+        plt.savefig(save_path, dpi=150)
+        print(f"[Viz] t-SNE 图已保存: {save_path}")
+    except Exception as ex:
+        print(f"[Viz] 保存 t-SNE 图片失败：{ex}")
+    finally:
+        plt.close()
 def save_snapshot_nodes(all_snapshots, output_file: Path = Path("test_snapshot.txt")) -> Optional[Path]:
     """保存快照节点信息到文件"""
     print(f"[INFO] 保存快照节点信息到: {output_file}")
@@ -118,7 +254,7 @@ def print_debug_info(all_snapshots, eval_true, eval_pred, eval_start_idx):
             tn_indices.append(snapshot_idx)
 
     # 打印统计概览
-    print(f"\n📊 快照分类统计:")
+    print("\n📊 快照分类统计:")
     print(f"  ✅ 真阳性 (TP): {len(tp_indices)} 个快照")
     print(f"  ❌ 假阳性 (FP): {len(fp_indices)} 个快照")
     print(f"  ⚠️  假阴性 (FN): {len(fn_indices)} 个快照")
@@ -192,12 +328,12 @@ def print_debug_info(all_snapshots, eval_true, eval_pred, eval_start_idx):
             print(f"  📊 节点类型分布: {dict(sorted(node_types_count.items()))}")
 
             if suspicious_patterns:
-                print(f"  ⚡ 可能的误报原因:")
+                print("  ⚡ 可能的误报原因:")
                 for pattern in suspicious_patterns[:5]:  # 最多显示5个
                     print(f"      • {pattern}")
 
             # 显示部分节点名称用于分析
-            print(f"  📝 部分节点 (前10个):")
+            print("  📝 部分节点 (前10个):")
             sample_nodes = ', '.join(all_nodes[:10])
             if len(all_nodes) > 10:
                 sample_nodes += f" ... (+{len(all_nodes)-10}个更多)"
@@ -296,7 +432,7 @@ def run_evaluation(path_map: dict) -> None:
     malicious_idx_start = snapshot_data['malicious_idx_start']
     malicious_idx_end = snapshot_data['malicious_idx_end']
 
-    print(f"✅ 快照数据加载成功:")
+    print("✅ 快照数据加载成功:")
     print(f"  - 总快照数: {len(all_snapshots)}")
     print(f"  - 良性快照范围: {benign_idx_start} 到 {benign_idx_end}")
     print(f"  - 恶意快照范围: {malicious_idx_start} 到 {malicious_idx_end}")
@@ -317,6 +453,22 @@ def run_evaluation(path_map: dict) -> None:
     embedder_cls = get_embedder_by_name(EMBEDDER_NAME)
     embedder = embedder_cls.load(snapshot_sequence=all_snapshots)
     snapshot_embeddings = embedder.get_snapshot_embeddings()
+
+    # 在测试阶段进行 t-SNE 可视化（Top-K 标注，默认每组各取 5 个，cosine 偏离）
+    try:
+        plot_tsne_embeddings(
+            snapshot_embeddings,
+            benign_idx_start,
+            benign_idx_end,
+            annotate=True,
+            mode="topk",
+            top_k=5,
+            group="per-group",
+            metric="cosine",
+            save_path="snapshot_embeddings_tsne.png",
+        )
+    except Exception as ex:
+        print(f"[Viz] t-SNE 可视化失败：{ex}")
 
     pred_labels, diff_vectors = predict_snapshots(
         snapshot_embeddings[malicious_idx_start: malicious_idx_end + 1]
