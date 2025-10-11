@@ -230,7 +230,6 @@ class GCCEmbedder(GraphEmbedderBase):
             if not emb_dict:
                 result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
                 continue
-            # 使用节点出现频率作为权重，若不可用则回退到度
             try:
                 freqs = g.vs['frequency'] if 'frequency' in g.vs.attributes() else None
             except Exception:
@@ -244,7 +243,6 @@ class GCCEmbedder(GraphEmbedderBase):
                 if vec is None:
                     continue
                 if freqs is not None:
-                    # 频率优先，非法值回退为 0
                     try:
                         w = float(freqs[local_idx])
                     except Exception:
