@@ -534,7 +534,7 @@ def run_evaluation(path_map: dict) -> None:
             group="per-group",
             metric="cosine",
             save_path="snapshot_embeddings_tsne.png",
-            which="all",
+            which="malicious",
             malicious_start=malicious_idx_start,
             malicious_end=malicious_idx_end,
         )
