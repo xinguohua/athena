@@ -73,7 +73,6 @@ def plot_tsne_embeddings(
     which: str = "all",             # "all" | "benign" | "malicious"
     malicious_start: Optional[int] = None,
     malicious_end: Optional[int] = None,
-    avoid_overlap: bool = True,
 ):
     """仅使用 t-SNE 可视化快照嵌入二维分布，标记良性区间。"""
     if arr is None or getattr(arr, "size", 0) == 0:
@@ -222,54 +221,11 @@ def plot_tsne_embeddings(
                             labels_for_indices[idx] = f"M{m_count}"
                             m_count += 1
 
-        # 绘制标签，并尽量避免重叠
-        if avoid_overlap:
-            texts = []
-            idx_list = list(indices_to_annotate)
-            for idx in idx_list:
-                lbl = labels_for_indices.get(idx, str(idx))
-                color = "#2ca02c" if mask_benign[idx] else "#d62728"
-                t = plt.text(xs[idx], ys[idx], lbl, fontsize=14, fontweight="bold", color=color, alpha=0.95)
-                texts.append(t)
-            try:
-                from adjustText import adjust_text  # type: ignore
-                adjust_text(
-                    texts,
-                    expand_points=(1.2, 1.4),
-                    expand_text=(1.1, 1.2),
-                    force_points=(0.5, 0.7),
-                    force_text=(0.8, 1.0),
-                    only_move={"points": "y", "text": "xy"},
-                    arrowprops=dict(arrowstyle="-", color="#999999", lw=0.5),
-                )
-            except Exception:
-                # 退化方案：按模式偏移文本，尽量减少重叠
-                span_x = float(np.max(xs) - np.min(xs)) if T > 1 else 1.0
-                span_y = float(np.max(ys) - np.min(ys)) if T > 1 else 1.0
-                base_dx = 0.02 * span_x
-                base_dy = 0.02 * span_y
-                offsets = [(base_dx, base_dy), (-base_dx, base_dy), (base_dx, -base_dy), (-base_dx, -base_dy),
-                           (1.5*base_dx, 0.0), (0.0, 1.5*base_dy), (-1.5*base_dx, 0.0), (0.0, -1.5*base_dy)]
-                for j, idx in enumerate(idx_list):
-                    lbl = labels_for_indices.get(idx, str(idx))
-                    color = "#2ca02c" if mask_benign[idx] else "#d62728"
-                    dx, dy = offsets[j % len(offsets)]
-                    plt.annotate(
-                        lbl,
-                        (xs[idx], ys[idx]),
-                        xytext=(dx, dy),
-                        textcoords="offset points",
-                        fontsize=14,
-                        fontweight="bold",
-                        color=color,
-                        alpha=0.95,
-                        arrowprops=dict(arrowstyle="-", color="#999999", lw=0.5),
-                    )
-        else:
-            for idx in indices_to_annotate:
-                lbl = labels_for_indices.get(idx, str(idx))
-                color = "#2ca02c" if mask_benign[idx] else "#d62728"
-                plt.annotate(lbl, (xs[idx], ys[idx]), fontsize=14, fontweight="bold", color=color, alpha=0.95)
+        # 直接在点上标注（不做重叠避让）
+        for idx in indices_to_annotate:
+            lbl = labels_for_indices.get(idx, str(idx))
+            color = "#2ca02c" if mask_benign[idx] else "#d62728"
+            plt.annotate(lbl, (xs[idx], ys[idx]), fontsize=14, fontweight="bold", color=color, alpha=0.95)
     plt.title("Snapshot Embeddings (t-SNE 2D)")
     plt.xlabel("Dim 1")
     plt.ylabel("Dim 2")
