@@ -306,7 +306,9 @@ def run_evaluation(path_map: dict) -> None:
         return
     save_snapshot_nodes(mal_snapshots)
     true_labels = get_true_labels(mal_snapshots)
-
+    # 打印恶意快照片段内索引（从0开始）
+    mal_idx_in_slice = np.where(true_labels == 1)[0]
+    print(f"恶意快照片段内索引: {mal_idx_in_slice.tolist()}")
     print("\n[DEBUG] 快照信息")
     print(f"  - 总快照数: {len(mal_snapshots)}")
     print(f"  - 真实标签数: {len(true_labels)}")
