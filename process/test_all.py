@@ -73,6 +73,7 @@ def plot_tsne_embeddings(
     which: str = "all",             # "all" | "benign" | "malicious"
     malicious_start: Optional[int] = None,
     malicious_end: Optional[int] = None,
+    selected_mal_ids_in_slice: Optional[List[int]] = None,  # 仅当 which="malicious" 时生效，片段内索引（0 开始）
 ):
     """仅使用 t-SNE 可视化快照嵌入二维分布，标记良性区间。"""
     if arr is None or getattr(arr, "size", 0) == 0:
@@ -123,6 +124,22 @@ def plot_tsne_embeddings(
 
     which_l = (which or "all").lower()
 
+    # 如果只画恶性且给定了片段内恶意索引，则仅绘制这些点
+    mask_mal_plot = mask_mal
+    if which_l == "malicious" and selected_mal_ids_in_slice is not None:
+        if malicious_start is None:
+            print("[Viz] 提供了恶意片段内索引，但缺少 malicious_start/end。将忽略该选择，绘制全部恶意点。")
+        else:
+            mal_sel_mask = np.zeros(T, dtype=bool)
+            for i in selected_mal_ids_in_slice:
+                try:
+                    gi = int(malicious_start + int(i))
+                except Exception:
+                    continue
+                if 0 <= gi < T:
+                    mal_sel_mask[gi] = True
+            mask_mal_plot = mask_mal & mal_sel_mask
+
     plt.figure(figsize=(8, 6))
     drew_any = False
     if which_l in ("all", "benign") and mask_benign.any():
@@ -131,9 +148,11 @@ def plot_tsne_embeddings(
             label=f"Benign [{lo}-{hi}]", s=40, alpha=0.85, edgecolors="white"
         )
         drew_any = True
-    if which_l in ("all", "malicious") and mask_mal.any():
+    if which_l in ("all", "malicious") and (mask_mal_plot if which_l == "malicious" else mask_mal).any():
         plt.scatter(
-            xs[mask_mal], ys[mask_mal], c="#d62728",
+            xs[mask_mal_plot] if which_l == "malicious" else xs[mask_mal],
+            ys[mask_mal_plot] if which_l == "malicious" else ys[mask_mal],
+            c="#d62728",
             label="Malicious", s=40, alpha=0.85, edgecolors="white"
         )
         drew_any = True
@@ -168,7 +187,7 @@ def plot_tsne_embeddings(
                         indices_to_annotate.append(idx)
                         labels_for_indices[idx] = f"B{r}"
         elif which_l == "malicious":
-            target_mask = mask_mal
+            target_mask = mask_mal_plot
             if mode_l == "all":
                 m_all = list(np.where(target_mask)[0])
                 for r, idx in enumerate(m_all):
@@ -544,6 +563,7 @@ def run_evaluation(path_map: dict) -> None:
             which="malicious",
             malicious_start=malicious_idx_start,
             malicious_end=malicious_idx_end,
+            selected_mal_ids_in_slice=[0,1]
         )
     except Exception as ex:
         print(f"[Viz] t-SNE 可视化失败：{ex}")
