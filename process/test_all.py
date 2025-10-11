@@ -923,6 +923,7 @@ def run_evaluation(path_map: dict) -> None:
             smooth_k=5,
             save_path="snapshot_deviation_curve.png",
             annotate_top_k=10,
+            annotate_mode="topk",  # 开关："none" | "topk" | "all"
             recompute_stats=False,
             deviation_mode="step",
         )
