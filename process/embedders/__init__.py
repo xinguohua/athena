@@ -2,7 +2,7 @@ from .word2vec_embedder import Word2VecEmbedder
 from .transe_embedder import TransEEmbedder
 from .prographer_embedder import ProGrapherEmbedder
 from .unicorn_embedder import UnicornGraphEmbedder
-from .roland_embedder import ROLANDGraphEmbedder
+from .roland_embedder1 import ROLANDGraphEmbedder
 
 def get_embedder_by_name(name: str):
     name = name.lower()
