@@ -20,8 +20,8 @@ from process.embedders import get_embedder_by_name
 # ========================================================================
 # 全局配置
 # ========================================================================
-EMBEDDER_NAME = "prographer"
-# EMBEDDER_NAME = "roland"
+# EMBEDDER_NAME = "prographer"
+EMBEDDER_NAME = "roland"
 CLASSIFY_NAME = "prographer"
 # EMBEDDER_NAME = "unicorn"
 # CLASSIFY_NAME = "unicorn"
@@ -589,7 +589,7 @@ def run_evaluation(path_map: dict) -> None:
             which="malicious",
             malicious_start=malicious_idx_start,
             malicious_end=malicious_idx_end,
-            selected_mal_ids_in_slice=[40, 41, 42, 43,44,45,46]
+            # selected_mal_ids_in_slice=[40, 41, 42, 43,44,45,46]
         )
     except Exception as ex:
         print(f"[Viz] t-SNE 可视化失败：{ex}")
