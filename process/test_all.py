@@ -2,7 +2,7 @@ import sys
 import textwrap
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 import pickle
 import os
 import numpy as np
@@ -71,8 +71,8 @@ def plot_tsne_embeddings(
     metric: str = "cosine",         # "cosine" 或 "l2"
     save_path: str = "snapshot_embeddings_tsne.png",
     which: str = "all",             # "all" | "benign" | "malicious"
-    malicious_start: int | None = None,
-    malicious_end: int | None = None,
+    malicious_start: Optional[int] = None,
+    malicious_end: Optional[int] = None,
 ):
     """仅使用 t-SNE 可视化快照嵌入二维分布，标记良性区间。"""
     if arr is None or getattr(arr, "size", 0) == 0:
@@ -137,8 +137,8 @@ def plot_tsne_embeddings(
         return
 
     if annotate:
-        indices_to_annotate: list[int] = []
-        labels_for_indices: dict[int, str] = {}
+        indices_to_annotate: List[int] = []
+        labels_for_indices: Dict[int, str] = {}
         mode_l = (mode or "topk").lower()
         group_l = (group or "per-group").lower()
         metric_l = (metric or "cosine").lower()
