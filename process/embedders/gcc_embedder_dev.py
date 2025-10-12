@@ -138,8 +138,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 训练快照索引
         self.train_snapshot_indices = self._resolve_train_indices(train_indices)
 
-    # 注意：已移除快照级异常/唯一性逻辑，仅保留基于节点频率的权重
-
         # 编码器 + 投影头（对比用）
         in_dim = self.prop_feat_dim if self.prop_feat_dim > 0 else 1
         self.encoder = GINEncoder(in_dim, self.enc_hidden_dim, self.enc_out_dim, num_layers=self.gin_layers, dropout=self.dropout).to(self.device)
