@@ -10,7 +10,7 @@ from process.classfy import get_classfy
 CONFIG_PATH = "config.yaml"
 DATASET_NAME = "atlas"          # 可切换数据集
 # DATASET_NAME = "cadets"          # 可切换数据集
-EMBEDDER_NAME = "gcc"    # 嵌入器
+EMBEDDER_NAME = "gcc_dev"    # 嵌入器
 # EMBEDDER_NAME = "prographer"
 CLASSIFY_NAME = "prographer"     # 训练器
 # EMBEDDER_NAME = "unicorn"    # 嵌入器

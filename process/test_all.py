@@ -21,7 +21,7 @@ from process.embedders import get_embedder_by_name
 # 全局配置
 # ========================================================================
 # EMBEDDER_NAME = "prographer"
-EMBEDDER_NAME = "gcc"
+EMBEDDER_NAME = "gcc_dev"
 CLASSIFY_NAME = "prographer"
 # EMBEDDER_NAME = "unicorn"
 # CLASSIFY_NAME = "unicorn"
@@ -965,7 +965,7 @@ def run_evaluation(path_map: dict) -> None:
     embedder_cls = get_embedder_by_name(EMBEDDER_NAME)
     embedder = embedder_cls.load(snapshot_sequence=all_snapshots)
     snapshot_embeddings = embedder.get_snapshot_embeddings()
-    # snapshot_embeddings, info = inject_snapshots_deviation(snapshot_embeddings, target_idxs=[43, 70, 71, 72, 73], mode="away", alpha=3.0)
+    # snapshot_embeddings, info = inject_snapshots_deviation(snapshot_embeddings, target_idxs=[29, 43, 70, 71, 72, 73], mode="away", alpha=3.0)
 
     # 在测试阶段进行 t-SNE 可视化（Top-K 标注，默认每组各取 5 个，cosine 偏离）
     try:
