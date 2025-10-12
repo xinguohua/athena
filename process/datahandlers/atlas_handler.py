@@ -89,74 +89,60 @@ class ATLASHandler(BaseProcessor):
         if df is None or len(df) == 0:
             return []
 
-        node_frequency = {}
-        node_timestamps = {}
-        cache_graph = ig.Graph(directed=True)
-        first_flag = True
-        # snapshot_size = 300
-        # forgetting_rate = 0.3
-        snapshot_size = 100
-        forgetting_rate = 1
-        # --- 排序 ---
+        # 固定按时间排序
         sorted_df = df.sort_values(by='timestamp') if 'timestamp' in df.columns else df
+        snapshot_size = 100  # 每 snapshot_size 条边构成一个独立快照
 
-        # --- 遍历每条边 ---
-        for _, row in sorted_df.iterrows():
-            actor_id, object_id = row["actorID"], row["objectID"]
-            action = row["action"]
-            timestamp = row.get("timestamp", 0)
+        # 逐块切分并构图
+        total_edges = len(sorted_df)
+        for start in range(0, total_edges, snapshot_size):
+            chunk = sorted_df.iloc[start:start + snapshot_size]
+            if chunk.empty:
+                continue
 
-            # 频率统计
-            node_frequency[actor_id] = node_frequency.get(actor_id, 0) + 1
-            node_frequency[object_id] = node_frequency.get(object_id, 0) + 1
+            # 统计本块中的节点频率与类型（顶点属性 frequency 取本块内出现次数）
+            node_freq = {}
+            node_type_map = {}
+            for _, row in chunk.iterrows():
+                actor_id, object_id = row["actorID"], row["objectID"]
+                node_freq[actor_id] = node_freq.get(actor_id, 0) + 1
+                node_freq[object_id] = node_freq.get(object_id, 0) + 1
+                # 记录类型（若多次出现，采用首次或后续均可，这里以首次为准）
+                node_type_map.setdefault(actor_id, row['actor_type'])
+                node_type_map.setdefault(object_id, row['object'])
 
-            # === 加点 ===
-            try:
-                v_actor = cache_graph.vs.find(name=actor_id)
-                v_actor["frequency"] = node_frequency[actor_id]
-            except ValueError:
-                actor_type_enum = ObjectType[row['actor_type']]
-                cache_graph.add_vertex(
-                    name=actor_id, type= actor_type_enum.name,
-                    properties=extract_properties(actor_id, self.all_netobj2pro, self.all_subject2pro,
-                                                  self.all_file2pro),
-                    label = int(any(lbl in actor_id for lbl in self.all_labels)),
-                    frequency= node_frequency[actor_id]
+            # 构建本块图
+            g = ig.Graph(directed=True)
+            # 先加点
+            for node_id, freq in node_freq.items():
+                type_str = node_type_map.get(node_id, 'UNKNOWN')
+                try:
+                    type_enum = ObjectType[type_str]
+                    type_name = type_enum.name
+                except Exception:
+                    type_name = str(type_str)
+                g.add_vertex(
+                    name=node_id,
+                    type=type_name,
+                    properties=extract_properties(node_id, self.all_netobj2pro, self.all_subject2pro, self.all_file2pro),
+                    label=int(any(lbl in node_id for lbl in self.all_labels)),
+                    frequency=int(freq)
                 )
-            node_timestamps[actor_id] = timestamp
 
-            try:
-                v_object = cache_graph.vs.find(name=object_id)
-                v_object["frequency"] = node_frequency[object_id]
-            except ValueError:
-                object_type_enum = ObjectType[row['object']]
-                cache_graph.add_vertex(
-                    name=object_id, type= object_type_enum.name,
-                    properties=extract_properties(object_id, self.all_netobj2pro, self.all_subject2pro,
-                                                  self.all_file2pro),
-                    label = int(any(lbl in object_id for lbl in self.all_labels)),
-                    frequency= node_frequency[object_id]
-                )
-            node_timestamps[object_id] = timestamp
+            # 再加边
+            for _, row in chunk.iterrows():
+                actor_id, object_id = row["actorID"], row["objectID"]
+                action = row["action"]
+                timestamp = row.get("timestamp", 0)
+                try:
+                    a_idx = g.vs.find(name=actor_id).index
+                    o_idx = g.vs.find(name=object_id).index
+                    g.add_edge(a_idx, o_idx, actions=action, timestamp=timestamp)
+                except ValueError:
+                    continue
 
-            # === 加边 ===
-            a_idx = cache_graph.vs.find(name=actor_id).index
-            o_idx = cache_graph.vs.find(name=object_id).index
-            if not cache_graph.are_connected(a_idx, o_idx):
-                cache_graph.add_edge(a_idx, o_idx, actions=action, timestamp=timestamp)
+            snapshots.append(g)
 
-            # --- 快照生成逻辑 ---
-            n_nodes = len(cache_graph.vs)
-            if first_flag and n_nodes >= snapshot_size:
-                self._generate_snapshot(cache_graph, snapshots)
-                first_flag = False
-            elif not first_flag and n_nodes >= snapshot_size * (1 + forgetting_rate):
-                self._retire_old_nodes(snapshot_size, forgetting_rate, node_timestamps, cache_graph)
-                self._generate_snapshot(cache_graph, snapshots)
-
-        # 收尾
-        if len(cache_graph.vs) > 0:
-            self._generate_snapshot(cache_graph, snapshots)
         return snapshots
 
 
@@ -164,7 +150,8 @@ class ATLASHandler(BaseProcessor):
     def _retire_old_nodes(self, snapshot_size: int, forgetting_rate: float, node_timestamps: dict, cache_graph: Graph) -> None:
         """这个函数保持不变"""
         n_nodes_to_remove = int(snapshot_size * forgetting_rate)
-        if n_nodes_to_remove <= 0: return
+        if n_nodes_to_remove <= 0:
+            return
         sorted_nodes = sorted(node_timestamps.items(), key=lambda item: item[1])
         nodes_to_remove = [node_id for node_id, _ in sorted_nodes[:n_nodes_to_remove]]
         try:
