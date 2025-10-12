@@ -557,4 +557,3 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     emb_dict[nid] = h[i].detach().cpu().numpy().astype(np.float32)
                 self.snapshot_node_embeddings.append(emb_dict)
 
-    # 末尾：快照级异常逻辑已删除
