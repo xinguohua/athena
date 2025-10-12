@@ -38,8 +38,6 @@ class MLP(nn.Module):
 
     def forward(self, x):
         return self.net(x)
-
-
 class GINConv(nn.Module):
     def __init__(self, in_dim: int, out_dim: int, eps: float = 0.0, mlp_hidden: int = 128, dropout: float = 0.0):
         super().__init__()
@@ -109,8 +107,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
         model_path: Optional[str] = None,
         # 异常活跃驱动损失参数（仅频率异常）
-        anomaly_alpha: float = 1.0,        # 加权强度，>0 表示异常越大权重越大
-        topk_abn: int = 5,                 # 计算快照分数时取前K个正向 z 分数的均值
+        anomaly_alpha: float = 1.0       # 加权强度，>0 表示异常越大权重越大
     ):
         super().__init__(snapshots, features, mapp)
         self.snapshots = snapshots
@@ -131,7 +128,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.model_path = model_path or self._default_path
         # 异常活跃参数（仅频率异常）
         self.anomaly_alpha = float(anomaly_alpha)
-        self.topk_abn = int(topk_abn)
 
         # 设备
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -142,12 +138,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 训练快照索引
         self.train_snapshot_indices = self._resolve_train_indices(train_indices)
 
-        # 基于频率的节点统计与每快照唯一性分数，用于损失加权
-        self._node_stats: Dict[str, Dict[str, float]] = {}
-        self._snapshot_uniqueness: List[float] = [0.0 for _ in range(len(self.snapshots))]
-        self._u_min: float = 0.0
-        self._u_max: float = 1.0
-        self._prepare_anomaly_stats()
+    # 注意：已移除快照级异常/唯一性逻辑，仅保留基于节点频率的权重
 
         # 编码器 + 投影头（对比用）
         in_dim = self.prop_feat_dim if self.prop_feat_dim > 0 else 1
@@ -193,7 +184,17 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     x2 = self._augment_features(x, mask_p=self.feat_mask_p)
                     batch_graphs.append((x1, e1))
                     batch_graphs.append((x2, e2))
-                    w = self._get_snapshot_weight(sidx)
+                    # 基于“节点异常=节点频率”的子图权重：取中心节点的频率作为异常度
+                    try:
+                        if 'frequency' in g.vs.attributes():
+                            freq_val = float(g.vs[center]['frequency'])
+                        else:
+                            freq_val = 1.0
+                    except Exception:
+                        freq_val = 1.0
+                    if not np.isfinite(freq_val) or freq_val < 0:
+                        freq_val = 0.0
+                    w = 1.0 + max(0.0, self.anomaly_alpha) * float(freq_val)
                     sample_weights.append(w)
                     sample_weights.append(w)
 
@@ -301,15 +302,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 'feat_mask_p': self.feat_mask_p,
                 'train_indices': self.train_snapshot_indices,
                 'model_path': self.model_path,
-                'anomaly_alpha': self.anomaly_alpha,
-                'topk_abn': self.topk_abn,
+                'anomaly_alpha': self.anomaly_alpha
             },
             'encoder': self.encoder.state_dict(),
             'proj_head': self.proj_head.state_dict(),
             'snapshot_node_embeddings': self.snapshot_node_embeddings,
-            'snapshot_uniqueness': self._snapshot_uniqueness,
-            'u_min': self._u_min,
-            'u_max': self._u_max,
         }
         torch.save(state, path)
         print(f"[GCC-Dev] Model saved to {path}")
@@ -325,16 +322,13 @@ class GCCEmbedderDev(GraphEmbedderBase):
             'prop_feat_dim','enc_hidden_dim','enc_out_dim','gin_layers','dropout',
             'num_epochs','steps_per_epoch','batch_size','lr','temperature',
             'r_hop','ego_max_nodes','drop_edge_p','feat_mask_p','train_indices','model_path',
-            'anomaly_alpha','topk_abn'
+            'anomaly_alpha'
         }
         params = {k: v for k, v in raw_params.items() if k in allowed}
         inst = cls(snapshot_sequence, **params)
         inst.encoder.load_state_dict(state['encoder'])
         inst.proj_head.load_state_dict(state['proj_head'])
         inst.snapshot_node_embeddings = state.get('snapshot_node_embeddings', [])
-        inst._snapshot_uniqueness = state.get('snapshot_uniqueness', inst._snapshot_uniqueness)
-        inst._u_min = state.get('u_min', inst._u_min)
-        inst._u_max = state.get('u_max', inst._u_max)
         print("[GCC-Dev] Model loaded successfully")
         return inst
 
@@ -470,102 +464,4 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     emb_dict[nid] = h[i].detach().cpu().numpy().astype(np.float32)
                 self.snapshot_node_embeddings.append(emb_dict)
 
-    # ---------- 基于频率的唯一性打分 ----------
-    def _prepare_anomaly_stats(self):
-        """
-        计算：
-        - 每个节点在训练快照中的出现次数 df(name) 与出现时的频率均值/标准差（按出现条件统计，缺席不计入均值）；
-        - 每个训练快照的分数 U_s：= topK(正向 z 分数)的均值（仅考虑频率异常，不再包含“唯一出现”项）；
-        并做 min-max 归一化，供损失加权使用。
-        """
-        train_ids = self.train_snapshot_indices
-        if not train_ids:
-            return
-        # 收集每个节点的频率样本（按出现计）与文档频次
-        freq_samples: Dict[str, List[float]] = {}
-        df_counts: Dict[str, int] = {}
-        for sidx in train_ids:
-            g = self.snapshots[sidx]
-            if g is None or g.vcount() == 0:
-                continue
-            names = [g.vs[i]['name'] for i in range(g.vcount())]
-            try:
-                freqs = g.vs['frequency'] if 'frequency' in g.vs.attributes() else [1.0] * g.vcount()
-            except Exception:
-                freqs = [1.0] * g.vcount()
-            seen = set()
-            for i, nid in enumerate(names):
-                try:
-                    f = float(freqs[i])
-                except Exception:
-                    f = 0.0
-                if not np.isfinite(f) or f < 0:
-                    f = 0.0
-                if f < 0:
-                    f = 0.0
-                freq_samples.setdefault(nid, []).append(f)
-                if nid not in seen:
-                    df_counts[nid] = df_counts.get(nid, 0) + 1
-                    seen.add(nid)
-        # 计算节点均值/标准差
-        self._node_stats.clear()
-        for nid, arr in freq_samples.items():
-            a = np.asarray(arr, dtype=np.float32)
-            mu = float(a.mean()) if a.size > 0 else 0.0
-            sigma = float(a.std(ddof=0)) if a.size > 1 else 0.0
-            df = float(df_counts.get(nid, 0))
-            self._node_stats[nid] = { 'mu': mu, 'sigma': sigma, 'df': df }
-        # 逐快照打分
-        U: List[float] = []
-        self._snapshot_uniqueness = [0.0 for _ in range(len(self.snapshots))]
-        eps = 1e-6
-        K = max(1, int(self.topk_abn))
-        for sidx in range(len(self.snapshots)):
-            g = self.snapshots[sidx]
-            if g is None or g.vcount() == 0:
-                U_s = 0.0
-                self._snapshot_uniqueness[sidx] = U_s
-                U.append(U_s)
-                continue
-            names = [g.vs[i]['name'] for i in range(g.vcount())]
-            try:
-                freqs = g.vs['frequency'] if 'frequency' in g.vs.attributes() else [1.0] * g.vcount()
-            except Exception:
-                freqs = [1.0] * g.vcount()
-            z_pos: List[float] = []
-            for i, nid in enumerate(names):
-                try:
-                    f = float(freqs[i])
-                except Exception:
-                    f = 0.0
-                if not np.isfinite(f) or f < 0:
-                    f = 0.0
-                st = self._node_stats.get(nid)
-                if st is None:
-                    continue
-                mu, sigma, df = st['mu'], st['sigma'], st['df']
-                z = (f - mu) / (sigma + eps)
-                if z > 0:
-                    z_pos.append(float(z))
-            z_pos.sort(reverse=True)
-            if len(z_pos) == 0:
-                z_topk_mean = 0.0
-            else:
-                k = min(K, len(z_pos))
-                z_topk_mean = float(np.mean(z_pos[:k]))
-            U_s = z_topk_mean
-            self._snapshot_uniqueness[sidx] = U_s
-            U.append(U_s)
-        # min-max 归一化范围
-        self._u_min = float(np.min(U)) if len(U) > 0 else 0.0
-        self._u_max = float(np.max(U)) if len(U) > 0 else 1.0
-        if abs(self._u_max - self._u_min) < 1e-8:
-            self._u_max = self._u_min + 1.0
-
-    def _get_snapshot_weight(self, sidx: int) -> float:
-        """根据快照唯一性分数返回损失权重，w = 1 + alpha * norm(U_s)。"""
-        if sidx < 0 or sidx >= len(self._snapshot_uniqueness):
-            return 1.0
-        u = self._snapshot_uniqueness[sidx]
-        u_norm = (u - self._u_min) / (self._u_max - self._u_min + 1e-6)
-        return float(1.0 + max(0.0, self.anomaly_alpha) * float(u_norm))
+    # 末尾：快照级异常逻辑已删除
