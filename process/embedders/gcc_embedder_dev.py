@@ -168,6 +168,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
     def train(self):
         if not self.train_snapshot_indices:
             raise RuntimeError("没有可用于训练的快照。请检查 train_indices 设置。")
+        # 先确保 Word2Vec 模型已准备好（预训练路径加载或用训练快照语料自训练）
+        self._ensure_w2v_model()
         print(f"[GCC-Dev] Pretrain on {len(self.train_snapshot_indices)}/{len(self.snapshots)} snapshots | batch={self.batch_size} | tau={self.temperature}")
 
         for epoch in range(self.num_epochs):
@@ -241,6 +243,12 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
     def embed_edges(self):
         return {}
+
+    def prepare_text_encoder(self):
+        """可选的显式预处理：提前训练/加载 Word2Vec 模型。
+        某些离线流程（例如只做快照嵌入而不调用 train）可先调用本方法。
+        """
+        self._ensure_w2v_model()
 
     def get_snapshot_embeddings(self, snapshot_sequence=None):
         if not self.snapshot_node_embeddings:
@@ -434,6 +442,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         if not corpus:
             raise RuntimeError("[GCC-Dev] W2V 语料为空，无法构建 Word2Vec 特征。")
         from gensim.models import Word2Vec
+        print(f"[GCC-Dev] 正在训练word2vec | 语料={len(corpus)} | dim={int(self.prop_feat_dim)} | window={int(self.w2v_window)} | min_count={int(self.w2v_min_count)} | sg={int(self.w2v_sg)} | epochs={int(self.w2v_epochs)}")
         self._w2v_model = Word2Vec(
             sentences=corpus,
             vector_size=int(self.prop_feat_dim),
