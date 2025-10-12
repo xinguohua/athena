@@ -383,8 +383,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         nodes_sorted = sorted(nodes)
         return g.subgraph(nodes_sorted)
 
-    # 旧的哈希特征函数已移除
-
     # ---------- Word2Vec 支持 ----------
     def _tokenize_properties(self, text: str) -> List[str]:
         if not text:
