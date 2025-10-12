@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Optional, Iterable, Tuple, List, Dict, Union
 import random
 import re
-import hashlib
+import os
 
 import numpy as np
 import torch
@@ -107,7 +107,12 @@ class GCCEmbedderDev(GraphEmbedderBase):
         train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
         model_path: Optional[str] = None,
         # 异常活跃驱动损失参数（仅频率异常）
-        anomaly_alpha: float = 1.0       # 加权强度，>0 表示异常越大权重越大
+        anomaly_alpha: float = 1.0,      # 加权强度，>0 表示异常越大权重越大
+        w2v_window: int = 5,
+        w2v_min_count: int = 1,
+        w2v_sg: int = 1,
+        w2v_epochs: int = 20,
+        w2v_pretrained_path: Optional[str] = None,
     ):
         super().__init__(snapshots, features, mapp)
         self.snapshots = snapshots
@@ -129,10 +134,18 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 异常活跃参数（仅频率异常）
         self.anomaly_alpha = float(anomaly_alpha)
 
+    # Word2Vec 配置（唯一特征来源）
+        self.w2v_window = int(w2v_window)
+        self.w2v_min_count = int(w2v_min_count)
+        self.w2v_sg = int(w2v_sg)
+        self.w2v_epochs = int(w2v_epochs)
+        self.w2v_pretrained_path = w2v_pretrained_path
+        self._w2v_model = None  # 延迟加载/训练
+
         # 设备
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        # 特征缓存（properties -> hashed vec）
+        # 特征缓存（properties -> 向量）
         self._prop_cache: Dict[str, np.ndarray] = {}
 
         # 训练快照索引
@@ -300,7 +313,13 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 'feat_mask_p': self.feat_mask_p,
                 'train_indices': self.train_snapshot_indices,
                 'model_path': self.model_path,
-                'anomaly_alpha': self.anomaly_alpha
+                'anomaly_alpha': self.anomaly_alpha,
+                # W2V 配置
+                'w2v_window': self.w2v_window,
+                'w2v_min_count': self.w2v_min_count,
+                'w2v_sg': self.w2v_sg,
+                'w2v_epochs': self.w2v_epochs,
+                'w2v_pretrained_path': self.w2v_pretrained_path,
             },
             'encoder': self.encoder.state_dict(),
             'proj_head': self.proj_head.state_dict(),
@@ -320,7 +339,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
             'prop_feat_dim','enc_hidden_dim','enc_out_dim','gin_layers','dropout',
             'num_epochs','steps_per_epoch','batch_size','lr','temperature',
             'r_hop','ego_max_nodes','drop_edge_p','feat_mask_p','train_indices','model_path',
-            'anomaly_alpha'
+            'anomaly_alpha',
+            # W2V 配置
+            'w2v_window','w2v_min_count','w2v_sg','w2v_epochs','w2v_pretrained_path'
         }
         params = {k: v for k, v in raw_params.items() if k in allowed}
         inst = cls(snapshot_sequence, **params)
@@ -362,16 +383,79 @@ class GCCEmbedderDev(GraphEmbedderBase):
         nodes_sorted = sorted(nodes)
         return g.subgraph(nodes_sorted)
 
-    def _text_hash_vector(self, text: str, dim: int) -> np.ndarray:
-        if dim <= 0:
-            return np.zeros(0, dtype=np.float32)
-        v = np.zeros(dim, dtype=np.float32)
+    # 旧的哈希特征函数已移除
+
+    # ---------- Word2Vec 支持 ----------
+    def _tokenize_properties(self, text: str) -> List[str]:
         if not text:
-            return v
-        tokens = [t for t in re.split(r'[^A-Za-z0-9]+', str(text).lower()) if t]
-        for tok in tokens:
-            h = int(hashlib.md5(tok.encode('utf-8')).hexdigest(), 16) % dim
-            v[h] += 1.0
+            return []
+        return [t for t in re.split(r'[^A-Za-z0-9]+', str(text).lower()) if t]
+
+    def _collect_w2v_corpus(self) -> List[List[str]]:
+        seen_props: Dict[str, List[str]] = {}
+        ids = self.train_snapshot_indices or list(range(len(self.snapshots)))
+        for sidx in ids:
+            g = self.snapshots[sidx]
+            if g is None or g.vcount() == 0:
+                continue
+            for i in range(g.vcount()):
+                try:
+                    prop = g.vs[i]['properties']
+                except Exception:
+                    prop = g.vs[i].attributes().get('properties', '')
+                key = str(prop)
+                if key not in seen_props:
+                    seen_props[key] = self._tokenize_properties(key)
+        corpus = [tokens for tokens in seen_props.values() if tokens]
+        return corpus
+
+    def _ensure_w2v_model(self):
+        if self._w2v_model is not None:
+            return
+        try:
+            from gensim.models import Word2Vec
+        except Exception:
+            raise RuntimeError("[GCC-Dev] 需要 gensim 才能使用 Word2Vec 特征，请先安装 gensim。")
+        # 预训练优先
+        if isinstance(self.w2v_pretrained_path, str) and os.path.exists(self.w2v_pretrained_path):
+            try:
+                self._w2v_model = Word2Vec.load(self.w2v_pretrained_path)
+                vec_dim = int(getattr(self._w2v_model.wv, 'vector_size', self.prop_feat_dim))
+                if int(vec_dim) == int(self.prop_feat_dim):
+                    print("[GCC-Dev] 已加载预训练 Word2Vec 模型。")
+                    return
+                else:
+                    print(f"[GCC-Dev] 预训练向量维度({vec_dim}) != prop_feat_dim({self.prop_feat_dim})，将改为自训练以匹配维度。")
+                    self._w2v_model = None
+            except Exception as e:
+                print(f"[GCC-Dev] 加载预训练 Word2Vec 失败：{e}，将尝试自训练。")
+        # 自训练
+        corpus = self._collect_w2v_corpus()
+        if not corpus:
+            raise RuntimeError("[GCC-Dev] W2V 语料为空，无法构建 Word2Vec 特征。")
+        from gensim.models import Word2Vec
+        self._w2v_model = Word2Vec(
+            sentences=corpus,
+            vector_size=int(self.prop_feat_dim),
+            window=int(self.w2v_window),
+            min_count=int(self.w2v_min_count),
+            sg=int(self.w2v_sg),
+            workers=4,
+            epochs=int(self.w2v_epochs),
+        )
+        print(f"[GCC-Dev] 训练 Word2Vec 完成：语料={len(corpus)} 条，dim={int(self.prop_feat_dim)}")
+
+    def _w2v_vector_from_tokens(self, tokens: List[str]) -> np.ndarray:
+        if not tokens or self._w2v_model is None:
+            return np.zeros(int(self.prop_feat_dim), dtype=np.float32)
+        vecs = []
+        wv = self._w2v_model.wv
+        for t in tokens:
+            if t in wv:
+                vecs.append(wv[t])
+        if not vecs:
+            return np.zeros(int(self.prop_feat_dim), dtype=np.float32)
+        v = np.mean(np.stack(vecs, axis=0), axis=0).astype(np.float32)
         n = np.linalg.norm(v) + 1e-12
         return (v / n).astype(np.float32)
 
@@ -380,7 +464,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
         if self.prop_feat_dim <= 0:
             # 用常数特征占位
             return np.ones((n, 1), dtype=np.float32)
-        X = np.zeros((n, self.prop_feat_dim), dtype=np.float32)
+        # 确保 W2V 模型就绪（延迟）
+        if self._w2v_model is None:
+            self._ensure_w2v_model()
+        X = np.zeros((n, int(self.prop_feat_dim)), dtype=np.float32)
         for i in range(n):
             try:
                 prop = g.vs[i]['properties']
@@ -389,10 +476,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
             key = str(prop)
             if key in self._prop_cache:
                 X[i] = self._prop_cache[key]
-            else:
-                vec = self._text_hash_vector(key, self.prop_feat_dim)
-                self._prop_cache[key] = vec
-                X[i] = vec
+                continue
+            tokens = self._tokenize_properties(key)
+            vec = self._w2v_vector_from_tokens(tokens)
+            self._prop_cache[key] = vec
+            X[i] = vec
         return X
 
     def _igraph_edges_to_edge_index(self, g) -> torch.Tensor:
