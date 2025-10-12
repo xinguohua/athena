@@ -108,10 +108,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 训练集选择
         train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
         model_path: Optional[str] = None,
-        # 异常活跃驱动损失参数
+        # 异常活跃驱动损失参数（仅频率异常）
         anomaly_alpha: float = 1.0,        # 加权强度，>0 表示异常越大权重越大
-        unique_bonus: float = 0.5,         # 节点“只在一个快照出现”的额外奖励权重
-        topk_abn: int = 5,                 # 计算快照唯一性时取前K个正向z分数的均值
+        topk_abn: int = 5,                 # 计算快照分数时取前K个正向 z 分数的均值
     ):
         super().__init__(snapshots, features, mapp)
         self.snapshots = snapshots
@@ -130,9 +129,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.drop_edge_p = float(drop_edge_p)
         self.feat_mask_p = float(feat_mask_p)
         self.model_path = model_path or self._default_path
-        # 异常活跃参数
+        # 异常活跃参数（仅频率异常）
         self.anomaly_alpha = float(anomaly_alpha)
-        self.unique_bonus = float(unique_bonus)
         self.topk_abn = int(topk_abn)
 
         # 设备
@@ -304,7 +302,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 'train_indices': self.train_snapshot_indices,
                 'model_path': self.model_path,
                 'anomaly_alpha': self.anomaly_alpha,
-                'unique_bonus': self.unique_bonus,
                 'topk_abn': self.topk_abn,
             },
             'encoder': self.encoder.state_dict(),
@@ -328,7 +325,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             'prop_feat_dim','enc_hidden_dim','enc_out_dim','gin_layers','dropout',
             'num_epochs','steps_per_epoch','batch_size','lr','temperature',
             'r_hop','ego_max_nodes','drop_edge_p','feat_mask_p','train_indices','model_path',
-            'anomaly_alpha','unique_bonus','topk_abn'
+            'anomaly_alpha','topk_abn'
         }
         params = {k: v for k, v in raw_params.items() if k in allowed}
         inst = cls(snapshot_sequence, **params)
@@ -478,7 +475,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         """
         计算：
         - 每个节点在训练快照中的出现次数 df(name) 与出现时的频率均值/标准差（按出现条件统计，缺席不计入均值）；
-        - 每个训练快照的唯一性分数 U_s：= topK(正向z分数)的均值 + unique_bonus * (该快照中 df==1 的节点比例)；
+        - 每个训练快照的分数 U_s：= topK(正向 z 分数)的均值（仅考虑频率异常，不再包含“唯一出现”项）；
         并做 min-max 归一化，供损失加权使用。
         """
         train_ids = self.train_snapshot_indices
@@ -536,7 +533,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
             except Exception:
                 freqs = [1.0] * g.vcount()
             z_pos: List[float] = []
-            unique_count = 0
             for i, nid in enumerate(names):
                 try:
                     f = float(freqs[i])
@@ -551,16 +547,13 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 z = (f - mu) / (sigma + eps)
                 if z > 0:
                     z_pos.append(float(z))
-                if df <= 1 and f > 0:
-                    unique_count += 1
             z_pos.sort(reverse=True)
             if len(z_pos) == 0:
                 z_topk_mean = 0.0
             else:
                 k = min(K, len(z_pos))
                 z_topk_mean = float(np.mean(z_pos[:k]))
-            frac_unique = (unique_count / max(1, g.vcount()))
-            U_s = z_topk_mean + self.unique_bonus * frac_unique
+            U_s = z_topk_mean
             self._snapshot_uniqueness[sidx] = U_s
             U.append(U_s)
         # min-max 归一化范围
