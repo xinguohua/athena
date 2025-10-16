@@ -145,7 +145,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self._w2v_model = None  # 延迟加载/训练
 
         # 对 (节点tokens + 1-hop邻域tokens) 做轻量增强（丢词+bigram）
-        self.use_token_augmentation = False
+        self.use_token_augmentation = True
 
         # 设备
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
