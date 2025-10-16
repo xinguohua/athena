@@ -184,8 +184,8 @@ class PrographerClassify(BaseClassify):
         print(f"[Save] model -> {cfg.model_save_path}")
         return history
 
-    # float = 0.016
-    def predict(self, embeddings: np.ndarray, threshold: float = 0.0022) -> Tuple[np.ndarray, Dict]:
+    # float = 0.016/0.0022/0.004
+    def predict(self, embeddings: np.ndarray, threshold: float = 0.02) -> Tuple[np.ndarray, Dict]:
         """
         用训练好的模型预测快照是否异常
         """
