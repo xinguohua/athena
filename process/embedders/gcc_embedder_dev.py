@@ -144,9 +144,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.w2v_pretrained_path = w2v_pretrained_path
         self._w2v_model = None  # 延迟加载/训练
 
-    # 特征 token 增强开关（默认关闭）：
-    # 对 (节点tokens + 1-hop邻域tokens) 做轻量增强（丢词+bigram）
-    self.use_token_augmentation = False
+        # 对 (节点tokens + 1-hop邻域tokens) 做轻量增强（丢词+bigram）
+        self.use_token_augmentation = False
 
         # 设备
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
