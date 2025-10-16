@@ -146,10 +146,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self._w2v_model = None  # 延迟加载/训练
 
         # 对 (节点tokens + 1-hop邻域tokens) 做轻量增强（丢词+bigram）
-        self.use_token_augmentation = True
+        self.use_token_augmentation = False
 
         # 是否使用“恶意语料”来生成额外负样本；以及腐化强度与每个节点替换的 token 数
-        self.use_malicious_negatives = False
+        self.use_malicious_negatives = True
 
         # 设备
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -282,7 +282,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 self_tokens = self._get_node_tokens(g, i)
                 nei_tokens = self._gather_neighbor_tokens(g, i)
                 self.malicious_token_counter.update(self_tokens)
-                self.malicious_token_counter.update(nei_tokens)
+                # self.malicious_token_counter.update(nei_tokens)
 
     def _sample_malicious_tokens(self, k: int) -> List[str]:
         if len(self.malicious_token_counter) == 0 or k <= 0:
