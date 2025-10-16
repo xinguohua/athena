@@ -147,6 +147,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 对 (节点tokens + 1-hop邻域tokens) 做轻量增强（丢词+bigram）
         self.use_token_augmentation = False
 
+
         # 设备
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -527,6 +528,14 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 self_tokens = self._get_node_tokens(g, i)
                 nei_tokens = self._gather_neighbor_tokens(g, i)
                 all_tokens = self_tokens + nei_tokens
+                # 若为恶意节点，最简打印：自身 properties + 周围（1-hop）properties 样例
+                lab = int(g.vs[i].attributes().get('label', 0))
+                if lab == 1:
+                    name = g.vs[i].attributes().get('name', str(i))
+                    self_prop = g.vs[i].attributes().get('properties', '')
+                    neigh_ids = g.neighbors(i) if hasattr(g, 'neighbors') else []
+                    neigh_props = [g.vs[n].attributes().get('properties', '') for n in neigh_ids]
+                    print(f"[GCC-Dev][MalProps] node={name} idx={i} | prop={self_prop} | around_props_sample={neigh_props[:5]}")
                 tokens = self._augment_tokens(all_tokens)
                 vec = self._w2v_vector_from_tokens(tokens)
                 vec = vec / (np.linalg.norm(vec) + 1e-12)
