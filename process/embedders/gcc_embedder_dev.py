@@ -38,6 +38,8 @@ class MLP(nn.Module):
 
     def forward(self, x):
         return self.net(x)
+
+
 class GINConv(nn.Module):
     def __init__(self, in_dim: int, out_dim: int, eps: float = 0.0, mlp_hidden: int = 128, dropout: float = 0.0):
         super().__init__()
@@ -134,13 +136,17 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 异常活跃参数（仅频率异常）
         self.anomaly_alpha = float(anomaly_alpha)
 
-    # Word2Vec 配置（唯一特征来源）
+        # Word2Vec 配置（唯一特征来源）
         self.w2v_window = int(w2v_window)
         self.w2v_min_count = int(w2v_min_count)
         self.w2v_sg = int(w2v_sg)
         self.w2v_epochs = int(w2v_epochs)
         self.w2v_pretrained_path = w2v_pretrained_path
         self._w2v_model = None  # 延迟加载/训练
+
+    # 特征 token 增强开关（默认关闭）：
+    # 对 (节点tokens + 1-hop邻域tokens) 做轻量增强（丢词+bigram）
+    self.use_token_augmentation = False
 
         # 设备
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -397,6 +403,47 @@ class GCCEmbedderDev(GraphEmbedderBase):
             return []
         return [t for t in re.split(r'[^A-Za-z0-9]+', str(text).lower()) if t]
 
+    def _get_node_tokens(self, g, i: int) -> List[str]:
+        try:
+            prop = g.vs[i]['properties']
+        except Exception:
+            prop = g.vs[i].attributes().get('properties', '')
+        return self._tokenize_properties(str(prop))
+
+    def _gather_neighbor_tokens(self, g, i: int) -> List[str]:
+        """固定策略的邻域 token 收集：1-hop，包含自身，限制 256 个 token。"""
+        try:
+            nodes = set(g.neighborhood(vertices=i, order=1))
+        except Exception:
+            nodes = {i}
+        out: List[str] = []
+        for nid in nodes:
+            out.extend(self._get_node_tokens(g, nid))
+            if len(out) >= 256:
+                break
+        if len(out) > 256:
+            out = out[:256]
+        return out
+
+    def _augment_tokens(self, tokens: List[str]) -> List[str]:
+        """对 token 做轻量样本增强：
+        - 10% 概率丢弃单词
+        - 追加顺序 bigram（相邻两词拼接）
+        - 最多保留 256 个 token
+        """
+        if not tokens:
+            return []
+        # 随机丢弃
+        kept = [t for t in tokens if random.random() > 0.1]
+        if not kept:
+            kept = list(tokens)
+        # 追加 bigram
+        bigrams = [kept[i] + '_' + kept[i + 1] for i in range(len(kept) - 1)] if len(kept) > 1 else []
+        out = kept + bigrams
+        if len(out) > 256:
+            out = out[:256]
+        return out
+
     def _collect_w2v_corpus(self) -> List[List[str]]:
         seen_props: Dict[str, List[str]] = {}
         ids = self.train_snapshot_indices or list(range(len(self.snapshots)))
@@ -476,18 +523,29 @@ class GCCEmbedderDev(GraphEmbedderBase):
             self._ensure_w2v_model()
         X = np.zeros((n, int(self.prop_feat_dim)), dtype=np.float32)
         for i in range(n):
-            try:
-                prop = g.vs[i]['properties']
-            except Exception:
-                prop = g.vs[i].attributes().get('properties', '')
-            key = str(prop)
-            if key in self._prop_cache:
-                X[i] = self._prop_cache[key]
-                continue
-            tokens = self._tokenize_properties(key)
-            vec = self._w2v_vector_from_tokens(tokens)
-            self._prop_cache[key] = vec
-            X[i] = vec
+            if self.use_token_augmentation:
+                # 增强路径：节点 + 1-hop 邻域 tokens，做轻量增强后编码
+                self_tokens = self._get_node_tokens(g, i)
+                nei_tokens = self._gather_neighbor_tokens(g, i)
+                all_tokens = self_tokens + nei_tokens
+                tokens = self._augment_tokens(all_tokens)
+                vec = self._w2v_vector_from_tokens(tokens)
+                vec = vec / (np.linalg.norm(vec) + 1e-12)
+                X[i] = vec.astype(np.float32)
+            else:
+                # 原始路径：仅节点自身 properties → tokens → 向量（带缓存）
+                try:
+                    prop = g.vs[i]['properties']
+                except Exception:
+                    prop = g.vs[i].attributes().get('properties', '')
+                key = str(prop)
+                if key in self._prop_cache:
+                    X[i] = self._prop_cache[key]
+                    continue
+                tokens = self._tokenize_properties(key)
+                vec = self._w2v_vector_from_tokens(tokens)
+                self._prop_cache[key] = vec
+                X[i] = vec
         return X
 
     def _igraph_edges_to_edge_index(self, g) -> torch.Tensor:
