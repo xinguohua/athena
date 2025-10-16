@@ -145,11 +145,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.w2v_pretrained_path = w2v_pretrained_path
         self._w2v_model = None  # 延迟加载/训练
 
-        # 对 (节点tokens + 1-hop邻域tokens) 做轻量增强（丢词+bigram）
-        self.use_token_augmentation = False
-
         # 是否使用“恶意语料”来生成额外负样本；以及腐化强度与每个节点替换的 token 数
         self.use_malicious_negatives = True
+        self.mal_neg_ratio: float = 0.3  # 每个子图中替换为恶意向量的节点比例
+        self.mal_neg_token_len: int = 16  # 生成恶意向量时采样的恶意 token 数
 
         # 设备
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -586,40 +585,19 @@ class GCCEmbedderDev(GraphEmbedderBase):
             self._ensure_w2v_model()
         X = np.zeros((n, int(self.prop_feat_dim)), dtype=np.float32)
         for i in range(n):
-            if self.use_token_augmentation:
-                # 增强路径：节点 + 1-hop 邻域 tokens，做轻量增强后编码
-                self_tokens = self._get_node_tokens(g, i)
-                nei_tokens = self._gather_neighbor_tokens(g, i)
-                all_tokens = self_tokens + nei_tokens
-                # 若为恶意节点，最简打印：自身 properties + 周围（1-hop）properties 样例
-                lab = int(g.vs[i].attributes().get('label', 0))
-                if lab == 1:
-                    name = g.vs[i].attributes().get('name', str(i))
-                    self_prop = g.vs[i].attributes().get('properties', '')
-                    neigh_ids = g.neighbors(i) if hasattr(g, 'neighbors') else []
-                    neigh_props = [g.vs[n].attributes().get('properties', '') for n in neigh_ids]
-                    print(f"[GCC-Dev][MalProps] node={name} idx={i} | prop={self_prop} | around_props_sample={neigh_props[:5]}")
-                    # 收集恶意 tokens（使用原始 self/neighbor tokens，不用增强后的 tokens）
-                    self.malicious_token_counter.update(self_tokens)
-                    self.malicious_token_counter.update(nei_tokens)
-                tokens = self._augment_tokens(all_tokens)
-                vec = self._w2v_vector_from_tokens(tokens)
-                vec = vec / (np.linalg.norm(vec) + 1e-12)
-                X[i] = vec.astype(np.float32)
-            else:
-                # 原始路径：仅节点自身 properties → tokens → 向量（带缓存）
-                try:
-                    prop = g.vs[i]['properties']
-                except Exception:
-                    prop = g.vs[i].attributes().get('properties', '')
-                key = str(prop)
-                if key in self._prop_cache:
-                    X[i] = self._prop_cache[key]
-                    continue
-                tokens = self._tokenize_properties(key)
-                vec = self._w2v_vector_from_tokens(tokens)
-                self._prop_cache[key] = vec
-                X[i] = vec
+            # 原始路径：仅节点自身 properties → tokens → 向量（带缓存）
+            try:
+                prop = g.vs[i]['properties']
+            except Exception:
+                prop = g.vs[i].attributes().get('properties', '')
+            key = str(prop)
+            if key in self._prop_cache:
+                X[i] = self._prop_cache[key]
+                continue
+            tokens = self._tokenize_properties(key)
+            vec = self._w2v_vector_from_tokens(tokens)
+            self._prop_cache[key] = vec
+            X[i] = vec
         return X
 
     def get_malicious_top_tokens(self, k: int = 50):

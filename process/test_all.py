@@ -20,8 +20,8 @@ from process.embedders import get_embedder_by_name
 # ========================================================================
 # 全局配置
 # ========================================================================
-EMBEDDER_NAME = "prographer"
-# EMBEDDER_NAME = "gcc_dev"
+# EMBEDDER_NAME = "prographer"
+EMBEDDER_NAME = "gcc_dev"
 # EMBEDDER_NAME = "gcc_dev"
 CLASSIFY_NAME = "prographer"
 # EMBEDDER_NAME = "unicorn"
