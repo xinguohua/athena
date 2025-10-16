@@ -9,6 +9,7 @@ GCCEmbedderDev: 开发版 Graph Contrastive Coding-style 预训练编码器
 from __future__ import annotations
 
 from typing import Optional, Iterable, Tuple, List, Dict, Union
+from collections import Counter
 import random
 import re
 import os
@@ -147,12 +148,16 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 对 (节点tokens + 1-hop邻域tokens) 做轻量增强（丢词+bigram）
         self.use_token_augmentation = True
 
+        # 是否使用“恶意语料”来生成额外负样本；以及腐化强度与每个节点替换的 token 数
+        self.use_malicious_negatives = False
 
         # 设备
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         # 特征缓存（properties -> 向量）
         self._prop_cache: Dict[str, np.ndarray] = {}
+        # 恶意 token 容器：累计出现在恶意节点及其邻域的 tokens
+        self.malicious_token_counter = Counter()
 
         # 训练快照索引
         self.train_snapshot_indices = self._resolve_train_indices(train_indices)
@@ -176,6 +181,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
             raise RuntimeError("没有可用于训练的快照。请检查 train_indices 设置。")
         # 先确保 Word2Vec 模型已准备好（预训练路径加载或用训练快照语料自训练）
         self._ensure_w2v_model()
+        # 预收集恶意 tokens（若尚未填充）
+        if self.use_malicious_negatives:
+            self._precollect_malicious_tokens()
         print(f"[GCC-Dev] Pretrain on {len(self.train_snapshot_indices)}/{len(self.snapshots)} snapshots | batch={self.batch_size} | tau={self.temperature}")
 
         for epoch in range(self.num_epochs):
@@ -196,13 +204,23 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     x_np = self._build_node_features(sub)
                     edge_index = self._igraph_edges_to_edge_index(sub)
                     x = torch.from_numpy(x_np).to(self.device)
-                    # 两视角增强
+                    # 两视角增强（标准正样本对）
                     e1 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
                     x1 = self._augment_features(x, mask_p=self.feat_mask_p)
                     e2 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
                     x2 = self._augment_features(x, mask_p=self.feat_mask_p)
                     batch_graphs.append((x1, e1))
                     batch_graphs.append((x2, e2))
+                    # 可选：基于恶意语料生成一对“腐化视角”，作为额外负样本来源
+                    if self.use_malicious_negatives and len(self.malicious_token_counter) > 0:
+                        x_neg_np = self._corrupt_features_with_malicious(sub, x_np, ratio=self.mal_neg_ratio, token_len=self.mal_neg_token_len)
+                        x_neg = torch.from_numpy(x_neg_np).to(self.device)
+                        e3 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
+                        x3 = self._augment_features(x_neg, mask_p=self.feat_mask_p)
+                        e4 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
+                        x4 = self._augment_features(x_neg, mask_p=self.feat_mask_p)
+                        batch_graphs.append((x3, e3))
+                        batch_graphs.append((x4, e4))
                     # 基于“节点异常=节点频率”的子图权重：取中心节点的频率作为异常度
                     try:
                         if 'frequency' in g.vs.attributes():
@@ -243,6 +261,51 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
         self._generate_snapshot_node_embeddings()
         self.save_model()
+
+    # ---------- 恶意 tokens 支持（用于负样本） ----------
+    def _precollect_malicious_tokens(self):
+        if getattr(self, 'malicious_token_counter', None) is None:
+            return
+        if len(self.malicious_token_counter) > 0:
+            return
+        # 遍历全部快照，收集 label==1 的节点 tokens 与其 1-hop 邻域 tokens
+        for g in self.snapshots:
+            if g is None or g.vcount() == 0:
+                continue
+            for i in range(g.vcount()):
+                try:
+                    lab = int(g.vs[i].attributes().get('label', 0))
+                except Exception:
+                    lab = 0
+                if lab != 1:
+                    continue
+                self_tokens = self._get_node_tokens(g, i)
+                nei_tokens = self._gather_neighbor_tokens(g, i)
+                self.malicious_token_counter.update(self_tokens)
+                self.malicious_token_counter.update(nei_tokens)
+
+    def _sample_malicious_tokens(self, k: int) -> List[str]:
+        if len(self.malicious_token_counter) == 0 or k <= 0:
+            return []
+        items = list(self.malicious_token_counter.items())
+        toks = [t for t, _ in items]
+        wts = np.array([max(1, int(c)) for _, c in items], dtype=np.float64)
+        wts = wts / (wts.sum() + 1e-12)
+        # 按权重独立采样 k 次（允许重复）
+        idx = np.random.choice(len(toks), size=int(k), replace=True, p=wts)
+        return [toks[j] for j in idx]
+
+    def _corrupt_features_with_malicious(self, g, X_base: np.ndarray, ratio: float, token_len: int) -> np.ndarray:
+        n = g.vcount()
+        out = X_base.copy()
+        if ratio <= 0 or len(self.malicious_token_counter) == 0:
+            return out
+        for i in range(n):
+            if random.random() < ratio:
+                tokens = self._sample_malicious_tokens(max(1, int(token_len)))
+                vec = self._w2v_vector_from_tokens(tokens)
+                out[i] = vec.astype(np.float32)
+        return out
 
     def embed_nodes(self):
         return self.snapshot_node_embeddings[-1] if self.snapshot_node_embeddings else {}
@@ -536,6 +599,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     neigh_ids = g.neighbors(i) if hasattr(g, 'neighbors') else []
                     neigh_props = [g.vs[n].attributes().get('properties', '') for n in neigh_ids]
                     print(f"[GCC-Dev][MalProps] node={name} idx={i} | prop={self_prop} | around_props_sample={neigh_props[:5]}")
+                    # 收集恶意 tokens（使用原始 self/neighbor tokens，不用增强后的 tokens）
+                    self.malicious_token_counter.update(self_tokens)
+                    self.malicious_token_counter.update(nei_tokens)
                 tokens = self._augment_tokens(all_tokens)
                 vec = self._w2v_vector_from_tokens(tokens)
                 vec = vec / (np.linalg.norm(vec) + 1e-12)
@@ -555,6 +621,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 self._prop_cache[key] = vec
                 X[i] = vec
         return X
+
+    def get_malicious_top_tokens(self, k: int = 50):
+        """返回收集到的恶意 token 的 Top-K 高频列表 [(token, count), ...]。"""
+        return self.malicious_token_counter.most_common(int(k))
 
     def _igraph_edges_to_edge_index(self, g) -> torch.Tensor:
         edges = g.get_edgelist()
