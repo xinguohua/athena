@@ -97,7 +97,6 @@ class TemporalPerLayer(nn.Module):
 
     约定：每层的通道维度不变（d_l -> d_l），便于直接替换或融合。
     """
-
     def __init__(self, layer_dims: List[int]):
         super().__init__()
         self.layer_dims = [int(d) for d in layer_dims]
@@ -116,7 +115,6 @@ class TemporalPerLayer(nn.Module):
             H_list.append(Hl)
         return H_list
 
-    # ---- 集中化时序状态管理接口 ----
     def reset(self):
         self.tables = [dict() for _ in self.layer_dims]
 
@@ -133,8 +131,37 @@ class TemporalPerLayer(nn.Module):
             except Exception:
                 out.append(torch.zeros((len(node_ids), int(d)), dtype=torch.float32, device=device))
                 continue
-            H_aligned = align_prev_state(H_prev=H_prev.to(device), curr_ids=node_ids, prev_ids=prev_ids, dim=int(d), device=device)
+            H_aligned = self.align_prev_state(H_prev=H_prev.to(device), curr_ids=node_ids, prev_ids=prev_ids, dim=int(d), device=device)
             out.append(H_aligned)
+        return out
+
+    def align_prev_state(self,
+                         H_prev: Optional[torch.Tensor],
+                         curr_ids: List[str],
+                         prev_ids: Optional[List[str]],
+                         dim: int,
+                         device) -> torch.Tensor:
+        """将上一时刻的隐状态按当前节点顺序对齐；缺失节点填 0。"""
+        if H_prev is None or not prev_ids:
+            return torch.zeros((len(curr_ids), dim), device=device, dtype=torch.float32)
+
+        id2pos_prev = {nid: i for i, nid in enumerate(prev_ids)}
+        N_curr = len(curr_ids)
+        out = torch.zeros((N_curr, dim), device=device, dtype=H_prev.dtype)
+        idx_prev = []
+        idx_curr = []
+
+        for i, nid in enumerate(curr_ids):
+            j = id2pos_prev.get(nid, -1)
+            if j >= 0:
+                idx_curr.append(i)
+                idx_prev.append(j)
+
+        if idx_curr:
+            ic = torch.tensor(idx_curr, device=device, dtype=torch.long)
+            ip = torch.tensor(idx_prev, device=device, dtype=torch.long)
+            out[ic] = H_prev[ip]
+
         return out
 
     def commit(self, node_ids: List[str], H_list: List[torch.Tensor]):
@@ -143,36 +170,6 @@ class TemporalPerLayer(nn.Module):
             Hl = H_list[li]
             for i, nid in enumerate(node_ids):
                 table[nid] = Hl[i].detach().to('cpu').contiguous()
-
-
-def align_prev_state(H_prev: Optional[torch.Tensor], curr_ids: List[str], prev_ids: Optional[List[str]], dim: int, device) -> torch.Tensor:
-    """将上一时刻的隐状态按当前节点顺序对齐；缺失节点填 0。
-
-    H_prev: [N_prev, D] 或 None
-    curr_ids/prev_ids: 节点全局 ID（如 name），用于匹配
-    返回: H_aligned: [N_curr, D]
-    """
-    if H_prev is None or not prev_ids:
-        return torch.zeros((len(curr_ids), dim), device=device, dtype=torch.float32)
-    id2pos_prev = {nid: i for i, nid in enumerate(prev_ids)}
-    N_curr = len(curr_ids)
-    out = torch.zeros((N_curr, dim), device=device, dtype=H_prev.dtype)
-    idx_prev = []
-    idx_curr = []
-    for i, nid in enumerate(curr_ids):
-        j = id2pos_prev.get(nid, -1)
-        if j >= 0:
-            idx_curr.append(i)
-            idx_prev.append(j)
-    if idx_curr:
-        ic = torch.tensor(idx_curr, device=device, dtype=torch.long)
-        ip = torch.tensor(idx_prev, device=device, dtype=torch.long)
-        out[ic] = H_prev[ip]
-    return out
-
-
-# ---------------- 时序状态管理器（集中化） ----------------
- 
 
 
 # ---------------- GCC Embedder Dev ----------------
