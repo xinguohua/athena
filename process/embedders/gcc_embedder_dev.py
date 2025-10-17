@@ -312,8 +312,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
             avg = epoch_loss / max(1, steps_done)
             print(f"[GCC-Dev] Epoch {epoch + 1}/{self.num_epochs} DONE | AvgLoss={avg:.6f}")
 
-        # 训练结束后生成节点嵌入并保存模型
-        self._generate_snapshot_node_embeddings()
+        # 训练结束后生成节点嵌入（静态路径，若需时序请调用 use_temporal=True）并保存模型
+        self.generate_node_embeddings(use_temporal=False)
         self.save_model()
 
     def _train_one_snapshot(self, g) -> float:
@@ -811,8 +811,16 @@ class GCCEmbedderDev(GraphEmbedderBase):
         else:
             return loss_vec.mean()
 
-    def _generate_snapshot_node_embeddings(self):
+    def generate_node_embeddings(self, use_temporal: bool = False):
+        """生成节点嵌入（单一实现，use_temporal 一个开关）。
+        - use_temporal=False: 仅 encoder（静态）
+        - use_temporal=True: 重置时序记忆后，按时间顺序 fetch→encoder(return_all=True)→temporal→commit（干净视角）
+        结果写入 self.snapshot_node_embeddings
+        """
         self.encoder.eval()
+        if use_temporal:
+            # 统一语义：推理前一律重置，确保可复现与独立性
+            self.temporal.reset()
         self.snapshot_node_embeddings.clear()
         with torch.no_grad():
             for g in self.snapshots:
@@ -822,10 +830,21 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 x_np = self._build_node_features(g)
                 eidx = self._igraph_edges_to_edge_index(g)
                 x = torch.from_numpy(x_np).to(self.device)
-                h = self.encoder(x, eidx)
+                curr_ids = [g.vs[i]['name'] for i in range(g.vcount())]
+                if use_temporal:
+                    H_prev = self.temporal.fetch(curr_ids, device=self.device)
+                    Z_list = self.encoder(x, eidx, return_all=True)
+                    H_list = self.temporal(Z_list, H_prev)
+                    # commit 干净视角的状态
+                    self.temporal.commit(curr_ids, [h.detach() for h in H_list])
+                    h_last = H_list[-1]
+                else:
+                    h_last = self.encoder(x, eidx)
                 emb_dict: Dict[str, np.ndarray] = {}
                 for i in range(g.vcount()):
                     nid = g.vs[i]['name']
-                    emb_dict[nid] = h[i].detach().cpu().numpy().astype(np.float32)
+                    emb_dict[nid] = h_last[i].detach().cpu().numpy().astype(np.float32)
                 self.snapshot_node_embeddings.append(emb_dict)
+        mode = 'temporal' if use_temporal else 'static'
+        print(f"[GCC-Dev] Generated {mode} node embeddings: {len(self.snapshot_node_embeddings)} snapshots")
 
