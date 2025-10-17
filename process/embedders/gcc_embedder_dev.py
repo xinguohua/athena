@@ -60,22 +60,85 @@ class GINConv(nn.Module):
 
 
 class GINEncoder(nn.Module):
+    """GIN 编码器，支持按层吐出中间表示。
+
+    - 默认行为：返回最后一层输出
+    - return_all=True：返回 [h1, h2, ..., hL]
+    """
+
     def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, num_layers: int = 3, dropout: float = 0.0):
         super().__init__()
         self.layers = nn.ModuleList()
-        dims = [in_dim] + [hidden_dim] * (num_layers - 1) + [out_dim]
-        for i in range(num_layers):
+        self.num_layers = int(num_layers)
+        self.hidden_dim = int(hidden_dim)
+        self.out_dim = int(out_dim)
+        # 逐层通道维度（用于外部按层时序单元的维度对齐）
+        self.layer_dims = [hidden_dim] * (self.num_layers - 1) + [out_dim]
+        dims = [in_dim] + [hidden_dim] * (self.num_layers - 1) + [out_dim]
+        for i in range(self.num_layers):
             self.layers.append(GINConv(dims[i], dims[i + 1], eps=0.0, mlp_hidden=hidden_dim, dropout=dropout))
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, return_all: bool = False):
         h = x
+        outs = []
         for i, layer in enumerate(self.layers):
             h = layer(h, edge_index)
             if i != len(self.layers) - 1:
                 h = F.relu(h)
                 h = self.dropout(h)
-        return h
+            outs.append(h)
+        return outs if return_all else outs[-1]
+
+
+# ---------------- 分层时序递推（GRUCell） ----------------
+class TemporalPerLayer(nn.Module):
+    """为每一层增加一个 GRUCell 进行时间递推：H_l,t = GRU(Z_l,t, H_l,t-1)
+
+    约定：每层的通道维度不变（d_l -> d_l），便于直接替换或融合。
+    """
+
+    def __init__(self, layer_dims: List[int]):
+        super().__init__()
+        self.layer_dims = [int(d) for d in layer_dims]
+        self.grus = nn.ModuleList([nn.GRUCell(d, d) for d in self.layer_dims])
+
+    def forward(self, Z_list: List[torch.Tensor], H_prev_list: Optional[List[Optional[torch.Tensor]]] = None) -> List[torch.Tensor]:
+        H_list: List[torch.Tensor] = []
+        for li, gru in enumerate(self.grus):
+            Zl = Z_list[li]
+            Hl_prev = None if (H_prev_list is None or li >= len(H_prev_list)) else H_prev_list[li]
+            if Hl_prev is None or Hl_prev.shape != Zl.shape:
+                Hl_prev = torch.zeros_like(Zl)
+            Hl = gru(Zl, Hl_prev)
+            H_list.append(Hl)
+        return H_list
+
+
+def align_prev_state(H_prev: Optional[torch.Tensor], curr_ids: List[str], prev_ids: Optional[List[str]], dim: int, device) -> torch.Tensor:
+    """将上一时刻的隐状态按当前节点顺序对齐；缺失节点填 0。
+
+    H_prev: [N_prev, D] 或 None
+    curr_ids/prev_ids: 节点全局 ID（如 name），用于匹配
+    返回: H_aligned: [N_curr, D]
+    """
+    if H_prev is None or not prev_ids:
+        return torch.zeros((len(curr_ids), dim), device=device, dtype=torch.float32)
+    id2pos_prev = {nid: i for i, nid in enumerate(prev_ids)}
+    N_curr = len(curr_ids)
+    out = torch.zeros((N_curr, dim), device=device, dtype=H_prev.dtype)
+    idx_prev = []
+    idx_curr = []
+    for i, nid in enumerate(curr_ids):
+        j = id2pos_prev.get(nid, -1)
+        if j >= 0:
+            idx_curr.append(i)
+            idx_prev.append(j)
+    if idx_curr:
+        ic = torch.tensor(idx_curr, device=device, dtype=torch.long)
+        ip = torch.tensor(idx_prev, device=device, dtype=torch.long)
+        out[ic] = H_prev[ip]
+    return out
 
 
 # ---------------- GCC Embedder Dev ----------------
@@ -169,10 +232,20 @@ class GCCEmbedderDev(GraphEmbedderBase):
             nn.ReLU(),
             nn.Linear(self.enc_out_dim, self.enc_out_dim),
         ).to(self.device)
-        self.optimizer = torch.optim.Adam(list(self.encoder.parameters()) + list(self.proj_head.parameters()), lr=self.lr, weight_decay=1e-4)
+        # 分层时序单元（训练期使用）
+        self.temporal = TemporalPerLayer(self.encoder.layer_dims).to(self.device)
+        # 优化器包含 encoder、projection head、temporal
+        self.optimizer = torch.optim.Adam(
+            list(self.encoder.parameters()) + list(self.proj_head.parameters()) + list(self.temporal.parameters()),
+            lr=self.lr,
+            weight_decay=1e-4,
+        )
 
         # 训练后缓存：每快照一个 {node_id: vec}
         self.snapshot_node_embeddings: List[Dict[str, np.ndarray]] = []
+
+        # 时序状态存储（按层）：List[Dict[node_id -> Tensor[D]]]，常驻 CPU，按需搬到 device
+        self._temporal_state: List[Dict[str, torch.Tensor]] = [dict() for _ in range(len(self.encoder.layer_dims))]
 
     # ---------- 公共 API ----------
     def train(self):
@@ -184,82 +257,148 @@ class GCCEmbedderDev(GraphEmbedderBase):
         if self.use_malicious_negatives:
             self._precollect_malicious_tokens()
         print(f"[GCC-Dev] Pretrain on {len(self.train_snapshot_indices)}/{len(self.snapshots)} snapshots | batch={self.batch_size} | tau={self.temperature}")
+        # 训练开始前重置时序状态（每层：node_id -> hidden）
+        self._reset_temporal_state()
 
         for epoch in range(self.num_epochs):
+            # 每个 epoch 从干净的时序状态开始，避免跨 epoch 漂移
+            self._reset_temporal_state()
             epoch_loss = 0.0
-            for _ in range(self.steps_per_epoch):
-                batch_graphs: List[Tuple[torch.Tensor, torch.Tensor]] = []  # (x, edge_index)
-                sample_weights: List[float] = []  # 与 batch_graphs 一一对应（注意每个子图视角各占一行）
-                # 采样 batch 个子图实例
-                for _b in range(self.batch_size):
-                    sidx = random.choice(self.train_snapshot_indices)
-                    g = self.snapshots[sidx]
-                    if g is None or g.vcount() == 0:
-                        continue
-                    center = random.randrange(0, g.vcount())
-                    sub = self._ego_subgraph(g, center, r=self.r_hop, max_nodes=self.ego_max_nodes)
-                    if sub.vcount() == 0:
-                        continue
-                    x_np = self._build_node_features(sub)
-                    edge_index = self._igraph_edges_to_edge_index(sub)
-                    x = torch.from_numpy(x_np).to(self.device)
-                    # 两视角增强（标准正样本对）
-                    e1 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
-                    x1 = self._augment_features(x, mask_p=self.feat_mask_p)
-                    e2 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
-                    x2 = self._augment_features(x, mask_p=self.feat_mask_p)
-                    batch_graphs.append((x1, e1))
-                    batch_graphs.append((x2, e2))
-                    # 可选：基于恶意语料生成一对“腐化视角”，作为额外负样本来源
-                    if self.use_malicious_negatives and len(self.malicious_token_counter) > 0:
-                        x_neg_np = self._corrupt_features_with_malicious(sub, x_np, ratio=self.mal_neg_ratio, token_len=self.mal_neg_token_len)
-                        x_neg = torch.from_numpy(x_neg_np).to(self.device)
-                        e3 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
-                        x3 = self._augment_features(x_neg, mask_p=self.feat_mask_p)
-                        e4 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
-                        x4 = self._augment_features(x_neg, mask_p=self.feat_mask_p)
-                        batch_graphs.append((x3, e3))
-                        batch_graphs.append((x4, e4))
-                    # 基于“节点异常=节点频率”的子图权重：取中心节点的频率作为异常度
-                    try:
-                        if 'frequency' in g.vs.attributes():
-                            freq_val = float(g.vs[center]['frequency'])
-                        else:
-                            freq_val = 1.0
-                    except Exception:
-                        freq_val = 1.0
-                    if not np.isfinite(freq_val) or freq_val < 0:
-                        freq_val = 0.0
-                    w = 1.0 + max(0.0, self.anomaly_alpha) * float(freq_val)
-                    sample_weights.append(w)
-                    sample_weights.append(w)
-
-                if len(batch_graphs) < 2:
+            # 将 steps 平均分配到各个时间片，按时间顺序滚动以避免时间泄露
+            steps_per_snapshot = max(1, int(self.steps_per_epoch // max(1, len(self.train_snapshot_indices))))
+            for sidx in sorted(self.train_snapshot_indices):
+                g = self.snapshots[sidx]
+                if g is None or g.vcount() == 0:
                     continue
+                for _step in range(steps_per_snapshot):
+                    Z_chunks: List[torch.Tensor] = []
+                    sample_weights: List[float] = []
+                    commit_payloads: List[Tuple[List[str], List[torch.Tensor]]] = []
+                    self.optimizer.zero_grad()
+                    # 采样 batch 个子图实例（来自同一时间片）
+                    for _b in range(self.batch_size):
+                        center = random.randrange(0, g.vcount())
+                        sub = self._ego_subgraph(g, center, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                        if sub.vcount() == 0:
+                            continue
+                        x_np = self._build_node_features(sub)
+                        edge_index = self._igraph_edges_to_edge_index(sub)
+                        x = torch.from_numpy(x_np).to(self.device)
+                        curr_ids = [sub.vs[i]['name'] for i in range(sub.vcount())]
+                        # 取上一时刻的按层隐状态（对齐 curr_ids 顺序）
+                        H_prev_aligned = self._fetch_prev_state_for_node_ids(curr_ids)
 
-                Z = []
-                self.optimizer.zero_grad()
-                for x_i, e_i in batch_graphs:
-                    h_i = self.encoder(x_i, e_i)
-                    g_i = h_i.mean(dim=0, keepdim=True)  # 简单平均池化
-                    z_i = self.proj_head(g_i)
-                    Z.append(F.normalize(z_i, dim=-1))
-                Z = torch.cat(Z, dim=0)  # [2N, D]
+                        # 两视角增强（标准正样本对）
+                        e1 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
+                        x1 = self._augment_features(x, mask_p=self.feat_mask_p)
+                        e2 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
+                        x2 = self._augment_features(x, mask_p=self.feat_mask_p)
 
-                w_tensor = None
-                if len(sample_weights) == Z.size(0):
-                    w_tensor = torch.tensor(sample_weights, dtype=torch.float32, device=Z.device)
-                loss = self._nt_xent_loss(Z, temperature=self.temperature, sample_weights=w_tensor)
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(list(self.encoder.parameters()) + list(self.proj_head.parameters()), max_norm=5.0)
-                self.optimizer.step()
-                epoch_loss += float(loss.detach().cpu().item())
+                        # 视角1：编码→时序递推→读出→投影
+                        Z_list_1 = self.encoder(x1, e1, return_all=True)
+                        H_list_1 = self.temporal(Z_list_1, H_prev_aligned)
+                        H_last_1 = H_list_1[-1]
+                        g_1 = H_last_1.mean(dim=0, keepdim=True)
+                        z_1 = self.proj_head(g_1)
+                        Z_chunks.append(F.normalize(z_1, dim=-1))
+
+                        # 视角2
+                        Z_list_2 = self.encoder(x2, e2, return_all=True)
+                        H_list_2 = self.temporal(Z_list_2, H_prev_aligned)
+                        H_last_2 = H_list_2[-1]
+                        g_2 = H_last_2.mean(dim=0, keepdim=True)
+                        z_2 = self.proj_head(g_2)
+                        Z_chunks.append(F.normalize(z_2, dim=-1))
+
+                        # 可选：基于恶意语料的腐化视角（作为额外负样本来源）
+                        extra_views = 0
+                        if self.use_malicious_negatives and len(self.malicious_token_counter) > 0:
+                            x_neg_np = self._corrupt_features_with_malicious(sub, x_np, ratio=self.mal_neg_ratio, token_len=self.mal_neg_token_len)
+                            x_neg = torch.from_numpy(x_neg_np).to(self.device)
+                            e3 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
+                            x3 = self._augment_features(x_neg, mask_p=self.feat_mask_p)
+                            e4 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
+                            x4 = self._augment_features(x_neg, mask_p=self.feat_mask_p)
+                            Z_list_3 = self.encoder(x3, e3, return_all=True)
+                            H_list_3 = self.temporal(Z_list_3, H_prev_aligned)
+                            z3 = self.proj_head(H_list_3[-1].mean(dim=0, keepdim=True))
+                            Z_chunks.append(F.normalize(z3, dim=-1))
+                            Z_list_4 = self.encoder(x4, e4, return_all=True)
+                            H_list_4 = self.temporal(Z_list_4, H_prev_aligned)
+                            z4 = self.proj_head(H_list_4[-1].mean(dim=0, keepdim=True))
+                            Z_chunks.append(F.normalize(z4, dim=-1))
+                            extra_views = 2
+
+                        # 子图权重（中心节点频率）
+                        try:
+                            if 'frequency' in g.vs.attributes():
+                                freq_val = float(g.vs[center]['frequency'])
+                            else:
+                                freq_val = 1.0
+                        except Exception:
+                            freq_val = 1.0
+                        if not np.isfinite(freq_val) or freq_val < 0:
+                            freq_val = 0.0
+                        w = 1.0 + max(0.0, self.anomaly_alpha) * float(freq_val)
+                        # 与视角数量一致的权重
+                        for _ in range(2 + extra_views):
+                            sample_weights.append(w)
+
+                        # 提交用的 H_list 取“未腐化”的视角1
+                        commit_payloads.append((curr_ids, [h.detach().cpu() for h in H_list_1]))
+
+                    if len(Z_chunks) < 2:
+                        continue
+
+                    Z = torch.cat(Z_chunks, dim=0)
+                    w_tensor = None
+                    if len(sample_weights) == Z.size(0):
+                        w_tensor = torch.tensor(sample_weights, dtype=torch.float32, device=Z.device)
+                    loss = self._nt_xent_loss(Z, temperature=self.temperature, sample_weights=w_tensor)
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(
+                        list(self.encoder.parameters()) + list(self.proj_head.parameters()) + list(self.temporal.parameters()),
+                        max_norm=5.0,
+                    )
+                    self.optimizer.step()
+                    epoch_loss += float(loss.detach().cpu().item())
+
+                    # 提交本 batch 影响到的节点隐状态
+                    for node_ids, H_list_cpu in commit_payloads:
+                        self._commit_temporal_state(node_ids, H_list_cpu)
 
             avg = epoch_loss / max(1, self.steps_per_epoch)
             print(f"[GCC-Dev] Epoch {epoch+1}/{self.num_epochs} | Loss={avg:.6f}")
 
         self._generate_snapshot_node_embeddings()
         self.save_model()
+
+    # ---------- 时序状态管理 ----------
+    def _reset_temporal_state(self):
+        self._temporal_state = [dict() for _ in range(len(self.encoder.layer_dims))]
+
+    def _fetch_prev_state_for_node_ids(self, node_ids: List[str]) -> List[torch.Tensor]:
+        """返回按层对齐的上一时刻隐状态列表，每层 [N, d_l]，在 self.device 上。"""
+        N = len(node_ids)
+        out: List[torch.Tensor] = []
+        for li, d in enumerate(self.encoder.layer_dims):
+            H_l = torch.zeros((N, int(d)), dtype=torch.float32)
+            table = self._temporal_state[li]
+            for i, nid in enumerate(node_ids):
+                val = table.get(nid)
+                if val is not None:
+                    if val.numel() == int(d):
+                        H_l[i] = val.to(dtype=torch.float32)
+            out.append(H_l.to(self.device))
+        return out
+
+    def _commit_temporal_state(self, node_ids: List[str], H_list_cpu: List[torch.Tensor]):
+        """将一组节点的每层隐状态写入内存，常驻 CPU。H_list_cpu 每层 [N,d]。"""
+        for li in range(min(len(self._temporal_state), len(H_list_cpu))):
+            table = self._temporal_state[li]
+            Hl = H_list_cpu[li]
+            for i, nid in enumerate(node_ids):
+                table[nid] = Hl[i].detach().to('cpu').contiguous()
 
     # ---------- 恶意 tokens 支持（用于负样本） ----------
     def _precollect_malicious_tokens(self):
@@ -399,6 +538,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             },
             'encoder': self.encoder.state_dict(),
             'proj_head': self.proj_head.state_dict(),
+            'temporal': self.temporal.state_dict(),
             'snapshot_node_embeddings': self.snapshot_node_embeddings,
         }
         torch.save(state, path)
@@ -423,6 +563,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
         inst = cls(snapshot_sequence, **params)
         inst.encoder.load_state_dict(state['encoder'])
         inst.proj_head.load_state_dict(state['proj_head'])
+        if 'temporal' in state:
+            try:
+                inst.temporal.load_state_dict(state['temporal'])
+            except Exception as e:
+                print(f"[GCC-Dev] Warning: 加载 temporal 失败：{e}")
         inst.snapshot_node_embeddings = state.get('snapshot_node_embeddings', [])
         print("[GCC-Dev] Model loaded successfully")
         return inst
@@ -528,7 +673,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
         if self._w2v_model is not None:
             return
         try:
-            from gensim.models import Word2Vec
+            import importlib
+            _w2v_mod = importlib.import_module('gensim.models')
+            Word2Vec = getattr(_w2v_mod, 'Word2Vec')
         except Exception:
             raise RuntimeError("[GCC-Dev] 需要 gensim 才能使用 Word2Vec 特征，请先安装 gensim。")
         # 预训练优先
@@ -548,7 +695,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         corpus = self._collect_w2v_corpus()
         if not corpus:
             raise RuntimeError("[GCC-Dev] W2V 语料为空，无法构建 Word2Vec 特征。")
-        from gensim.models import Word2Vec
         print(f"[GCC-Dev] 正在训练word2vec | 语料={len(corpus)} | dim={int(self.prop_feat_dim)} | window={int(self.w2v_window)} | min_count={int(self.w2v_min_count)} | sg={int(self.w2v_sg)} | epochs={int(self.w2v_epochs)}")
         self._w2v_model = Word2Vec(
             sentences=corpus,
