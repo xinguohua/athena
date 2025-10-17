@@ -102,6 +102,8 @@ class TemporalPerLayer(nn.Module):
         super().__init__()
         self.layer_dims = [int(d) for d in layer_dims]
         self.grus = nn.ModuleList([nn.GRUCell(d, d) for d in self.layer_dims])
+        # 每层的节点隐藏状态表（CPU 常驻）：List[Dict[node_id -> Tensor[d_l]]]
+        self.tables: List[Dict[str, torch.Tensor]] = [dict() for _ in self.layer_dims]
 
     def forward(self, Z_list: List[torch.Tensor], H_prev_list: Optional[List[Optional[torch.Tensor]]] = None) -> List[torch.Tensor]:
         H_list: List[torch.Tensor] = []
@@ -113,6 +115,34 @@ class TemporalPerLayer(nn.Module):
             Hl = gru(Zl, Hl_prev)
             H_list.append(Hl)
         return H_list
+
+    # ---- 集中化时序状态管理接口 ----
+    def reset(self):
+        self.tables = [dict() for _ in self.layer_dims]
+
+    def fetch(self, node_ids: List[str], device) -> List[torch.Tensor]:
+        out: List[torch.Tensor] = []
+        for li, d in enumerate(self.layer_dims):
+            table = self.tables[li]
+            if not table:
+                out.append(torch.zeros((len(node_ids), int(d)), dtype=torch.float32, device=device))
+                continue
+            prev_ids = list(table.keys())
+            try:
+                H_prev = torch.stack([table[nid] for nid in prev_ids], dim=0).to(dtype=torch.float32)
+            except Exception:
+                out.append(torch.zeros((len(node_ids), int(d)), dtype=torch.float32, device=device))
+                continue
+            H_aligned = align_prev_state(H_prev=H_prev.to(device), curr_ids=node_ids, prev_ids=prev_ids, dim=int(d), device=device)
+            out.append(H_aligned)
+        return out
+
+    def commit(self, node_ids: List[str], H_list: List[torch.Tensor]):
+        for li in range(min(len(self.tables), len(H_list))):
+            table = self.tables[li]
+            Hl = H_list[li]
+            for i, nid in enumerate(node_ids):
+                table[nid] = Hl[i].detach().to('cpu').contiguous()
 
 
 def align_prev_state(H_prev: Optional[torch.Tensor], curr_ids: List[str], prev_ids: Optional[List[str]], dim: int, device) -> torch.Tensor:
@@ -139,6 +169,10 @@ def align_prev_state(H_prev: Optional[torch.Tensor], curr_ids: List[str], prev_i
         ip = torch.tensor(idx_prev, device=device, dtype=torch.long)
         out[ic] = H_prev[ip]
     return out
+
+
+# ---------------- 时序状态管理器（集中化） ----------------
+ 
 
 
 # ---------------- GCC Embedder Dev ----------------
@@ -232,7 +266,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             nn.ReLU(),
             nn.Linear(self.enc_out_dim, self.enc_out_dim),
         ).to(self.device)
-        # 分层时序单元（训练期使用）
+        # 分层时序单元（训练期使用，内置状态管理）
         self.temporal = TemporalPerLayer(self.encoder.layer_dims).to(self.device)
         # 优化器包含 encoder、projection head、temporal
         self.optimizer = torch.optim.Adam(
@@ -244,8 +278,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 训练后缓存：每快照一个 {node_id: vec}
         self.snapshot_node_embeddings: List[Dict[str, np.ndarray]] = []
 
-        # 时序状态存储（按层）：List[Dict[node_id -> Tensor[D]]]，常驻 CPU，按需搬到 device
-        self._temporal_state: List[Dict[str, torch.Tensor]] = [dict() for _ in range(len(self.encoder.layer_dims))]
+        # 初始化时序状态
+        self.temporal.reset()
 
     # ---------- 公共 API ----------
     def train(self):
@@ -257,12 +291,12 @@ class GCCEmbedderDev(GraphEmbedderBase):
         if self.use_malicious_negatives:
             self._precollect_malicious_tokens()
         print(f"[GCC-Dev] Pretrain on {len(self.train_snapshot_indices)}/{len(self.snapshots)} snapshots | batch={self.batch_size} | tau={self.temperature}")
-        # 训练开始前重置时序状态（每层：node_id -> hidden）
-        self._reset_temporal_state()
+        # 训练开始前重置时序状态
+        self.temporal.reset()
 
         for epoch in range(self.num_epochs):
             # 每个 epoch 从干净的时序状态开始，避免跨 epoch 漂移
-            self._reset_temporal_state()
+            self.temporal.reset()
             epoch_loss = 0.0
             # 将 steps 平均分配到各个时间片，按时间顺序滚动以避免时间泄露
             steps_per_snapshot = max(1, int(self.steps_per_epoch // max(1, len(self.train_snapshot_indices))))
@@ -286,7 +320,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         x = torch.from_numpy(x_np).to(self.device)
                         curr_ids = [sub.vs[i]['name'] for i in range(sub.vcount())]
                         # 取上一时刻的按层隐状态（对齐 curr_ids 顺序）
-                        H_prev_aligned = self._fetch_prev_state_for_node_ids(curr_ids)
+                        H_prev_aligned = self.temporal.fetch(curr_ids, device=self.device)
 
                         # 两视角增强（标准正样本对）
                         e1 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
@@ -345,7 +379,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                             sample_weights.append(w)
 
                         # 提交用的 H_list 取“未腐化”的视角1
-                        commit_payloads.append((curr_ids, [h.detach().cpu() for h in H_list_1]))
+                        commit_payloads.append((curr_ids, [h.detach() for h in H_list_1]))
 
                     if len(Z_chunks) < 2:
                         continue
@@ -364,8 +398,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     epoch_loss += float(loss.detach().cpu().item())
 
                     # 提交本 batch 影响到的节点隐状态
-                    for node_ids, H_list_cpu in commit_payloads:
-                        self._commit_temporal_state(node_ids, H_list_cpu)
+                    for node_ids, H_list_t in commit_payloads:
+                        self.temporal.commit(node_ids, H_list_t)
 
             avg = epoch_loss / max(1, self.steps_per_epoch)
             print(f"[GCC-Dev] Epoch {epoch+1}/{self.num_epochs} | Loss={avg:.6f}")
@@ -373,32 +407,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self._generate_snapshot_node_embeddings()
         self.save_model()
 
-    # ---------- 时序状态管理 ----------
-    def _reset_temporal_state(self):
-        self._temporal_state = [dict() for _ in range(len(self.encoder.layer_dims))]
-
-    def _fetch_prev_state_for_node_ids(self, node_ids: List[str]) -> List[torch.Tensor]:
-        """返回按层对齐的上一时刻隐状态列表，每层 [N, d_l]，在 self.device 上。"""
-        N = len(node_ids)
-        out: List[torch.Tensor] = []
-        for li, d in enumerate(self.encoder.layer_dims):
-            H_l = torch.zeros((N, int(d)), dtype=torch.float32)
-            table = self._temporal_state[li]
-            for i, nid in enumerate(node_ids):
-                val = table.get(nid)
-                if val is not None:
-                    if val.numel() == int(d):
-                        H_l[i] = val.to(dtype=torch.float32)
-            out.append(H_l.to(self.device))
-        return out
-
-    def _commit_temporal_state(self, node_ids: List[str], H_list_cpu: List[torch.Tensor]):
-        """将一组节点的每层隐状态写入内存，常驻 CPU。H_list_cpu 每层 [N,d]。"""
-        for li in range(min(len(self._temporal_state), len(H_list_cpu))):
-            table = self._temporal_state[li]
-            Hl = H_list_cpu[li]
-            for i, nid in enumerate(node_ids):
-                table[nid] = Hl[i].detach().to('cpu').contiguous()
 
     # ---------- 恶意 tokens 支持（用于负样本） ----------
     def _precollect_malicious_tokens(self):
