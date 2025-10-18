@@ -265,6 +265,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         num_epochs: int = 30,
         steps_per_epoch: int = 200,
         batch_size: int = 64,
+        # batch_size: int = 10,
         lr: float = 1e-3,
         # 对比学习
         temperature: float = 0.2,
