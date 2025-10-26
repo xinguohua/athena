@@ -330,8 +330,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         sample_weights: List[float] = []
         commit_payloads: List[Tuple[List[str], List[torch.Tensor]]] = []
         # 统一对比损失需要的缓存
-        row_owner: List[int] = []              # 每一行向量属于哪个样本（-1 表示纯负样本，不参与正对）
-        sample_rows: List[List[int]] = []      # 每个样本对应的行索引列表（通常每样本2行：两视角）
+        sample_rows: List[List[int]] = []      # 每个样本的“主视角”行索引
+        neg_rows: List[List[int]] = []         # 每个样本的“恶意负样本”行索引（仅作为该样本的负对）
         sample_fps: List[np.ndarray] = []      # 每个样本一个领域指纹（用于语义相似度）
 
         self.optimizer.zero_grad()
@@ -360,9 +360,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
             # 记录行归属（单视角属于该“样本”）
             sample_id = len(sample_rows)
             sample_rows.append([])
+            neg_rows.append([])
             # 将刚刚追加的该行标记为该样本
             row_i = len(Z_chunks) - 1
-            row_owner.append(sample_id)
             sample_rows[sample_id].append(row_i)
 
             # 生成样本的领域指纹
@@ -387,8 +387,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     H_list_neg = self.temporal(Z_list_neg, H_prev_aligned)
                     z_neg = self.proj_head(H_list_neg[-1].mean(dim=0, keepdim=True))
                     Z_chunks.append(F.normalize(z_neg, dim=-1))
-                    # 这些额外视角作为“负样本”，不参与正对
-                    row_owner.append(-1)
+                    # 这些额外视角作为“负样本”，不参与正对（仅针对当前样本 sample_id）
+                    row_j = len(Z_chunks) - 1
+                    neg_rows[sample_id].append(row_j)
                     extra_views += 1
 
             # 样本权重
@@ -431,9 +432,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
             denom = (a1 + a1.t() - inter).clamp_min(1e-6)
             S = inter / denom
             S.fill_diagonal_(0.0)
-            # 为每个锚 i（属于样本 s），把 λ·S[s,t] 平均分给 t 的各视角 j
-            # 负样本行（owner=-1）不参与正对
-            # 先反查每行的样本 id
+            # 为每个锚 i（属于样本 s），将 S[s,t] 直接加到 t 的主视角行上（主视角只有1行，无需分摊）
+            # 恶意负样本不参与正对
             for s in range(B):
                 Rs = sample_rows[s]
                 if not Rs:
@@ -447,7 +447,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     Rt = sample_rows[t]
                     if not Rt:
                         continue
-                    add_each = st / float(len(Rt))
+                    # 主视角每个样本仅一行，无需分摊
+                    add_each = st
                     for i in Rs:
                         # i 一定是有效行（属于样本 s）
                         for j in Rt:
@@ -485,9 +486,29 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         for j in Rt:
                             denom_w[i, j] = denom_w[i, j] * scale
 
+        # 仅让每个样本的锚行看到“自己”的恶意负样本：
+        # 构造分母掩码，将其他样本的恶意负样本对该锚行屏蔽掉
+        denom_mask = torch.ones((N, N), dtype=torch.float32, device=device)
+        if B >= 1:
+            for s in range(B):
+                Rs = sample_rows[s]
+                if not Rs:
+                    continue
+                # 收集“其他样本”的所有恶意负样本行
+                neg_others: List[int] = []
+                for t in range(B):
+                    if t == s:
+                        continue
+                    neg_others.extend(neg_rows[t])
+                if not neg_others:
+                    continue
+                j_idx = torch.tensor(neg_others, device=device, dtype=torch.long)
+                for i in Rs:
+                    denom_mask[i, j_idx] = 0.0
+
         # 统一损失：-log( 分子/分母 )
         numerator = (W * exp_sim).sum(dim=1)
-        denominator = (denom_w * exp_sim).sum(dim=1).clamp_min(1e-12)
+        denominator = (denom_mask * denom_w * exp_sim).sum(dim=1).clamp_min(1e-12)
         valid = numerator > 0.0
         if valid.any():
             loss_vec = -torch.log((numerator.clamp_min(1e-12)) / denominator)
