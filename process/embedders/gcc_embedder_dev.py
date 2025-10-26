@@ -336,7 +336,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
         self.optimizer.zero_grad()
 
-        # 遍历所有节点作为中心（不再随机采样）
+        # 遍历所有节点作为中心
         for center in range(g.vcount()):
             sub = self._ego_subgraph(g, center, r=self.r_hop, max_nodes=self.ego_max_nodes)
             if sub.vcount() == 0:
@@ -418,7 +418,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         sim = sim.masked_fill(eye, -1e9)
         exp_sim = torch.exp(sim)
 
-    # 权重矩阵 W：语义正对=S（分摊到目标样本的各视角）
+        # 权重矩阵 W：语义正对=S（分摊到目标样本的各视角）
         W = torch.zeros((N, N), dtype=torch.float32, device=device)
 
         # 语义正对：按 Tanimoto 相似度加权
