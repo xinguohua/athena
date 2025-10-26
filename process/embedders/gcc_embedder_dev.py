@@ -46,67 +46,14 @@ class GINConv(nn.Module):
         super().__init__()
         self.eps = nn.Parameter(torch.tensor(float(eps)))
         self.mlp = MLP(in_dim, mlp_hidden, out_dim, num_layers=2, dropout=dropout)
-        # 历史感知 gating：将消息投影到与历史同维度以计算相似度
-        self._gate_out_dim = int(out_dim)
-        self.msg_proj_for_gate = nn.Linear(in_dim, out_dim, bias=False)
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        edge_index: torch.Tensor,
-        H_prev: Optional[torch.Tensor] = None,
-        gate_alpha: float = 1.0,
-        gate_min: float = 0.5,
-        gate_max: float = 1.5,
-        gate_detach: bool = True,
-    ) -> torch.Tensor:
-        """历史感知的 GIN 聚合。
-
-        - 若提供 H_prev（对齐到当前节点顺序，形状 [N, out_dim]），则按边级别对消息缩放：
-          s(u->v) = clamp(1 + alpha * (1 - cos(Proj(x_u), H_prev_v)), [gate_min, gate_max])
-        - 未提供则退化为普通的求和聚合。
-        """
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         if x.numel() == 0:
             return x
         src, dst = edge_index[0], edge_index[1]
-        N = x.size(0)
-
-        # 默认聚合容器（在 x 维度上聚合，以保持与经典 GIN 一致的输入到 MLP）
         agg = torch.zeros_like(x)
-
         if src.numel() > 0:
-            use_gate = (
-                H_prev is not None
-                and H_prev.numel() > 0
-                and H_prev.size(0) == N
-                and H_prev.size(1) == self._gate_out_dim
-                and gate_alpha != 0.0
-            )
-            if use_gate:
-                Hp = H_prev.detach() if gate_detach else H_prev
-                # 预先计算所有节点的投影并做 L2 归一化
-                msg_proj = self.msg_proj_for_gate(x)  # [N, out_dim]
-                msg_proj = F.normalize(msg_proj, dim=-1)
-                Hp_norm = F.normalize(Hp, dim=-1)
-                # 取出边两侧向量并计算余弦相似度
-                pv = msg_proj.index_select(0, src)     # [E, out_dim]
-                hv = Hp_norm.index_select(0, dst)      # [E, out_dim]
-                sim = (pv * hv).sum(dim=-1)            # [E]
-                # 新信息程度（越新越大）
-                novelty = 1.0 - sim                    # [E]
-                scale = 1.0 + float(gate_alpha) * novelty
-                if gate_min is not None or gate_max is not None:
-                    lo = gate_min if gate_min is not None else -float('inf')
-                    hi = gate_max if gate_max is not None else float('inf')
-                    scale = scale.clamp(min=float(lo), max=float(hi))
-                scale = scale.unsqueeze(-1)            # [E,1]
-                # 缩放消息（仍在 x 的原空间中聚合）
-                x_src_scaled = x.index_select(0, src) * scale
-                agg.index_add_(0, dst, x_src_scaled)
-            else:
-                # 退化为标准求和
-                agg.index_add_(0, dst, x.index_select(0, src))
-
+            agg.index_add_(0, dst, x[src])
         out = (1.0 + self.eps) * x + agg
         out = self.mlp(out)
         return out
@@ -132,32 +79,11 @@ class GINEncoder(nn.Module):
             self.layers.append(GINConv(dims[i], dims[i + 1], eps=0.0, mlp_hidden=hidden_dim, dropout=dropout))
         self.dropout = nn.Dropout(dropout)
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        edge_index: torch.Tensor,
-        return_all: bool = False,
-        H_prev_list: Optional[List[torch.Tensor]] = None,
-        gate_alpha: float = 1.0,
-        gate_min: float = 0.5,
-        gate_max: float = 1.5,
-        gate_detach: bool = True,
-    ):
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, return_all: bool = False):
         h = x
         outs = []
         for i, layer in enumerate(self.layers):
-            H_prev_l = None
-            if H_prev_list is not None and i < len(H_prev_list):
-                H_prev_l = H_prev_list[i].detach() if gate_detach else H_prev_list[i]
-            h = layer(
-                h,
-                edge_index,
-                H_prev=H_prev_l,
-                gate_alpha=gate_alpha,
-                gate_min=gate_min,
-                gate_max=gate_max,
-                gate_detach=gate_detach,
-            )
+            h = layer(h, edge_index)
             if i != len(self.layers) - 1:
                 h = F.relu(h)
                 h = self.dropout(h)
@@ -314,9 +240,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.w2v_pretrained_path = w2v_pretrained_path
         self._w2v_model = None  # 延迟加载/训练
 
-        # 历史感知 gating 超参（精简：仅提供强度开关）
-        self.gate_strength = 1.0  # 0 关闭历史感知；>0 增强新信息
-
         # 是否使用“恶意语料”来生成额外负样本；以及腐化强度与每个节点替换的 token 数
         self.use_malicious_negatives = True
         self.mal_neg_ratio: float = 0.3  # 每个子图中替换为恶意向量的节点比例
@@ -425,25 +348,13 @@ class GCCEmbedderDev(GraphEmbedderBase):
             x2 = self._augment_features(x, mask_p=self.feat_mask_p)
 
             # 视角1
-            Z_list_1 = self.encoder(
-                x1,
-                e1,
-                return_all=True,
-                H_prev_list=H_prev_aligned,
-                gate_alpha=self.gate_strength,
-            )
+            Z_list_1 = self.encoder(x1, e1, return_all=True)
             H_list_1 = self.temporal(Z_list_1, H_prev_aligned)
             z_1 = self.proj_head(H_list_1[-1].mean(dim=0, keepdim=True))
             Z_chunks.append(F.normalize(z_1, dim=-1))
 
             # 视角2
-            Z_list_2 = self.encoder(
-                x2,
-                e2,
-                return_all=True,
-                H_prev_list=H_prev_aligned,
-                gate_alpha=self.gate_strength,
-            )
+            Z_list_2 = self.encoder(x2, e2, return_all=True)
             H_list_2 = self.temporal(Z_list_2, H_prev_aligned)
             z_2 = self.proj_head(H_list_2[-1].mean(dim=0, keepdim=True))
             Z_chunks.append(F.normalize(z_2, dim=-1))
@@ -459,13 +370,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 for _ in range(2):
                     e_neg = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
                     x_neg_aug = self._augment_features(x_neg, mask_p=self.feat_mask_p)
-                    Z_list_neg = self.encoder(
-                        x_neg_aug,
-                        e_neg,
-                        return_all=True,
-                        H_prev_list=H_prev_aligned,
-                        gate_alpha=self.gate_strength,
-                    )
+                    Z_list_neg = self.encoder(x_neg_aug, e_neg, return_all=True)
                     H_list_neg = self.temporal(Z_list_neg, H_prev_aligned)
                     z_neg = self.proj_head(H_list_neg[-1].mean(dim=0, keepdim=True))
                     Z_chunks.append(F.normalize(z_neg, dim=-1))
@@ -643,8 +548,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 'w2v_sg': self.w2v_sg,
                 'w2v_epochs': self.w2v_epochs,
                 'w2v_pretrained_path': self.w2v_pretrained_path,
-                # 历史感知 gating 强度（单参数）
-                'gate_strength': self.gate_strength,
             },
             'encoder': self.encoder.state_dict(),
             'proj_head': self.proj_head.state_dict(),
@@ -671,9 +574,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         }
         params = {k: v for k, v in raw_params.items() if k in allowed}
         inst = cls(snapshot_sequence, **params)
-        # 恢复 gating 强度（若存在保存值）
-        if 'gate_strength' in raw_params:
-            inst.gate_strength = float(raw_params['gate_strength'])
         inst.encoder.load_state_dict(state['encoder'])
         inst.proj_head.load_state_dict(state['proj_head'])
         if 'temporal' in state:
@@ -934,13 +834,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 curr_ids = [g.vs[i]['name'] for i in range(g.vcount())]
                 if use_temporal:
                     H_prev = self.temporal.fetch(curr_ids, device=self.device)
-                    Z_list = self.encoder(
-                        x,
-                        eidx,
-                        return_all=True,
-                        H_prev_list=H_prev,
-                        gate_alpha=self.gate_strength,
-                    )
+                    Z_list = self.encoder(x, eidx, return_all=True)
                     H_list = self.temporal(Z_list, H_prev)
                     # commit 干净视角的状态
                     self.temporal.commit(curr_ids, [h.detach() for h in H_list])
