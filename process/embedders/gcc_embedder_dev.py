@@ -13,6 +13,7 @@ from collections import Counter
 import random
 import re
 import os
+import hashlib
 
 import numpy as np
 import torch
@@ -240,6 +241,12 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.w2v_pretrained_path = w2v_pretrained_path
         self._w2v_model = None  # 延迟加载/训练
 
+        # 语义相似度参数
+        # - sem_fp_bits: 指纹长度（哈希位数），用于快速近似 Tanimoto 计算
+        # - sem_push_weight: 对不相似对在分母端增强推开，0 表示不额外增强
+        self.sem_fp_bits = 1024
+        self.sem_push_weight = 0.0
+
         # 是否使用“恶意语料”来生成额外负样本；以及腐化强度与每个节点替换的 token 数
         self.use_malicious_negatives = True
         self.mal_neg_ratio: float = 0.3  # 每个子图中替换为恶意向量的节点比例
@@ -322,12 +329,15 @@ class GCCEmbedderDev(GraphEmbedderBase):
         Z_chunks: List[torch.Tensor] = []
         sample_weights: List[float] = []
         commit_payloads: List[Tuple[List[str], List[torch.Tensor]]] = []
+        # 统一对比损失需要的缓存
+        row_owner: List[int] = []              # 每一行向量属于哪个样本（-1 表示纯负样本，不参与正对）
+        sample_rows: List[List[int]] = []      # 每个样本对应的行索引列表（通常每样本2行：两视角）
+        sample_fps: List[np.ndarray] = []      # 每个样本一个领域指纹（用于语义相似度）
 
         self.optimizer.zero_grad()
 
-        # 采样 batch 个子图实例
-        for _b in range(self.batch_size):
-            center = random.randrange(0, g.vcount())
+        # 遍历所有节点作为中心（不再随机采样）
+        for center in range(g.vcount()):
             sub = self._ego_subgraph(g, center, r=self.r_hop, max_nodes=self.ego_max_nodes)
             if sub.vcount() == 0:
                 continue
@@ -340,24 +350,27 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
             # 获取上一个时间片的隐藏状态
             H_prev_aligned = self.temporal.fetch(curr_ids, device=self.device)
-
-            # 双视角增强
-            e1 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
-            x1 = self._augment_features(x, mask_p=self.feat_mask_p)
-            e2 = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
-            x2 = self._augment_features(x, mask_p=self.feat_mask_p)
-
-            # 视角1
+            e1 = edge_index
+            x1 = x
             Z_list_1 = self.encoder(x1, e1, return_all=True)
             H_list_1 = self.temporal(Z_list_1, H_prev_aligned)
             z_1 = self.proj_head(H_list_1[-1].mean(dim=0, keepdim=True))
             Z_chunks.append(F.normalize(z_1, dim=-1))
 
-            # 视角2
-            Z_list_2 = self.encoder(x2, e2, return_all=True)
-            H_list_2 = self.temporal(Z_list_2, H_prev_aligned)
-            z_2 = self.proj_head(H_list_2[-1].mean(dim=0, keepdim=True))
-            Z_chunks.append(F.normalize(z_2, dim=-1))
+            # 记录行归属（单视角属于该“样本”）
+            sample_id = len(sample_rows)
+            sample_rows.append([])
+            # 将刚刚追加的该行标记为该样本
+            row_i = len(Z_chunks) - 1
+            row_owner.append(sample_id)
+            sample_rows[sample_id].append(row_i)
+
+            # 生成样本的领域指纹
+            try:
+                fp = self._subgraph_fingerprint(sub, m_bits=int(self.sem_fp_bits)) if int(self.sem_fp_bits) > 0 else np.zeros(0, dtype=np.float32)
+            except Exception:
+                fp = np.zeros(int(max(1, self.sem_fp_bits)), dtype=np.float32)
+            sample_fps.append(fp)
 
             # 可选：恶意负样本
             extra_views = 0
@@ -374,6 +387,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     H_list_neg = self.temporal(Z_list_neg, H_prev_aligned)
                     z_neg = self.proj_head(H_list_neg[-1].mean(dim=0, keepdim=True))
                     Z_chunks.append(F.normalize(z_neg, dim=-1))
+                    # 这些额外视角作为“负样本”，不参与正对
+                    row_owner.append(-1)
                     extra_views += 1
 
             # 样本权重
@@ -383,7 +398,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 freq_val = 1.0
             freq_val = max(0.0, freq_val) if np.isfinite(freq_val) else 0.0
             w = 1.0 + max(0.0, self.anomaly_alpha) * freq_val
-            for _ in range(2 + extra_views):
+            for _ in range(1 + extra_views):
                 sample_weights.append(w)
 
             # 保存状态以更新记忆
@@ -393,10 +408,97 @@ class GCCEmbedderDev(GraphEmbedderBase):
         if len(Z_chunks) < 2:
             return 0.0
 
-        # 对比损失
+        # 统一加权对比损失（SupCon 风格）：实例正对 + 语义正对，分母保留全体（含负样本）
         Z = torch.cat(Z_chunks, dim=0)
-        w_tensor = torch.tensor(sample_weights, dtype=torch.float32, device=Z.device)
-        loss = self._nt_xent_loss(Z, temperature=self.temperature, sample_weights=w_tensor)
+        N = Z.size(0)
+        device = Z.device
+        Z = F.normalize(Z, dim=-1)
+        sim = torch.mm(Z, Z.t()) / float(self.temperature)
+        eye = torch.eye(N, device=device, dtype=torch.bool)
+        sim = sim.masked_fill(eye, -1e9)
+        exp_sim = torch.exp(sim)
+
+    # 权重矩阵 W：语义正对=S（分摊到目标样本的各视角）
+        W = torch.zeros((N, N), dtype=torch.float32, device=device)
+
+        # 语义正对：按 Tanimoto 相似度加权
+        B = len(sample_rows)
+        if B >= 2 and len(sample_fps) == B:
+            FP_np = np.stack(sample_fps, axis=0).astype(np.float32)
+            FP = torch.from_numpy(FP_np).to(device=device, dtype=torch.float32)
+            inter = FP @ FP.t()
+            a1 = FP.sum(dim=1, keepdim=True)
+            denom = (a1 + a1.t() - inter).clamp_min(1e-6)
+            S = inter / denom
+            S.fill_diagonal_(0.0)
+            # 为每个锚 i（属于样本 s），把 λ·S[s,t] 平均分给 t 的各视角 j
+            # 负样本行（owner=-1）不参与正对
+            # 先反查每行的样本 id
+            for s in range(B):
+                Rs = sample_rows[s]
+                if not Rs:
+                    continue
+                for t in range(B):
+                    if t == s:
+                        continue
+                    st = float(S[s, t].item())
+                    if st <= 0.0:
+                        continue
+                    Rt = sample_rows[t]
+                    if not Rt:
+                        continue
+                    add_each = st / float(len(Rt))
+                    for i in Rs:
+                        # i 一定是有效行（属于样本 s）
+                        for j in Rt:
+                            W[i, j] += add_each
+
+        # 分母加权：对“结构不相似”的对按 (1 + beta*(1-S)) 放大，强化推开
+        denom_w = torch.ones((N, N), dtype=torch.float32, device=device)
+        if getattr(self, 'sem_push_weight', 0.0) > 0.0 and B >= 2:
+            beta = float(self.sem_push_weight)
+            # 仅对有样本归属的行/列生效（恶意负样本列自然保留权重1）
+            for s in range(B):
+                Rs = sample_rows[s]
+                if not Rs:
+                    continue
+                for t in range(B):
+                    if t == s:
+                        continue
+                    Rt = sample_rows[t]
+                    if not Rt:
+                        continue
+                    # 若上面未计算 S，则在此计算一次（通常已在语义正对分支求出；为稳妥再算一遍）
+                    if 'S' not in locals():
+                        FP_np_tmp = np.stack(sample_fps, axis=0).astype(np.float32)
+                        FP_tmp = torch.from_numpy(FP_np_tmp).to(device=device, dtype=torch.float32)
+                        inter_tmp = FP_tmp @ FP_tmp.t()
+                        a1_tmp = FP_tmp.sum(dim=1, keepdim=True)
+                        denom_tmp = (a1_tmp + a1_tmp.t() - inter_tmp).clamp_min(1e-6)
+                        S = inter_tmp / denom_tmp
+                        S.fill_diagonal_(0.0)
+                    st = float(S[s, t].item()) if 'S' in locals() else 0.0
+                    scale = 1.0 + beta * max(0.0, (1.0 - st))
+                    if scale == 1.0:
+                        continue
+                    for i in Rs:
+                        for j in Rt:
+                            denom_w[i, j] = denom_w[i, j] * scale
+
+        # 统一损失：-log( 分子/分母 )
+        numerator = (W * exp_sim).sum(dim=1)
+        denominator = (denom_w * exp_sim).sum(dim=1).clamp_min(1e-12)
+        valid = numerator > 0.0
+        if valid.any():
+            loss_vec = -torch.log((numerator.clamp_min(1e-12)) / denominator)
+            loss_vec = loss_vec[valid]
+            w_tensor = torch.tensor(sample_weights, dtype=torch.float32, device=device)
+            w_tensor = w_tensor[valid]
+            denom_w = w_tensor.sum().clamp_min(1e-6)
+            loss = (w_tensor * loss_vec).sum() / denom_w
+        else:
+            # 没有任何正对（极端情况），退化为 0
+            loss = torch.tensor(0.0, dtype=torch.float32, device=device)
 
         # 反向传播与梯度裁剪
         loss.backward()
@@ -457,6 +559,37 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 vec = self._w2v_vector_from_tokens(tokens)
                 out[i] = vec.astype(np.float32)
         return out
+
+    # ---------- 语义指纹（Tanimoto）支持 ----------
+    def _collect_subgraph_tokens(self, sub, max_tokens: int = 512) -> List[str]:
+        """收集子图的领域 tokens（基于节点 properties），限制总量。
+        当前实现：合并所有节点的 properties 分词。
+        """
+        toks: List[str] = []
+        for i in range(sub.vcount()):
+            toks.extend(self._get_node_tokens(sub, i))
+            if len(toks) >= int(max_tokens):
+                break
+        if len(toks) > int(max_tokens):
+            toks = toks[: int(max_tokens)]
+        return toks
+
+    def _fingerprint_from_tokens(self, tokens: List[str], m_bits: int = 1024) -> np.ndarray:
+        """将 tokens 映射为长度为 m_bits 的 0/1 指纹向量（MD5 哈希取模）。"""
+        m = max(1, int(m_bits))
+        fp = np.zeros(m, dtype=np.float32)
+        if not tokens:
+            return fp
+        for t in tokens:
+            # 使用 MD5 哈希映射到 [0, m)
+            h = hashlib.md5(t.encode('utf-8')).hexdigest()
+            idx = int(h, 16) % m
+            fp[idx] = 1.0
+        return fp
+
+    def _subgraph_fingerprint(self, sub, m_bits: int = 1024) -> np.ndarray:
+        toks = self._collect_subgraph_tokens(sub)
+        return self._fingerprint_from_tokens(toks, m_bits=m_bits)
 
     def embed_nodes(self):
         return self.snapshot_node_embeddings[-1] if self.snapshot_node_embeddings else {}
@@ -542,6 +675,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 'train_indices': self.train_snapshot_indices,
                 'model_path': self.model_path,
                 'anomaly_alpha': self.anomaly_alpha,
+                # Semantic settings
+                'sem_fp_bits': self.sem_fp_bits,
+                'sem_push_weight': self.sem_push_weight,
                 # W2V 配置
                 'w2v_window': self.w2v_window,
                 'w2v_min_count': self.w2v_min_count,
@@ -574,6 +710,15 @@ class GCCEmbedderDev(GraphEmbedderBase):
         }
         params = {k: v for k, v in raw_params.items() if k in allowed}
         inst = cls(snapshot_sequence, **params)
+        # 恢复语义拉近配置（不作为构造参数传入，以保持构造签名简洁）
+        try:
+            inst.sem_fp_bits = int(raw_params.get('sem_fp_bits', inst.sem_fp_bits))
+        except Exception:
+            pass
+        try:
+            inst.sem_push_weight = float(raw_params.get('sem_push_weight', inst.sem_push_weight))
+        except Exception:
+            pass
         inst.encoder.load_state_dict(state['encoder'])
         inst.proj_head.load_state_dict(state['proj_head'])
         if 'temporal' in state:
