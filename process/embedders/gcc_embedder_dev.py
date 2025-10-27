@@ -377,8 +377,13 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     neg_rows[sid].append(len(Z_chunks) - 1)
                     extra += 1
 
-            freq = float(g.vs[center].get("frequency", 1.0))
-            w = 1 + max(0, self.anomaly_alpha) * max(0, freq)
+            # 频率权重
+            if "frequency" in g.vs[center].attributes():
+                freq = float(g.vs[center]["frequency"])
+            else:
+                freq = 1.0
+            freq = max(0.0, freq)  # 确保无负数
+            w = 1.0 + max(0.0, self.anomaly_alpha) * freq
             for _ in range(1 + extra):
                 sample_weights.append(w)
 
@@ -423,7 +428,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 for t in range(B):
                     if s != t:
                         j = sample_rows[t][0]
-                        denom_w[i, j] *= (1 + beta * max(0, 1 - float(S[s, t])))
+                        scale = 1.0 + beta * torch.clamp(1.0 - S[s, t], min=0.0)
+                        denom_w[i, j] *= scale
 
         # 屏蔽别人的恶意负样本 denom_mask
         denom_mask = torch.ones((N, N), device=device)
