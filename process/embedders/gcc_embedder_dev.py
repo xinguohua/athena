@@ -484,7 +484,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         W[i, j] = st
 
             denom_w = torch.ones((N, N), dtype=torch.float32, device=device)
-            beta = float(getattr(self, 'sem_push_weight', 0.0))
+            beta = float(getattr(self, 'sem_push_weight', 2))
             if beta > 0 and S is not None:
                 for s in range(Bcur):
                     i = batch_sample_rows[s][0]
@@ -502,7 +502,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 if neg_other:
                     denom_mask[i, torch.tensor(neg_other, device=device, dtype=torch.long)] = 0.0
 
-            gamma_neg = float(getattr(self, 'mal_neg_push_gamma', 3.0))
+            gamma_neg = float(getattr(self, 'mal_neg_push_gamma',5))
             if gamma_neg > 1.0:
                 for s in range(Bcur):
                     i = batch_sample_rows[s][0]
