@@ -313,11 +313,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 e_list.append(ei)
                 ids_list.append(ids)
                 node_counts.append(sub.vcount())
-                try:
-                    freq = float(g.vs[center].get('frequency', 1.0))
-                except Exception:
-                    freq = 1.0
-                freq = max(0.0, freq)
+                # 简化为直接读取顶点属性（按你的要求）
+                freq = float(g.vs[center]['frequency'])
                 freq_weights.append(1.0 + max(0.0, self.anomaly_alpha) * freq)
                 try:
                     fp = self._subgraph_fingerprint(sub, m_bits=int(self.sem_fp_bits)) if int(self.sem_fp_bits) > 0 else np.zeros(0, dtype=np.float32)
