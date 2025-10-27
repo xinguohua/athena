@@ -142,7 +142,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 训练
         num_epochs: int = 2,
         steps_per_epoch: int = 200,
-        batch_size: int = 64,
+        batch_size: int = 1000,
         # batch_size: int = 10,
         lr: float = 1e-3,
         # 对比学习
@@ -313,7 +313,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 e_list.append(ei)
                 ids_list.append(ids)
                 node_counts.append(sub.vcount())
-                # 简化为直接读取顶点属性（按你的要求）
                 freq = float(g.vs[center]['frequency'])
                 freq_weights.append(1.0 + max(0.0, self.anomaly_alpha) * freq)
                 try:
