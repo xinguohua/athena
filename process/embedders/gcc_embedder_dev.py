@@ -18,6 +18,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
+try:
+    from tqdm import tqdm as _tqdm
+except Exception:
+    def _tqdm(x, **kwargs):
+        return x
 from .base import GraphEmbedderBase
 
 
@@ -256,7 +262,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     continue
 
                 # 对当前 snapshot 训练一次 batch
-                batch_loss = self._train_one_snapshot(g)
+                batch_loss = self._train_one_snapshot(g, sidx=sidx)
                 epoch_loss += batch_loss
                 steps_done += 1
 
@@ -269,7 +275,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.generate_node_embeddings(use_temporal=False)
         self.save_model()
 
-    def _train_one_snapshot(self, g) -> float:
+    def _train_one_snapshot(self, g, sidx: Optional[int] = None) -> float:
         """单个 snapshot 训练：按 batch 聚合多个中心子图，一次性 GNN 前向。"""
         device = self.device
         centers = list(range(g.vcount()))
@@ -278,8 +284,13 @@ class GCCEmbedderDev(GraphEmbedderBase):
         total_loss = 0.0
         total_steps = 0
 
-        for start in range(0, len(centers), max(1, int(self.batch_size))):
-            end = min(len(centers), start + max(1, int(self.batch_size)))
+        bsz = max(1, int(self.batch_size))
+        total_batches = math.ceil(len(centers) / bsz)
+        iterator = range(0, len(centers), bsz)
+        iterator = _tqdm(iterator, total=total_batches, leave=False, desc=f"Snapshot {sidx} Batches")
+
+        for start in iterator:
+            end = min(len(centers), start + bsz)
             batch_centers = centers[start:end]
 
             subs: List = []
@@ -440,12 +451,14 @@ class GCCEmbedderDev(GraphEmbedderBase):
             numerator = (W * exp_sim).sum(dim=1)
             denominator = (denom_mask * denom_w * exp_sim).sum(dim=1).clamp_min(1e-12)
             valid = numerator > 0
-            if valid.any():
-                loss_vec = -torch.log(numerator[valid] / denominator[valid])
-                w_t = torch.tensor(batch_weights, dtype=torch.float32, device=device)[valid[:len(batch_weights)]]
-                loss = (w_t * loss_vec).sum() / w_t.sum().clamp_min(1e-6)
-            else:
-                loss = torch.tensor(0.0, dtype=torch.float32, device=device)
+            if not valid.any():
+                # 仍然提交时间记忆，再跳过本 batch 的反向传播
+                for ids, H in batch_commit_payloads:
+                    self.temporal.commit(ids, H)
+                continue
+            loss_vec = -torch.log(numerator[valid] / denominator[valid])
+            w_t = torch.tensor(batch_weights, dtype=torch.float32, device=device)[valid[:len(batch_weights)]]
+            loss = (w_t * loss_vec).sum() / w_t.sum().clamp_min(1e-6)
 
             self.optimizer.zero_grad(set_to_none=True)
             loss.backward()
