@@ -163,6 +163,16 @@ class GCCEmbedderDev(GraphEmbedderBase):
         w2v_sg: int = 1,
         w2v_epochs: int = 20,
         w2v_pretrained_path: Optional[str] = None,
+        # 相似度/权重相关可选参数
+        sim_measure: str = 'wl',            # 'tanimoto' | 'cosine' | 'wl'
+        wl_height: int = 2,
+        sem_push_weight: float = 0.0,
+        sem_fp_bits: int = 1024,
+        # 恶意负样本与推开强度
+        use_malicious_negatives: bool = True,
+        mal_neg_ratio: float = 0.3,
+        mal_neg_token_len: int = 16,
+        mal_neg_push_gamma: float = 3.0,
     ):
         super().__init__(snapshots, features, mapp)
         self.snapshots = snapshots
@@ -195,19 +205,24 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 语义相似度参数
         # - sem_fp_bits: 指纹长度（哈希位数），用于快速近似 Tanimoto 计算
         # - sem_push_weight: 对不相似对在分母端增强推开，0 表示不额外增强
-        self.sem_fp_bits = 1024
-        self.sem_push_weight = 0.0
+        self.sem_fp_bits = int(sem_fp_bits)
+        self.sem_push_weight = float(sem_push_weight)
+        # 相似度度量方式：'tanimoto' | 'cosine' | 'wl'
+        self.sim_measure = str(sim_measure)
+        # WL 子树核参数（用于 sim_measure='wl'）
+        self.wl_height = int(wl_height)
 
         # 是否使用“恶意语料”来生成额外负样本；以及腐化强度与每个节点替换的 token 数
-        self.use_malicious_negatives = True
-        self.mal_neg_ratio: float = 0.3  # 每个子图中替换为恶意向量的节点比例
-        self.mal_neg_token_len: int = 16  # 生成恶意向量时采样的恶意 token 数
+        self.use_malicious_negatives = bool(use_malicious_negatives)
+        self.mal_neg_ratio = float(mal_neg_ratio)  # 每个子图中替换为恶意向量的节点比例
+        self.mal_neg_token_len = int(mal_neg_token_len)  # 生成恶意向量时采样的恶意 token 数
+        self.mal_neg_push_gamma = float(mal_neg_push_gamma)
 
         # 设备
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         # 特征缓存（properties -> 向量）
-        self._prop_cache: Dict[str, np.ndarray] = {}
+        self._prop_cache = {}
         # 恶意 token 容器：累计出现在恶意节点及其邻域的 tokens
         self.malicious_token_counter = Counter()
 
@@ -232,7 +247,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         )
 
         # 训练后缓存：每快照一个 {node_id: vec}
-        self.snapshot_node_embeddings: List[Dict[str, np.ndarray]] = []
+        self.snapshot_node_embeddings = []
 
         # 初始化时序状态
         self.temporal.reset()
@@ -300,6 +315,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
             node_counts: List[int] = []
             freq_weights: List[float] = []
             fps: List[np.ndarray] = []
+            semvecs: List[np.ndarray] = []
+            wl_counters: List[Counter] = []
 
             for center in batch_centers:
                 sub = self._ego_subgraph(g, center, r=self.r_hop, max_nodes=self.ego_max_nodes)
@@ -315,11 +332,25 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 node_counts.append(sub.vcount())
                 freq = float(g.vs[center]['frequency'])
                 freq_weights.append(1.0 + max(0.0, self.anomaly_alpha) * freq)
-                try:
-                    fp = self._subgraph_fingerprint(sub, m_bits=int(self.sem_fp_bits)) if int(self.sem_fp_bits) > 0 else np.zeros(0, dtype=np.float32)
-                except Exception:
-                    fp = np.zeros(int(max(1, self.sem_fp_bits)), dtype=np.float32)
-                fps.append(fp)
+                # 准备相似度特征（按配置）
+                if getattr(self, 'sim_measure', 'wl') == 'tanimoto':
+                    try:
+                        fp = self._subgraph_fingerprint(sub, m_bits=int(self.sem_fp_bits)) if int(self.sem_fp_bits) > 0 else np.zeros(0, dtype=np.float32)
+                    except Exception:
+                        fp = np.zeros(int(max(1, self.sem_fp_bits)), dtype=np.float32)
+                    fps.append(fp)
+                elif getattr(self, 'sim_measure', 'wl') == 'cosine':
+                    try:
+                        sv = self._subgraph_semantic_vector(sub)
+                    except Exception:
+                        sv = np.zeros(int(self.prop_feat_dim), dtype=np.float32)
+                    semvecs.append(sv)
+                else:  # 'wl'
+                    try:
+                        cnt = self._wl_subtree_counter(sub, h=int(getattr(self, 'wl_height', 2)))
+                    except Exception:
+                        cnt = Counter()
+                    wl_counters.append(cnt)
 
             if not subs:
                 continue
@@ -351,7 +382,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             batch_sample_rows = [[i] for i in range(Z_pos.size(0))]
             batch_neg_rows = [[] for _ in range(Z_pos.size(0))]
             batch_weights = list(freq_weights)
-            batch_fps = list(fps)
+            # 相似度特征（fps/semvecs/wl_counters）已在上方按需收集
             batch_commit_payloads = []
             for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
                 beg, endi = offsets[gi], offsets[gi] + n
@@ -398,12 +429,37 @@ class GCCEmbedderDev(GraphEmbedderBase):
             Bcur = len(batch_sample_rows)
             S = None
             if Bcur >= 2:
-                FP = torch.tensor(np.stack(batch_fps), dtype=torch.float32, device=device)
-                inter = FP @ FP.t()
-                a1 = FP.sum(1, keepdim=True)
-                denom_fp = (a1 + a1.t() - inter).clamp_min(1e-6)
-                S = inter / denom_fp
-                S.fill_diagonal_(0.0)
+                simm = getattr(self, 'sim_measure', 'wl')
+                if simm == 'tanimoto' and fps:
+                    FP = torch.tensor(np.stack(fps[:Bcur]), dtype=torch.float32, device=device)
+                    inter = FP @ FP.t()
+                    a1 = FP.sum(1, keepdim=True)
+                    denom_fp = (a1 + a1.t() - inter).clamp_min(1e-6)
+                    S = inter / denom_fp
+                    S.fill_diagonal_(0.0)
+                elif simm == 'cosine' and semvecs:
+                    SV = torch.tensor(np.stack(semvecs[:Bcur]), dtype=torch.float32, device=device)
+                    SV = F.normalize(SV, dim=1)
+                    S = SV @ SV.t()
+                    S.fill_diagonal_(0.0)
+                else:  # WL 子树核
+                    if wl_counters:
+                        vocab = sorted(set().union(*[set(c.keys()) for c in wl_counters[:Bcur]]))
+                    else:
+                        vocab = []
+                    if len(vocab) > 0:
+                        vid = {k: i for i, k in enumerate(vocab)}
+                        Fw = np.zeros((Bcur, len(vocab)), dtype=np.float32)
+                        for r, cnt in enumerate(wl_counters[:Bcur]):
+                            for k, v in cnt.items():
+                                idx = vid.get(k)
+                                if idx is not None:
+                                    Fw[r, idx] = float(v)
+                        Fw_t = torch.tensor(Fw, dtype=torch.float32, device=device)
+                        K = Fw_t @ Fw_t.t()
+                        d = torch.diag(K).clamp_min(1e-12).sqrt()
+                        S = K / (d.unsqueeze(1) * d.unsqueeze(0) + 1e-12)
+                        S.fill_diagonal_(0.0)
 
             W = torch.zeros((N, N), dtype=torch.float32, device=device)
             if S is not None:
@@ -548,6 +604,52 @@ class GCCEmbedderDev(GraphEmbedderBase):
     def _subgraph_fingerprint(self, sub, m_bits: int = 1024) -> np.ndarray:
         toks = self._collect_subgraph_tokens(sub)
         return self._fingerprint_from_tokens(toks, m_bits=m_bits)
+
+    def _subgraph_semantic_vector(self, sub) -> np.ndarray:
+        """将子图 tokens 聚合为稠密语义向量（Word2Vec 平均，已归一化）。"""
+        toks = self._collect_subgraph_tokens(sub)
+        return self._w2v_vector_from_tokens(toks)
+
+    def _wl_subtree_counter(self, sub, h: int = 2) -> Counter:
+        """WL 子树核标签计数。
+        初始标签优先用节点 type（或者 degree），迭代 h 次构造 (label, multiset(neigh)) 标签并计数，返回 Counter。
+        键格式 "k:label"，k 表示迭代层（0..h）。
+        """
+        n = sub.vcount()
+        if n == 0:
+            return Counter()
+        # 初始标签：使用节点 properties（不再读取 type）
+        base_labels = []
+        for i in range(n):
+            try:
+                prop = sub.vs[i]['properties']
+            except Exception:
+                prop = sub.vs[i].attributes().get('properties', '')
+            lab = str(prop) if prop is not None else ''
+            # 如为空则后备使用度信息，避免空标签
+            if lab == '':
+                try:
+                    lab = f"deg:{sub.degree(i)}"
+                except Exception:
+                    lab = "deg:0"
+            base_labels.append(lab)
+        labels = list(base_labels)
+        ctr = Counter(f"0:{lab}" for lab in labels)
+        # 邻接
+        try:
+            adj = sub.get_adjlist()
+        except Exception:
+            adj = [list(sub.neighbors(i)) for i in range(n)]
+        for k in range(1, int(max(0, h)) + 1):
+            new_labels = []
+            for i in range(n):
+                neigh = adj[i] if i < len(adj) else []
+                multiset = sorted(labels[j] for j in neigh) if neigh else []
+                new_lab = labels[i] + '|' + '#'.join(multiset)
+                new_labels.append(new_lab)
+            labels = new_labels
+            ctr.update(f"{k}:{lab}" for lab in labels)
+        return ctr
 
     def embed_nodes(self):
         return self.snapshot_node_embeddings[-1] if self.snapshot_node_embeddings else {}
