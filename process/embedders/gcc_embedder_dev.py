@@ -620,9 +620,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
         return self._w2v_vector_from_tokens(toks)
 
     def _wl_subtree_counter(self, sub, h: int = 2) -> Counter:
-        """WL 子树核标签计数。
-        初始标签优先用节点 type（或者 degree），迭代 h 次构造 (label, multiset(neigh)) 标签并计数，返回 Counter。
-        键格式 "k:label"，k 表示迭代层（0..h）。
+        """WL 子树核标签计数（增强版）。
+        - 初始标签：节点 properties（为空回退 degree）。
+        - 迭代 h 次：新标签 = (自身标签, 多重集{(dir, edge_type, 邻居标签)})。
+          其中 dir∈{out,in,und}，edge_type 如果边属性包含 'etype'/'type'/'label' 则使用对应字符串，否则为 ''。
+        - 返回计数器，键格式 "k:label"，k 表示迭代层（0..h）。
         """
         n = sub.vcount()
         if n == 0:
@@ -635,26 +637,84 @@ class GCCEmbedderDev(GraphEmbedderBase):
             except Exception:
                 prop = sub.vs[i].attributes().get('properties', '')
             lab = str(prop) if prop is not None else ''
-            # 如为空则后备使用度信息，避免空标签
             if lab == '':
+                # 如为空则后备使用度信息，避免空标签
                 try:
                     lab = f"deg:{sub.degree(i)}"
                 except Exception:
                     lab = "deg:0"
             base_labels.append(lab)
+
+        # 构造包含方向/类型的邻接信息：neighbors_info[i] = [(dir_code, etype, j), ...]
+        # dir_code: 'out' | 'in' | 'und'
+        neighbors_info: List[List[Tuple[str, str, int]]] = [[] for _ in range(n)]
+        is_dir = False
+        try:
+            is_dir = bool(sub.is_directed())
+        except Exception:
+            is_dir = False
+        # 提取边类型属性名称（按优先级）
+        try:
+            edge_attr_names = set(sub.es.attributes())
+        except Exception:
+            edge_attr_names = set()
+        etype_key = None
+        for key in ('etype', 'type', 'label'):
+            if key in edge_attr_names:
+                etype_key = key
+                break
+        # 遍历边，填充邻接信息
+        try:
+            for e in sub.es:
+                try:
+                    u, v = e.tuple  # type: ignore[attr-defined]
+                except Exception:
+                    # 备用路径：通过 get_edgelist 与索引匹配
+                    # 该分支极少触发，仅作保护
+                    continue
+                etype_val = ''
+                if etype_key is not None:
+                    try:
+                        etype_val = str(e[etype_key]) if e[etype_key] is not None else ''
+                    except Exception:
+                        etype_val = ''
+                if is_dir:
+                    # 有向：区分出入边
+                    if 0 <= u < n and 0 <= v < n:
+                        neighbors_info[u].append(('out', etype_val, v))
+                        neighbors_info[v].append(('in', etype_val, u))
+                else:
+                    # 无向：两端均记录为 und
+                    if 0 <= u < n and 0 <= v < n:
+                        neighbors_info[u].append(('und', etype_val, v))
+                        neighbors_info[v].append(('und', etype_val, u))
+        except Exception:
+            # 回退到无类型、无方向的纯邻接
+            try:
+                adj = sub.get_adjlist()
+            except Exception:
+                adj = [list(sub.neighbors(i)) for i in range(n)]
+            for i in range(n):
+                for j in (adj[i] if i < len(adj) else []):
+                    neighbors_info[i].append(('und', '', j))
+
         labels = list(base_labels)
         ctr = Counter(f"0:{lab}" for lab in labels)
-        # 邻接
-        try:
-            adj = sub.get_adjlist()
-        except Exception:
-            adj = [list(sub.neighbors(i)) for i in range(n)]
+
         for k in range(1, int(max(0, h)) + 1):
-            new_labels = []
+            new_labels: List[str] = []
             for i in range(n):
-                neigh = adj[i] if i < len(adj) else []
-                multiset = sorted(labels[j] for j in neigh) if neigh else []
-                new_lab = labels[i] + '|' + '#'.join(multiset)
+                neigh = neighbors_info[i]
+                if neigh:
+                    # 将 (dir, etype, neighbor_label) 作为元素进入多重集，并排序以实现“无序多重集合”
+                    multiset_elems = [
+                        f"{d}:{et}:{labels[j]}" for (d, et, j) in neigh if 0 <= j < n
+                    ]
+                    multiset_elems.sort()
+                    multiset = '#'.join(multiset_elems)
+                else:
+                    multiset = ''
+                new_lab = labels[i] + '|' + multiset
                 new_labels.append(new_lab)
             labels = new_labels
             ctr.update(f"{k}:{lab}" for lab in labels)
