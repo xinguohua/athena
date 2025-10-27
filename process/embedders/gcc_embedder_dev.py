@@ -10,160 +10,105 @@ from __future__ import annotations
 
 from typing import Optional, Iterable, Tuple, List, Dict, Union
 from collections import Counter
-import random
-import re
 import os
+import re
 import hashlib
-
+import random
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ..embedders.base import GraphEmbedderBase
 
-from process.embedders.base import GraphEmbedderBase
 
-
-# ---------------- GIN 组件 ----------------
+# ----------------------- GIN 基元 -----------------------
 class MLP(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, num_layers: int = 2, dropout: float = 0.0):
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, dropout: float = 0.0):
         super().__init__()
-        layers: List[nn.Module] = []
-        dim = in_dim
-        for _ in range(max(0, num_layers - 1)):
-            layers.append(nn.Linear(dim, hidden_dim))
-            layers.append(nn.ReLU())
-            if dropout > 0:
-                layers.append(nn.Dropout(dropout))
-            dim = hidden_dim
-        layers.append(nn.Linear(dim, out_dim))
-        self.net = nn.Sequential(*layers)
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim), nn.ReLU(), nn.Dropout(p=dropout),
+            nn.Linear(hidden_dim, out_dim)
+        )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
 
 
 class GINConv(nn.Module):
-    def __init__(self, in_dim: int, out_dim: int, eps: float = 0.0, mlp_hidden: int = 128, dropout: float = 0.0):
+    def __init__(self, in_dim: int, out_dim: int, dropout: float = 0.0):
         super().__init__()
-        self.eps = nn.Parameter(torch.tensor(float(eps)))
-        self.mlp = MLP(in_dim, mlp_hidden, out_dim, num_layers=2, dropout=dropout)
+        self.mlp = MLP(in_dim, out_dim, out_dim, dropout)
+        self.eps = nn.Parameter(torch.zeros(1))
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
-        if x.numel() == 0:
-            return x
-        src, dst = edge_index[0], edge_index[1]
-        agg = torch.zeros_like(x)
-        if src.numel() > 0:
+        if edge_index.numel() == 0:
+            agg = torch.zeros_like(x)
+        else:
+            src, dst = edge_index[0], edge_index[1]
+            agg = torch.zeros_like(x)
             agg.index_add_(0, dst, x[src])
-        out = (1.0 + self.eps) * x + agg
-        out = self.mlp(out)
+        out = self.mlp((1 + self.eps) * x + agg)
         return out
 
 
 class GINEncoder(nn.Module):
-    """GIN 编码器，支持按层吐出中间表示。
-
-    - 默认行为：返回最后一层输出
-    - return_all=True：返回 [h1, h2, ..., hL]
-    """
-
-    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, num_layers: int = 3, dropout: float = 0.0):
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, num_layers: int = 3, dropout: float = 0.1):
         super().__init__()
-        self.layers = nn.ModuleList()
-        self.num_layers = int(num_layers)
-        self.hidden_dim = int(hidden_dim)
-        self.out_dim = int(out_dim)
-        # 逐层通道维度（用于外部按层时序单元的维度对齐）
-        self.layer_dims = [hidden_dim] * (self.num_layers - 1) + [out_dim]
-        dims = [in_dim] + [hidden_dim] * (self.num_layers - 1) + [out_dim]
-        for i in range(self.num_layers):
-            self.layers.append(GINConv(dims[i], dims[i + 1], eps=0.0, mlp_hidden=hidden_dim, dropout=dropout))
-        self.dropout = nn.Dropout(dropout)
+        num_layers = int(max(1, num_layers))
+        dims = [in_dim] + [hidden_dim] * (num_layers - 1) + [out_dim]
+        self.layers = nn.ModuleList([GINConv(dims[i], dims[i + 1], dropout) for i in range(num_layers)])
+        self.layer_dims = dims[1:]
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor, return_all: bool = False):
+        Zs = []
         h = x
-        outs = []
-        for i, layer in enumerate(self.layers):
-            h = layer(h, edge_index)
-            if i != len(self.layers) - 1:
-                h = F.relu(h)
-                h = self.dropout(h)
-            outs.append(h)
-        return outs if return_all else outs[-1]
+        for conv in self.layers:
+            h = conv(h, edge_index)
+            h = F.relu(h)
+            Zs.append(h)
+        return Zs if return_all else h
 
 
-# ---------------- 分层时序递推（GRUCell） ----------------
 class TemporalPerLayer(nn.Module):
-    """为每一层增加一个 GRUCell 进行时间递推：H_l,t = GRU(Z_l,t, H_l,t-1)
-
-    约定：每层的通道维度不变（d_l -> d_l），便于直接替换或融合。
-    """
     def __init__(self, layer_dims: List[int]):
         super().__init__()
         self.layer_dims = [int(d) for d in layer_dims]
-        self.grus = nn.ModuleList([nn.GRUCell(d, d) for d in self.layer_dims])
-        # 每层的节点隐藏状态表（CPU 常驻）：List[Dict[node_id -> Tensor[d_l]]]
+        self.cells = nn.ModuleList([nn.GRUCell(d, d) for d in self.layer_dims])
         self.tables: List[Dict[str, torch.Tensor]] = [dict() for _ in self.layer_dims]
 
-    def forward(self, Z_list: List[torch.Tensor], H_prev_list: Optional[List[Optional[torch.Tensor]]] = None) -> List[torch.Tensor]:
-        H_list: List[torch.Tensor] = []
-        for li, gru in enumerate(self.grus):
-            Zl = Z_list[li]
-            Hl_prev = None if (H_prev_list is None or li >= len(H_prev_list)) else H_prev_list[li]
-            if Hl_prev is None or Hl_prev.shape != Zl.shape:
-                Hl_prev = torch.zeros_like(Zl)
-            Hl = gru(Zl, Hl_prev)
-            H_list.append(Hl)
-        return H_list
-
     def reset(self):
-        self.tables = [dict() for _ in self.layer_dims]
+        for t in self.tables:
+            t.clear()
 
-    def fetch(self, node_ids: List[str], device) -> List[torch.Tensor]:
-        out: List[torch.Tensor] = []
-        for li, d in enumerate(self.layer_dims):
+    def state_dict(self):
+        return {'cells': self.cells.state_dict()}
+
+    def load_state_dict(self, state):
+        try:
+            self.cells.load_state_dict(state.get('cells', {}))
+        except Exception:
+            pass
+
+    def fetch(self, node_ids: List[str], device: torch.device) -> List[torch.Tensor]:
+        H_prev: List[torch.Tensor] = []
+        n = len(node_ids)
+        for li, dim in enumerate(self.layer_dims):
             table = self.tables[li]
-            if not table:
-                out.append(torch.zeros((len(node_ids), int(d)), dtype=torch.float32, device=device))
-                continue
-            prev_ids = list(table.keys())
-            try:
-                H_prev = torch.stack([table[nid] for nid in prev_ids], dim=0).to(dtype=torch.float32)
-            except Exception:
-                out.append(torch.zeros((len(node_ids), int(d)), dtype=torch.float32, device=device))
-                continue
-            H_aligned = self.align_prev_state(H_prev=H_prev.to(device), curr_ids=node_ids, prev_ids=prev_ids, dim=int(d), device=device)
-            out.append(H_aligned)
-        return out
+            H = torch.zeros((n, dim), dtype=torch.float32, device=device)
+            for i, nid in enumerate(node_ids):
+                if nid in table:
+                    H[i] = table[nid].to(device)
+            H_prev.append(H)
+        return H_prev
 
-    def align_prev_state(self,
-                         H_prev: Optional[torch.Tensor],
-                         curr_ids: List[str],
-                         prev_ids: Optional[List[str]],
-                         dim: int,
-                         device) -> torch.Tensor:
-        """将上一时刻的隐状态按当前节点顺序对齐；缺失节点填 0。"""
-        if H_prev is None or not prev_ids:
-            return torch.zeros((len(curr_ids), dim), device=device, dtype=torch.float32)
-
-        id2pos_prev = {nid: i for i, nid in enumerate(prev_ids)}
-        N_curr = len(curr_ids)
-        out = torch.zeros((N_curr, dim), device=device, dtype=H_prev.dtype)
-        idx_prev = []
-        idx_curr = []
-
-        for i, nid in enumerate(curr_ids):
-            j = id2pos_prev.get(nid, -1)
-            if j >= 0:
-                idx_curr.append(i)
-                idx_prev.append(j)
-
-        if idx_curr:
-            ic = torch.tensor(idx_curr, device=device, dtype=torch.long)
-            ip = torch.tensor(idx_prev, device=device, dtype=torch.long)
-            out[ic] = H_prev[ip]
-
-        return out
+    def forward(self, Z_list: List[torch.Tensor], H_prev: List[torch.Tensor]) -> List[torch.Tensor]:
+        H_list: List[torch.Tensor] = []
+        for li, cell in enumerate(self.cells):
+            z = Z_list[li]
+            h0 = H_prev[li]
+            h1 = cell(z, h0)
+            H_list.append(h1)
+        return H_list
 
     def commit(self, node_ids: List[str], H_list: List[torch.Tensor]):
         for li in range(min(len(self.tables), len(H_list))):
@@ -325,156 +270,198 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.save_model()
 
     def _train_one_snapshot(self, g) -> float:
-        """在单个 snapshot 上执行一轮训练"""
-        Z_chunks, sample_weights = [], []
-        commit_payloads = []
-        sample_rows, neg_rows, sample_fps = [], [], []
+        """单个 snapshot 训练：按 batch 聚合多个中心子图，一次性 GNN 前向。"""
+        device = self.device
+        centers = list(range(g.vcount()))
+        if not centers:
+            return 0.0
+        total_loss = 0.0
+        total_steps = 0
 
-        self.optimizer.zero_grad()
+        for start in range(0, len(centers), max(1, int(self.batch_size))):
+            end = min(len(centers), start + max(1, int(self.batch_size)))
+            batch_centers = centers[start:end]
 
-        # ===== 构造样本 =====
-        for center in range(g.vcount()):
-            sub = self._ego_subgraph(g, center, r=self.r_hop, max_nodes=self.ego_max_nodes)
-            if sub.vcount() == 0:
+            subs: List = []
+            x_list: List[np.ndarray] = []
+            e_list: List[torch.Tensor] = []
+            ids_list: List[List[str]] = []
+            node_counts: List[int] = []
+            freq_weights: List[float] = []
+            fps: List[np.ndarray] = []
+
+            for center in batch_centers:
+                sub = self._ego_subgraph(g, center, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                if sub.vcount() == 0:
+                    continue
+                subs.append(sub)
+                xi = self._build_node_features(sub)
+                ei = self._igraph_edges_to_edge_index(sub)
+                ids = [sub.vs[i]['name'] for i in range(sub.vcount())]
+                x_list.append(xi)
+                e_list.append(ei)
+                ids_list.append(ids)
+                node_counts.append(sub.vcount())
+                try:
+                    freq = float(g.vs[center].get('frequency', 1.0))
+                except Exception:
+                    freq = 1.0
+                freq = max(0.0, freq)
+                freq_weights.append(1.0 + max(0.0, self.anomaly_alpha) * freq)
+                try:
+                    fp = self._subgraph_fingerprint(sub, m_bits=int(self.sem_fp_bits)) if int(self.sem_fp_bits) > 0 else np.zeros(0, dtype=np.float32)
+                except Exception:
+                    fp = np.zeros(int(max(1, self.sem_fp_bits)), dtype=np.float32)
+                fps.append(fp)
+
+            if not subs:
                 continue
 
-            x_np = self._build_node_features(sub)
-            edge_index = self._igraph_edges_to_edge_index(sub)
-            x = torch.from_numpy(x_np).to(self.device)
-            curr_ids = [sub.vs[i]['name'] for i in range(sub.vcount())]
+            X_pos = torch.from_numpy(np.vstack(x_list)).to(device)
+            offsets = np.cumsum([0] + node_counts[:-1]).tolist()
+            E_cols = []
+            for ei, off in zip(e_list, offsets):
+                if ei.numel() == 0:
+                    continue
+                E_cols.append(ei + off)
+            E_pos = torch.cat(E_cols, dim=1) if E_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
+            flat_ids = [nid for ids in ids_list for nid in ids]
+            graph_ids = torch.tensor([gi for gi, n in enumerate(node_counts) for _ in range(n)], dtype=torch.long, device=device)
 
-            H_prev = self.temporal.fetch(curr_ids, self.device)
-            Zls = self.encoder(x, edge_index, return_all=True)
-            Hls = self.temporal(Zls, H_prev)
-            z = self.proj_head(Hls[-1].mean(dim=0, keepdim=True))
-            Z_chunks.append(F.normalize(z, dim=-1))
+            H_prev = self.temporal.fetch(flat_ids, device=device)
+            Z_list = self.encoder(X_pos, E_pos, return_all=True)
+            H_list = self.temporal(Z_list, H_prev)
+            H_last = H_list[-1]
+            Bc = len(node_counts)
+            sums = torch.zeros((Bc, H_last.size(1)), dtype=H_last.dtype, device=device)
+            cnts = torch.zeros((Bc,), dtype=torch.float32, device=device)
+            sums.index_add_(0, graph_ids, H_last)
+            cnts.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
+            means = sums / (cnts.clamp_min(1e-6).unsqueeze(1))
+            Z_pos = self.proj_head(means)
+            Z_pos = F.normalize(Z_pos, dim=-1)
 
-            sid = len(sample_rows)
-            sample_rows.append([len(Z_chunks) - 1])
-            neg_rows.append([])
+            batch_sample_rows = [[i] for i in range(Z_pos.size(0))]
+            batch_neg_rows = [[] for _ in range(Z_pos.size(0))]
+            batch_weights = list(freq_weights)
+            batch_fps = list(fps)
+            batch_commit_payloads = []
+            for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
+                beg, endi = offsets[gi], offsets[gi] + n
+                slice_H = [Hl[beg:endi].detach() for Hl in H_list]
+                batch_commit_payloads.append((ids, slice_H))
 
-            # 语义指纹
-            try:
-                fp = self._subgraph_fingerprint(sub, m_bits=int(self.sem_fp_bits))
-            except:
-                fp = np.zeros(int(max(1, self.sem_fp_bits)))
-            sample_fps.append(fp)
+            Z_neg = None
+            if self.use_malicious_negatives and len(self.malicious_token_counter) > 0:
+                xneg_list: List[torch.Tensor] = []
+                eneg_list: List[torch.Tensor] = []
+                for (sub, xi, ei) in zip(subs, x_list, e_list):
+                    x_neg_np = self._corrupt_features_with_malicious(sub, xi, ratio=self.mal_neg_ratio, token_len=self.mal_neg_token_len)
+                    x_neg = torch.from_numpy(x_neg_np).to(device)
+                    e_neg = self._augment_edges(ei, drop_p=self.drop_edge_p)
+                    x_neg = self._augment_features(x_neg, mask_p=self.feat_mask_p)
+                    xneg_list.append(x_neg)
+                    eneg_list.append(e_neg)
+                X_neg = torch.cat(xneg_list, dim=0) if xneg_list else torch.empty(0, X_pos.size(1), device=device)
+                E_cols_n = []
+                for ei, off in zip(eneg_list, offsets):
+                    if ei.numel() == 0:
+                        continue
+                    E_cols_n.append(ei + off)
+                E_neg = torch.cat(E_cols_n, dim=1) if E_cols_n else torch.zeros((2, 0), dtype=torch.long, device=device)
+                Z_list_n = self.encoder(X_neg, E_neg, return_all=True)
+                H_list_n = self.temporal(Z_list_n, H_prev)
+                H_last_n = H_list_n[-1]
+                sums_n = torch.zeros((Bc, H_last_n.size(1)), dtype=H_last_n.dtype, device=device)
+                cnts_n = torch.zeros((Bc,), dtype=torch.float32, device=device)
+                sums_n.index_add_(0, graph_ids, H_last_n)
+                cnts_n.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
+                means_n = sums_n / (cnts_n.clamp_min(1e-6).unsqueeze(1))
+                Z_neg = self.proj_head(means_n)
+                Z_neg = F.normalize(Z_neg, dim=-1)
+                for gi in range(Bc):
+                    batch_neg_rows[gi].append(Z_pos.size(0) + gi)
 
-            # 恶意负样本
-            extra = 0
-            if self.use_malicious_negatives:
-                x_neg_np = self._corrupt_features_with_malicious(
-                    sub, x_np, ratio=self.mal_neg_ratio, token_len=self.mal_neg_token_len)
-                x_neg = torch.from_numpy(x_neg_np).to(self.device)
+            Z_batch = torch.cat([Z_pos, Z_neg], dim=0) if Z_neg is not None else Z_pos
+            N = Z_batch.size(0)
+            sim = torch.mm(Z_batch, Z_batch.t()) / float(self.temperature)
+            sim = sim.masked_fill(torch.eye(N, device=device, dtype=torch.bool), -1e9)
+            exp_sim = torch.exp(sim)
 
-                for _ in range(2):
-                    e_neg = self._augment_edges(edge_index, self.drop_edge_p)
-                    x_neg_aug = self._augment_features(x_neg, self.feat_mask_p)
-                    Zln = self.encoder(x_neg_aug, e_neg, return_all=True)
-                    Hln = self.temporal(Zln, H_prev)
-                    z_neg = self.proj_head(Hln[-1].mean(dim=0, keepdim=True))
-                    Z_chunks.append(F.normalize(z_neg, dim=-1))
-                    neg_rows[sid].append(len(Z_chunks) - 1)
-                    extra += 1
-
-            # 频率权重
-            if "frequency" in g.vs[center].attributes():
-                freq = float(g.vs[center]["frequency"])
-            else:
-                freq = 1.0
-            freq = max(0.0, freq)  # 确保无负数
-            w = 1.0 + max(0.0, self.anomaly_alpha) * freq
-            for _ in range(1 + extra):
-                sample_weights.append(w)
-
-            commit_payloads.append((curr_ids, [h.detach() for h in Hls]))
-
-        if len(Z_chunks) < 2:
-            return 0.0
-
-        # ===== 损失计算 =====
-        Z = torch.cat(Z_chunks, 0)
-        N = Z.size(0)
-        device = Z.device
-
-        Z = F.normalize(Z, dim=-1)
-        sim = torch.mm(Z, Z.t()) / self.temperature
-        sim = sim.masked_fill(torch.eye(N, device=device, dtype=torch.bool), -1e9)
-        exp_sim = torch.exp(sim)
-
-        B = len(sample_rows)
-        main_idx = torch.tensor([r[0] for r in sample_rows], device=device)
-
-        # 构建主视角 mask (B x B)
-        main_mat = torch.zeros((N, N), dtype=torch.bool, device=device)
-        main_mat[main_idx[:, None], main_idx[None, :]] = True
-
-        # 语义指纹矩阵 S
-        if B >= 2:
-            FP = torch.tensor(np.stack(sample_fps), dtype=torch.float32, device=device)
-            inter = FP @ FP.t()
-            denom_fp = (FP.sum(1, keepdim=True) + FP.sum(1) - inter).clamp_min(1e-6)
-            S = inter / denom_fp
-            S.fill_diagonal_(0.0)
-        else:
+            Bcur = len(batch_sample_rows)
             S = None
+            if Bcur >= 2:
+                FP = torch.tensor(np.stack(batch_fps), dtype=torch.float32, device=device)
+                inter = FP @ FP.t()
+                a1 = FP.sum(1, keepdim=True)
+                denom_fp = (a1 + a1.t() - inter).clamp_min(1e-6)
+                S = inter / denom_fp
+                S.fill_diagonal_(0.0)
 
-        # === 正样本 W (主视角之间的语义相似)
-        W = torch.zeros((N, N), device=device)
-        if S is not None:
-            W[main_idx[:, None], main_idx[None, :]] = torch.clamp(S, min=0.0)
+            W = torch.zeros((N, N), dtype=torch.float32, device=device)
+            if S is not None:
+                for s in range(Bcur):
+                    i = batch_sample_rows[s][0]
+                    for t in range(Bcur):
+                        if s == t:
+                            continue
+                        st = float(S[s, t].item())
+                        if st <= 0:
+                            continue
+                        j = batch_sample_rows[t][0]
+                        W[i, j] = st
 
-        # === 负样本分母权重 denom_w（语义推开）
-        denom_w = torch.ones((N, N), device=device)
-        beta = float(getattr(self, 'sem_push_weight', 0))
-        if S is not None and beta > 0:
-            S_diff = torch.clamp(1.0 - S, min=0.0)
-            scale = 1.0 + beta * S_diff
-            denom_w[main_idx[:, None], main_idx[None, :]] *= scale
-            denom_w[main_idx, main_idx] = 1.0  # 自己不推自己
+            denom_w = torch.ones((N, N), dtype=torch.float32, device=device)
+            beta = float(getattr(self, 'sem_push_weight', 0.0))
+            if beta > 0 and S is not None:
+                for s in range(Bcur):
+                    i = batch_sample_rows[s][0]
+                    for t in range(Bcur):
+                        if s == t:
+                            continue
+                        j = batch_sample_rows[t][0]
+                        scale = 1.0 + beta * torch.clamp(1.0 - S[s, t], min=0.0)
+                        denom_w[i, j] *= scale
 
-        # === 分母掩码（屏蔽别人恶意负样本）
-        denom_mask = torch.zeros((N, N), device=device)
-        for s in range(B):
-            i = main_idx[s]
-            allowed = torch.cat([
-                main_idx,
-                torch.tensor(neg_rows[s], device=device, dtype=torch.long)
-            ], dim=0)
-            denom_mask[i, allowed] = 1.0
+            denom_mask = torch.ones((N, N), dtype=torch.float32, device=device)
+            for s in range(Bcur):
+                i = batch_sample_rows[s][0]
+                neg_other = [idx for t in range(Bcur) if t != s for idx in batch_neg_rows[t]]
+                if neg_other:
+                    denom_mask[i, torch.tensor(neg_other, device=device, dtype=torch.long)] = 0.0
 
-        # === 恶意负样本推开 γ
-        gamma_neg = float(getattr(self, 'mal_neg_push_gamma', 3.0))
-        if gamma_neg > 1:
-            for s in range(B):
-                i = main_idx[s]
-                if len(neg_rows[s]) > 0:
-                    denom_w[i, torch.tensor(neg_rows[s], device=device)] *= gamma_neg
+            gamma_neg = float(getattr(self, 'mal_neg_push_gamma', 3.0))
+            if gamma_neg > 1.0:
+                for s in range(Bcur):
+                    i = batch_sample_rows[s][0]
+                    for j in batch_neg_rows[s]:
+                        denom_w[i, j] *= gamma_neg
 
-        # === 最终 InfoNCE
-        numerator = (W * exp_sim).sum(1)
-        denominator = (denom_mask * denom_w * exp_sim).sum(1).clamp_min(1e-12)
+            numerator = (W * exp_sim).sum(dim=1)
+            denominator = (denom_mask * denom_w * exp_sim).sum(dim=1).clamp_min(1e-12)
+            valid = numerator > 0
+            if valid.any():
+                loss_vec = -torch.log(numerator[valid] / denominator[valid])
+                w_t = torch.tensor(batch_weights, dtype=torch.float32, device=device)[valid[:len(batch_weights)]]
+                loss = (w_t * loss_vec).sum() / w_t.sum().clamp_min(1e-6)
+            else:
+                loss = torch.tensor(0.0, dtype=torch.float32, device=device)
 
-        valid = numerator > 0
-        if valid.any():
-            loss_vec = -torch.log(numerator[valid] / denominator[valid])
-            w_t = torch.tensor(sample_weights, device=device)[valid]
-            loss = (w_t * loss_vec).sum() / w_t.sum().clamp_min(1e-6)
-        else:
-            loss = torch.tensor(0.0, device=device)
+            self.optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                list(self.encoder.parameters()) + list(self.proj_head.parameters()) + list(self.temporal.parameters()),
+                max_norm=5.0,
+            )
+            self.optimizer.step()
 
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(
-            list(self.encoder.parameters()) +
-            list(self.proj_head.parameters()) +
-            list(self.temporal.parameters()),
-            5.0)
-        self.optimizer.step()
+            for ids, H in batch_commit_payloads:
+                self.temporal.commit(ids, H)
 
-        for ids, H in commit_payloads:
-            self.temporal.commit(ids, H)
+            total_loss += float(loss.detach().cpu().item())
+            total_steps += 1
 
-        return float(loss.detach().cpu().item())
+        return total_loss / max(1, total_steps)
 
 
     # ---------- 恶意 tokens 支持（用于负样本） ----------
