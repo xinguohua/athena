@@ -18,7 +18,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ..embedders.base import GraphEmbedderBase
+from .base import GraphEmbedderBase
 
 
 # ----------------------- GIN 基元 -----------------------
