@@ -403,15 +403,19 @@ class GCCEmbedderDev(GraphEmbedderBase):
         B = len(sample_rows)
         device = Z.device
 
-        # 正样本权重 W
-        W = torch.zeros((N, N), device=device)
+        # 先统一计算一次语义相似度矩阵 S，供 W 与 denom_w 共用
+        S = None
         if B >= 2:
             FP = torch.tensor(np.stack(sample_fps), dtype=torch.float32, device=device)
             inter = FP @ FP.t()
-            denom_fp = (FP.sum(1, keepdim=True) + FP.sum(1) - inter).clamp_min(1e-6)
+            a1 = FP.sum(1, keepdim=True)
+            denom_fp = (a1 + a1.t() - inter).clamp_min(1e-6)
             S = inter / denom_fp
             S.fill_diagonal_(0.0)
 
+        # 正样本权重 W（仅主视角之间，恶意负样本不参与分子）
+        W = torch.zeros((N, N), device=device)
+        if S is not None:
             for s in range(B):
                 i = sample_rows[s][0]
                 for t in range(B):
@@ -422,7 +426,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 普通负样本语义推开 denom_w
         denom_w = torch.ones((N, N), device=device)
         beta = float(getattr(self, 'sem_push_weight', 0))
-        if beta > 0 and B >= 2:
+        if beta > 0 and S is not None:
             for s in range(B):
                 i = sample_rows[s][0]
                 for t in range(B):
