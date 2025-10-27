@@ -502,7 +502,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 if neg_other:
                     denom_mask[i, torch.tensor(neg_other, device=device, dtype=torch.long)] = 0.0
 
-            gamma_neg = float(getattr(self, 'mal_neg_push_gamma',5))
+            gamma_neg = float(getattr(self, 'mal_neg_push_gamma',10))
             if gamma_neg > 1.0:
                 for s in range(Bcur):
                     i = batch_sample_rows[s][0]
