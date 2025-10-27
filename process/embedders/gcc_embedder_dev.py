@@ -392,24 +392,33 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
             Z_neg = None
             if self.use_malicious_negatives and len(self.malicious_token_counter) > 0:
+                # 负样本完全使用恶意语料：
+                # - 特征：每个节点用恶意 tokens 生成语义向量；不引用原子图特征
+                # - 结构：不使用原图边（空图），避免引用原图结构
                 xneg_list: List[torch.Tensor] = []
                 eneg_list: List[torch.Tensor] = []
-                for (sub, xi, ei) in zip(subs, x_list, e_list):
-                    x_neg_np = self._corrupt_features_with_malicious(sub, xi, ratio=self.mal_neg_ratio, token_len=self.mal_neg_token_len)
-                    x_neg = torch.from_numpy(x_neg_np).to(device)
-                    e_neg = self._augment_edges(ei, drop_p=self.drop_edge_p)
+                for sub in subs:
+                    n = sub.vcount()
+                    # 构建纯恶意特征矩阵
+                    feats = np.zeros((n, int(self.prop_feat_dim)), dtype=np.float32)
+                    for i_local in range(n):
+                        tokens = self._sample_malicious_tokens(max(1, int(self.mal_neg_token_len)))
+                        vec = self._w2v_vector_from_tokens(tokens)
+                        feats[i_local] = vec.astype(np.float32)
+                    x_neg = torch.from_numpy(feats).to(device)
+                    # 空边集（不使用原图结构）
+                    e_neg = torch.zeros((2, 0), dtype=torch.long, device=device)
+                    # 可选：特征遮蔽增强
                     x_neg = self._augment_features(x_neg, mask_p=self.feat_mask_p)
                     xneg_list.append(x_neg)
                     eneg_list.append(e_neg)
                 X_neg = torch.cat(xneg_list, dim=0) if xneg_list else torch.empty(0, X_pos.size(1), device=device)
-                E_cols_n = []
-                for ei, off in zip(eneg_list, offsets):
-                    if ei.numel() == 0:
-                        continue
-                    E_cols_n.append(ei + off)
-                E_neg = torch.cat(E_cols_n, dim=1) if E_cols_n else torch.zeros((2, 0), dtype=torch.long, device=device)
+                # 所有 e_neg 都为空，整体负图边集为空
+                E_neg = torch.zeros((2, 0), dtype=torch.long, device=device)
                 Z_list_n = self.encoder(X_neg, E_neg, return_all=True)
-                H_list_n = self.temporal(Z_list_n, H_prev)
+                # 负样本时序初值用零，避免引用原图节点的时序状态
+                H_prev_zero = [torch.zeros_like(h) for h in H_prev]
+                H_list_n = self.temporal(Z_list_n, H_prev_zero)
                 H_last_n = H_list_n[-1]
                 sums_n = torch.zeros((Bc, H_last_n.size(1)), dtype=H_last_n.dtype, device=device)
                 cnts_n = torch.zeros((Bc,), dtype=torch.float32, device=device)
@@ -548,7 +557,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 if lab != 1:
                     continue
                 self_tokens = self._get_node_tokens(g, i)
-                nei_tokens = self._gather_neighbor_tokens(g, i)
+                _nei_tokens = self._gather_neighbor_tokens(g, i)
                 self.malicious_token_counter.update(self_tokens)
                 # self.malicious_token_counter.update(nei_tokens)
 
