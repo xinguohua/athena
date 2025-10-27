@@ -140,9 +140,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
         gin_layers: int = 3,
         dropout: float = 0.1,
         # 训练
-        num_epochs: int = 2,
+        num_epochs: int = 1,
         steps_per_epoch: int = 200,
-        batch_size: int = 1000,
+        batch_size: int = 2000,
         # batch_size: int = 10,
         lr: float = 1e-3,
         # 对比学习
