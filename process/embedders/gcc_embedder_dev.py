@@ -189,7 +189,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         gin_layers: int = 3,
         dropout: float = 0.1,
         # 训练
-        num_epochs: int = 30,
+        num_epochs: int = 2,
         steps_per_epoch: int = 200,
         batch_size: int = 64,
         # batch_size: int = 10,
@@ -326,212 +326,143 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
     def _train_one_snapshot(self, g) -> float:
         """在单个 snapshot 上执行一轮训练"""
-        Z_chunks: List[torch.Tensor] = []
-        sample_weights: List[float] = []
-        commit_payloads: List[Tuple[List[str], List[torch.Tensor]]] = []
-        # 统一对比损失需要的缓存
-        sample_rows: List[List[int]] = []      # 每个样本的“主视角”行索引
-        neg_rows: List[List[int]] = []         # 每个样本的“恶意负样本”行索引（仅作为该样本的负对）
-        sample_fps: List[np.ndarray] = []      # 每个样本一个领域指纹（用于语义相似度）
+        Z_chunks, sample_weights = [], []
+        commit_payloads = []
+        sample_rows, neg_rows, sample_fps = [], [], []
 
         self.optimizer.zero_grad()
 
-        # 遍历所有节点作为中心
+        # ===== 构造样本 =====
         for center in range(g.vcount()):
             sub = self._ego_subgraph(g, center, r=self.r_hop, max_nodes=self.ego_max_nodes)
             if sub.vcount() == 0:
                 continue
 
-            # 节点特征与边
             x_np = self._build_node_features(sub)
             edge_index = self._igraph_edges_to_edge_index(sub)
             x = torch.from_numpy(x_np).to(self.device)
             curr_ids = [sub.vs[i]['name'] for i in range(sub.vcount())]
 
-            # 获取上一个时间片的隐藏状态
-            H_prev_aligned = self.temporal.fetch(curr_ids, device=self.device)
-            e1 = edge_index
-            x1 = x
-            Z_list_1 = self.encoder(x1, e1, return_all=True)
-            H_list_1 = self.temporal(Z_list_1, H_prev_aligned)
-            z_1 = self.proj_head(H_list_1[-1].mean(dim=0, keepdim=True))
-            Z_chunks.append(F.normalize(z_1, dim=-1))
+            H_prev = self.temporal.fetch(curr_ids, self.device)
+            Zls = self.encoder(x, edge_index, return_all=True)
+            Hls = self.temporal(Zls, H_prev)
+            z = self.proj_head(Hls[-1].mean(dim=0, keepdim=True))
+            Z_chunks.append(F.normalize(z, dim=-1))
 
-            # 记录行归属（单视角属于该“样本”）
-            sample_id = len(sample_rows)
-            sample_rows.append([])
+            sid = len(sample_rows)
+            sample_rows.append([len(Z_chunks) - 1])
             neg_rows.append([])
-            # 将刚刚追加的该行标记为该样本
-            row_i = len(Z_chunks) - 1
-            sample_rows[sample_id].append(row_i)
 
-            # 生成样本的领域指纹
+            # 语义指纹
             try:
-                fp = self._subgraph_fingerprint(sub, m_bits=int(self.sem_fp_bits)) if int(self.sem_fp_bits) > 0 else np.zeros(0, dtype=np.float32)
-            except Exception:
-                fp = np.zeros(int(max(1, self.sem_fp_bits)), dtype=np.float32)
+                fp = self._subgraph_fingerprint(sub, m_bits=int(self.sem_fp_bits))
+            except:
+                fp = np.zeros(int(max(1, self.sem_fp_bits)))
             sample_fps.append(fp)
 
-            # 可选：恶意负样本
-            extra_views = 0
-            if self.use_malicious_negatives and len(self.malicious_token_counter) > 0:
+            # 恶意负样本
+            extra = 0
+            if self.use_malicious_negatives:
                 x_neg_np = self._corrupt_features_with_malicious(
-                    sub, x_np, ratio=self.mal_neg_ratio, token_len=self.mal_neg_token_len
-                )
+                    sub, x_np, ratio=self.mal_neg_ratio, token_len=self.mal_neg_token_len)
                 x_neg = torch.from_numpy(x_neg_np).to(self.device)
 
                 for _ in range(2):
-                    e_neg = self._augment_edges(edge_index, drop_p=self.drop_edge_p)
-                    x_neg_aug = self._augment_features(x_neg, mask_p=self.feat_mask_p)
-                    Z_list_neg = self.encoder(x_neg_aug, e_neg, return_all=True)
-                    H_list_neg = self.temporal(Z_list_neg, H_prev_aligned)
-                    z_neg = self.proj_head(H_list_neg[-1].mean(dim=0, keepdim=True))
+                    e_neg = self._augment_edges(edge_index, self.drop_edge_p)
+                    x_neg_aug = self._augment_features(x_neg, self.feat_mask_p)
+                    Zln = self.encoder(x_neg_aug, e_neg, return_all=True)
+                    Hln = self.temporal(Zln, H_prev)
+                    z_neg = self.proj_head(Hln[-1].mean(dim=0, keepdim=True))
                     Z_chunks.append(F.normalize(z_neg, dim=-1))
-                    # 这些额外视角作为“负样本”，不参与正对（仅针对当前样本 sample_id）
-                    row_j = len(Z_chunks) - 1
-                    neg_rows[sample_id].append(row_j)
-                    extra_views += 1
+                    neg_rows[sid].append(len(Z_chunks) - 1)
+                    extra += 1
 
-            # 样本权重
-            try:
-                freq_val = float(g.vs[center].get("frequency", 1.0))
-            except Exception:
-                freq_val = 1.0
-            freq_val = max(0.0, freq_val) if np.isfinite(freq_val) else 0.0
-            w = 1.0 + max(0.0, self.anomaly_alpha) * freq_val
-            for _ in range(1 + extra_views):
+            freq = float(g.vs[center].get("frequency", 1.0))
+            w = 1 + max(0, self.anomaly_alpha) * max(0, freq)
+            for _ in range(1 + extra):
                 sample_weights.append(w)
 
-            # 保存状态以更新记忆
-            commit_payloads.append((curr_ids, [h.detach() for h in H_list_1]))
+            commit_payloads.append((curr_ids, [h.detach() for h in Hls]))
 
-        # 如果没采到有效子图，跳过
         if len(Z_chunks) < 2:
             return 0.0
 
-        # 统一加权对比损失（SupCon 风格）：实例正对 + 语义正对，分母保留全体（含负样本）
-        Z = torch.cat(Z_chunks, dim=0)
+        # ===== 损失计算 =====
+        Z = torch.cat(Z_chunks, 0)
         N = Z.size(0)
-        device = Z.device
         Z = F.normalize(Z, dim=-1)
-        sim = torch.mm(Z, Z.t()) / float(self.temperature)
-        eye = torch.eye(N, device=device, dtype=torch.bool)
-        sim = sim.masked_fill(eye, -1e9)
+        sim = torch.mm(Z, Z.t()) / self.temperature
+        sim = sim.masked_fill(torch.eye(N, device=Z.device, dtype=torch.bool), -1e9)
         exp_sim = torch.exp(sim)
 
-        # 权重矩阵 W：语义正对=S（分摊到目标样本的各视角）
-        W = torch.zeros((N, N), dtype=torch.float32, device=device)
-
-        # 语义正对：按 Tanimoto 相似度加权
         B = len(sample_rows)
-        if B >= 2 and len(sample_fps) == B:
-            FP_np = np.stack(sample_fps, axis=0).astype(np.float32)
-            FP = torch.from_numpy(FP_np).to(device=device, dtype=torch.float32)
+        device = Z.device
+
+        # 正样本权重 W
+        W = torch.zeros((N, N), device=device)
+        if B >= 2:
+            FP = torch.tensor(np.stack(sample_fps), dtype=torch.float32, device=device)
             inter = FP @ FP.t()
-            a1 = FP.sum(dim=1, keepdim=True)
-            denom = (a1 + a1.t() - inter).clamp_min(1e-6)
-            S = inter / denom
+            denom_fp = (FP.sum(1, keepdim=True) + FP.sum(1) - inter).clamp_min(1e-6)
+            S = inter / denom_fp
             S.fill_diagonal_(0.0)
-            # 为每个锚 i（属于样本 s），将 S[s,t] 直接加到 t 的主视角行上（主视角只有1行，无需分摊）
-            # 恶意负样本不参与正对
-            for s in range(B):
-                Rs = sample_rows[s]
-                if not Rs:
-                    continue
-                for t in range(B):
-                    if t == s:
-                        continue
-                    st = float(S[s, t].item())
-                    if st <= 0.0:
-                        continue
-                    Rt = sample_rows[t]
-                    if not Rt:
-                        continue
-                    # 主视角每个样本仅一行，无需分摊
-                    add_each = st
-                    for i in Rs:
-                        # i 一定是有效行（属于样本 s）
-                        for j in Rt:
-                            W[i, j] += add_each
 
-        # 分母加权：对“结构不相似”的对按 (1 + beta*(1-S)) 放大，强化推开
-        denom_w = torch.ones((N, N), dtype=torch.float32, device=device)
-        if getattr(self, 'sem_push_weight', 0.0) > 0.0 and B >= 2:
-            beta = float(self.sem_push_weight)
-            # 仅对有样本归属的行/列生效（恶意负样本列自然保留权重1）
             for s in range(B):
-                Rs = sample_rows[s]
-                if not Rs:
-                    continue
+                i = sample_rows[s][0]
                 for t in range(B):
-                    if t == s:
-                        continue
-                    Rt = sample_rows[t]
-                    if not Rt:
-                        continue
-                    # 若上面未计算 S，则在此计算一次（通常已在语义正对分支求出；为稳妥再算一遍）
-                    if 'S' not in locals():
-                        FP_np_tmp = np.stack(sample_fps, axis=0).astype(np.float32)
-                        FP_tmp = torch.from_numpy(FP_np_tmp).to(device=device, dtype=torch.float32)
-                        inter_tmp = FP_tmp @ FP_tmp.t()
-                        a1_tmp = FP_tmp.sum(dim=1, keepdim=True)
-                        denom_tmp = (a1_tmp + a1_tmp.t() - inter_tmp).clamp_min(1e-6)
-                        S = inter_tmp / denom_tmp
-                        S.fill_diagonal_(0.0)
-                    st = float(S[s, t].item()) if 'S' in locals() else 0.0
-                    scale = 1.0 + beta * max(0.0, (1.0 - st))
-                    if scale == 1.0:
-                        continue
-                    for i in Rs:
-                        for j in Rt:
-                            denom_w[i, j] = denom_w[i, j] * scale
+                    if s != t and S[s, t] > 0:
+                        j = sample_rows[t][0]
+                        W[i, j] = S[s, t]
 
-        # 仅让每个样本的锚行看到“自己”的恶意负样本：
-        # 构造分母掩码，将其他样本的恶意负样本对该锚行屏蔽掉
-        denom_mask = torch.ones((N, N), dtype=torch.float32, device=device)
-        if B >= 1:
+        # 普通负样本语义推开 denom_w
+        denom_w = torch.ones((N, N), device=device)
+        beta = float(getattr(self, 'sem_push_weight', 0))
+        if beta > 0 and B >= 2:
             for s in range(B):
-                Rs = sample_rows[s]
-                if not Rs:
-                    continue
-                # 收集“其他样本”的所有恶意负样本行
-                neg_others: List[int] = []
+                i = sample_rows[s][0]
                 for t in range(B):
-                    if t == s:
-                        continue
-                    neg_others.extend(neg_rows[t])
-                if not neg_others:
-                    continue
-                j_idx = torch.tensor(neg_others, device=device, dtype=torch.long)
-                for i in Rs:
-                    denom_mask[i, j_idx] = 0.0
+                    if s != t:
+                        j = sample_rows[t][0]
+                        denom_w[i, j] *= (1 + beta * max(0, 1 - float(S[s, t])))
 
-        # 统一损失：-log( 分子/分母 )
-        numerator = (W * exp_sim).sum(dim=1)
-        denominator = (denom_mask * denom_w * exp_sim).sum(dim=1).clamp_min(1e-12)
-        valid = numerator > 0.0
+        # 屏蔽别人的恶意负样本 denom_mask
+        denom_mask = torch.ones((N, N), device=device)
+        for s in range(B):
+            i = sample_rows[s][0]
+            neg_other = [idx for t in range(B) if t != s for idx in neg_rows[t]]
+            if len(neg_other) > 0:
+                denom_mask[i, torch.tensor(neg_other, device=device)] = 0
+
+        # ✅新增：对自己恶意负样本强推，不依赖语义 S
+        gamma_neg = float(getattr(self, 'mal_neg_push_gamma', 3.0))
+        if gamma_neg > 1:
+            for s in range(B):
+                i = sample_rows[s][0]
+                for j in neg_rows[s]:
+                    denom_w[i, j] *= gamma_neg
+
+        # 最终 InfoNCE
+        numerator = (W * exp_sim).sum(1)
+        denominator = (denom_mask * denom_w * exp_sim).sum(1).clamp_min(1e-12)
+
+        valid = numerator > 0
         if valid.any():
-            loss_vec = -torch.log((numerator.clamp_min(1e-12)) / denominator)
-            loss_vec = loss_vec[valid]
-            w_tensor = torch.tensor(sample_weights, dtype=torch.float32, device=device)
-            w_tensor = w_tensor[valid]
-            denom_w = w_tensor.sum().clamp_min(1e-6)
-            loss = (w_tensor * loss_vec).sum() / denom_w
+            loss_vec = -torch.log(numerator[valid] / denominator[valid])
+            w_t = torch.tensor(sample_weights, device=device)[valid]
+            loss = (w_t * loss_vec).sum() / w_t.sum().clamp_min(1e-6)
         else:
-            # 没有任何正对（极端情况），退化为 0
-            loss = torch.tensor(0.0, dtype=torch.float32, device=device)
+            loss = torch.tensor(0.0, device=device)
 
-        # 反向传播与梯度裁剪
         loss.backward()
         torch.nn.utils.clip_grad_norm_(
-            list(self.encoder.parameters()) + list(self.proj_head.parameters()) + list(self.temporal.parameters()),
-            max_norm=5.0,
-        )
+            list(self.encoder.parameters()) +
+            list(self.proj_head.parameters()) +
+            list(self.temporal.parameters()),
+            5.0)
         self.optimizer.step()
 
-        # 更新时序记忆
-        for node_ids, H_list_t in commit_payloads:
-            self.temporal.commit(node_ids, H_list_t)
+        for ids, H in commit_payloads:
+            self.temporal.commit(ids, H)
 
         return float(loss.detach().cpu().item())
 
