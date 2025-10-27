@@ -395,63 +395,63 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # ===== 损失计算 =====
         Z = torch.cat(Z_chunks, 0)
         N = Z.size(0)
+        device = Z.device
+
         Z = F.normalize(Z, dim=-1)
         sim = torch.mm(Z, Z.t()) / self.temperature
-        sim = sim.masked_fill(torch.eye(N, device=Z.device, dtype=torch.bool), -1e9)
+        sim = sim.masked_fill(torch.eye(N, device=device, dtype=torch.bool), -1e9)
         exp_sim = torch.exp(sim)
 
         B = len(sample_rows)
-        device = Z.device
+        main_idx = torch.tensor([r[0] for r in sample_rows], device=device)
 
-        # 先统一计算一次语义相似度矩阵 S，供 W 与 denom_w 共用
-        S = None
+        # 构建主视角 mask (B x B)
+        main_mat = torch.zeros((N, N), dtype=torch.bool, device=device)
+        main_mat[main_idx[:, None], main_idx[None, :]] = True
+
+        # 语义指纹矩阵 S
         if B >= 2:
             FP = torch.tensor(np.stack(sample_fps), dtype=torch.float32, device=device)
             inter = FP @ FP.t()
-            a1 = FP.sum(1, keepdim=True)
-            denom_fp = (a1 + a1.t() - inter).clamp_min(1e-6)
+            denom_fp = (FP.sum(1, keepdim=True) + FP.sum(1) - inter).clamp_min(1e-6)
             S = inter / denom_fp
             S.fill_diagonal_(0.0)
+        else:
+            S = None
 
-        # 正样本权重 W（仅主视角之间，恶意负样本不参与分子）
+        # === 正样本 W (主视角之间的语义相似)
         W = torch.zeros((N, N), device=device)
         if S is not None:
-            for s in range(B):
-                i = sample_rows[s][0]
-                for t in range(B):
-                    if s != t and S[s, t] > 0:
-                        j = sample_rows[t][0]
-                        W[i, j] = S[s, t]
+            W[main_idx[:, None], main_idx[None, :]] = torch.clamp(S, min=0.0)
 
-        # 普通负样本语义推开 denom_w
+        # === 负样本分母权重 denom_w（语义推开）
         denom_w = torch.ones((N, N), device=device)
         beta = float(getattr(self, 'sem_push_weight', 0))
-        if beta > 0 and S is not None:
-            for s in range(B):
-                i = sample_rows[s][0]
-                for t in range(B):
-                    if s != t:
-                        j = sample_rows[t][0]
-                        scale = 1.0 + beta * torch.clamp(1.0 - S[s, t], min=0.0)
-                        denom_w[i, j] *= scale
+        if S is not None and beta > 0:
+            S_diff = torch.clamp(1.0 - S, min=0.0)
+            scale = 1.0 + beta * S_diff
+            denom_w[main_idx[:, None], main_idx[None, :]] *= scale
+            denom_w[main_idx, main_idx] = 1.0  # 自己不推自己
 
-        # 屏蔽别人的恶意负样本 denom_mask
-        denom_mask = torch.ones((N, N), device=device)
+        # === 分母掩码（屏蔽别人恶意负样本）
+        denom_mask = torch.zeros((N, N), device=device)
         for s in range(B):
-            i = sample_rows[s][0]
-            neg_other = [idx for t in range(B) if t != s for idx in neg_rows[t]]
-            if len(neg_other) > 0:
-                denom_mask[i, torch.tensor(neg_other, device=device)] = 0
+            i = main_idx[s]
+            allowed = torch.cat([
+                main_idx,
+                torch.tensor(neg_rows[s], device=device, dtype=torch.long)
+            ], dim=0)
+            denom_mask[i, allowed] = 1.0
 
-        # ✅新增：对自己恶意负样本强推，不依赖语义 S
+        # === 恶意负样本推开 γ
         gamma_neg = float(getattr(self, 'mal_neg_push_gamma', 3.0))
         if gamma_neg > 1:
             for s in range(B):
-                i = sample_rows[s][0]
-                for j in neg_rows[s]:
-                    denom_w[i, j] *= gamma_neg
+                i = main_idx[s]
+                if len(neg_rows[s]) > 0:
+                    denom_w[i, torch.tensor(neg_rows[s], device=device)] *= gamma_neg
 
-        # 最终 InfoNCE
+        # === 最终 InfoNCE
         numerator = (W * exp_sim).sum(1)
         denominator = (denom_mask * denom_w * exp_sim).sum(1).clamp_min(1e-12)
 
