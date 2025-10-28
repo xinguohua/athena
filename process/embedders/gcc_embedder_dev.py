@@ -164,7 +164,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         w2v_epochs: int = 20,
         w2v_pretrained_path: Optional[str] = None,
         # 相似度/权重相关可选参数
-        sim_measure: str = 'cosine',            # 'tanimoto' | 'cosine' | 'wl'
+        sim_measure: str = 'wl',            # 'tanimoto' | 'cosine' | 'wl'
         wl_height: int = 2,
         sem_push_weight: float = 0.0,
         sem_fp_bits: int = 1024,
