@@ -219,9 +219,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.mal_neg_push_gamma = float(mal_neg_push_gamma)
 
         # 调试参数（只保留一个开关，其它使用内置默认值；默认关闭，可运行时直接改属性开启）
-        self.debug_sim_dump = False
+        self.debug_sim_dump = True
         self.debug_dump_dir = './gcc_debug'
-        self.debug_rows_per_batch = 1
+        self.debug_rows_per_batch = 100
         self.debug_max_batches = 1
         self._debug_dumped_batches = 0
 
