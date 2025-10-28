@@ -408,7 +408,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     # 空边集（不使用原图结构）
                     e_neg = torch.zeros((2, 0), dtype=torch.long, device=device)
                     # 可选：特征遮蔽增强
-                    x_neg = self._augment_features(x_neg, mask_p=self.feat_mask_p)
+                    # x_neg = self._augment_features(x_neg, mask_p=self.feat_mask_p)
                     xneg_list.append(x_neg)
                     eneg_list.append(e_neg)
                 X_neg = torch.cat(xneg_list, dim=0) if xneg_list else torch.empty(0, X_pos.size(1), device=device)
@@ -470,6 +470,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         S = K / (d.unsqueeze(1) * d.unsqueeze(0) + 1e-12)
                         S.fill_diagonal_(0.0)
 
+            # TODO 相似度算的有问题
             W = torch.zeros((N, N), dtype=torch.float32, device=device)
             if S is not None:
                 for s in range(Bcur):
