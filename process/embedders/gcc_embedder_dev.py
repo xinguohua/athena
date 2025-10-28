@@ -590,6 +590,27 @@ class GCCEmbedderDev(GraphEmbedderBase):
                             f.write("exp_sim_row_pick: ")
                             f.write(" ".join(map(lambda x: f"{x:.6f}", dump['exp_sim_row_pick'].tolist())))
                             f.write("\n")
+                            # 自身负样本细节（按设计每个 anchor 只有 1 个）
+                            if own_neg_cols:
+                                denom_sum = float((denom_mask[i] * denom_w[i] * exp_sim[i]).sum().item())
+                                num_sum = float((W[i] * exp_sim[i]).sum().item())
+                                j = own_neg_cols[0]
+                                wv = float(W[i, j].item())
+                                dw = float(denom_w[i, j].item())
+                                dm = float(denom_mask[i, j].item())
+                                ev = float(exp_sim[i, j].item())
+                                denom_term = dm * dw * ev
+                                f.write(f"neg_detail: col={j} W={wv:.6f} denom_w={dw:.6f} denom_mask={dm:.6f} exp={ev:.6f} denom_term={denom_term:.6f}\\n")
+                                # 该 anchor 的 z_neg 向量（行向量，归一化后）
+                                if Z_neg is not None:
+                                    neg_row = j - Z_pos.size(0)
+                                    if 0 <= neg_row < Z_neg.size(0):
+                                        zneg = Z_neg[neg_row].detach().cpu().numpy().astype(np.float32)
+                                        f.write("z_neg: ")
+                                        f.write(" ".join(map(lambda x: f"{x:.6f}", zneg.tolist())))
+                                        f.write("\\n")
+                                f.write(f"numerator_row: {num_sum:.6f}\n")
+                                f.write(f"denominator_row: {denom_sum:.6f}\n")
                             # WL 全量核（若存在）
                             if 'wl_all_items' in dump:
                                 f.write("wl_all:\n")
