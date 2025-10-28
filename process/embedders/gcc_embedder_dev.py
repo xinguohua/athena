@@ -218,6 +218,13 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.mal_neg_token_len = int(mal_neg_token_len)  # 生成恶意向量时采样的恶意 token 数
         self.mal_neg_push_gamma = float(mal_neg_push_gamma)
 
+        # 调试参数（只保留一个开关，其它使用内置默认值；默认关闭，可运行时直接改属性开启）
+        self.debug_sim_dump = False
+        self.debug_dump_dir = './gcc_debug'
+        self.debug_rows_per_batch = 1
+        self.debug_max_batches = 1
+        self._debug_dumped_batches = 0
+
         # 设备
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -304,6 +311,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         iterator = range(0, len(centers), bsz)
         iterator = _tqdm(iterator, total=total_batches, leave=False, desc=f"Snapshot {sidx} Batches")
 
+        batch_idx = 0
         for start in iterator:
             end = min(len(centers), start + bsz)
             batch_centers = centers[start:end]
@@ -510,6 +518,88 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     for j in batch_neg_rows[s]:
                         denom_w[i, j] *= gamma_neg
 
+            # 可选：导出调试信息（行级别，避免 NxN 过大）
+            if self.debug_sim_dump and self._debug_dumped_batches < int(self.debug_max_batches):
+                try:
+                    os.makedirs(self.debug_dump_dir, exist_ok=True)
+                    sel_rows = list(range(min(Bcur, max(1, int(self.debug_rows_per_batch)))))
+                    main_cols = [batch_sample_rows[t][0] for t in range(Bcur)]
+                    for s in sel_rows:
+                        i = batch_sample_rows[s][0]
+                        own_neg_cols = list(batch_neg_rows[s])
+                        # 其他负样本数（通过 denom_mask 的 0 统计，可视为 neg_other）
+                        zeros_other = int((denom_mask[i] == 0).sum().item())
+                        # 选取列索引进行行裁剪 dump：主视角列 + 自己的负样本列
+                        cols_pick = main_cols + own_neg_cols
+                        cols_pick_idx = torch.tensor(cols_pick, dtype=torch.long, device=device)
+                        dump = {
+                            'sidx': int(sidx if sidx is not None else -1),
+                            'batch_idx': int(batch_idx),
+                            'anchor_s': int(s),
+                            'center_idx': int(batch_centers[s]) if s < len(batch_centers) else -1,
+                            'center_name': str(g.vs[batch_centers[s]]['name']) if s < len(batch_centers) else '',
+                            'sim_measure': str(getattr(self, 'sim_measure', 'wl')),
+                            'Bcur': int(Bcur),
+                            'N_total': int(Z_batch.size(0)),
+                            'own_neg_count': int(len(own_neg_cols)),
+                            'other_neg_count': int(zeros_other),
+                            'main_cols': main_cols,
+                            'own_neg_cols': own_neg_cols,
+                        }
+                        # 将数值矩阵对应行裁剪为 numpy
+                        if S is not None:
+                            dump['S_row_main'] = (S[s, :Bcur].detach().cpu().numpy()).astype(np.float32)
+                        dump['W_row_pick'] = (W[i, cols_pick_idx].detach().cpu().numpy()).astype(np.float32)
+                        dump['denom_w_row_pick'] = (denom_w[i, cols_pick_idx].detach().cpu().numpy()).astype(np.float32)
+                        dump['denom_mask_row_pick'] = (denom_mask[i, cols_pick_idx].detach().cpu().numpy()).astype(np.float32)
+                        dump['exp_sim_row_pick'] = (exp_sim[i, cols_pick_idx].detach().cpu().numpy()).astype(np.float32)
+                        # WL 调试：导出该 anchor 的计数 Top-K（若适用）
+                        if (getattr(self, 'sim_measure', 'wl') == 'wl') and (s < len(wl_counters)):
+                            cnt = wl_counters[s]
+                            top_items = cnt.most_common(20)
+                            dump['wl_top20_keys'] = [k for k, _ in top_items]
+                            dump['wl_top20_vals'] = [int(v) for _, v in top_items]
+                        # 保存为简单 TXT 文本（便于直接查看）
+                        base = os.path.join(self.debug_dump_dir, f"simdump_s{sidx}_b{batch_idx}_a{s}")
+                        with open(base + '.txt', 'w', encoding='utf-8') as f:
+                            f.write(f"sidx: {dump['sidx']}\n")
+                            f.write(f"batch_idx: {dump['batch_idx']}\n")
+                            f.write(f"anchor_s: {dump['anchor_s']}\n")
+                            f.write(f"center_idx: {dump['center_idx']}\n")
+                            f.write(f"center_name: {dump['center_name']}\n")
+                            f.write(f"sim_measure: {dump['sim_measure']}\n")
+                            f.write(f"Bcur: {dump['Bcur']}\n")
+                            f.write(f"N_total: {dump['N_total']}\n")
+                            f.write(f"own_neg_count: {dump['own_neg_count']}\n")
+                            f.write(f"other_neg_count: {dump['other_neg_count']}\n")
+                            f.write(f"main_cols: {','.join(map(str, dump['main_cols']))}\n")
+                            f.write(f"own_neg_cols: {','.join(map(str, dump['own_neg_cols']))}\n")
+                            # 数值向量按空格分隔，单行展示
+                            if 'S_row_main' in dump and dump['S_row_main'] is not None:
+                                f.write("S_row_main: ")
+                                f.write(" ".join(map(lambda x: f"{x:.6f}", dump['S_row_main'].tolist())))
+                                f.write("\n")
+                            f.write("W_row_pick: ")
+                            f.write(" ".join(map(lambda x: f"{x:.6f}", dump['W_row_pick'].tolist())))
+                            f.write("\n")
+                            f.write("denom_w_row_pick: ")
+                            f.write(" ".join(map(lambda x: f"{x:.6f}", dump['denom_w_row_pick'].tolist())))
+                            f.write("\n")
+                            f.write("denom_mask_row_pick: ")
+                            f.write(" ".join(map(lambda x: f"{x:.6f}", dump['denom_mask_row_pick'].tolist())))
+                            f.write("\n")
+                            f.write("exp_sim_row_pick: ")
+                            f.write(" ".join(map(lambda x: f"{x:.6f}", dump['exp_sim_row_pick'].tolist())))
+                            f.write("\n")
+                            # WL Top-K（若存在）
+                            if 'wl_top20_keys' in dump and 'wl_top20_vals' in dump:
+                                f.write("wl_top20: \n")
+                                for k, v in zip(dump['wl_top20_keys'], dump['wl_top20_vals']):
+                                    f.write(f"  {k}\t{v}\n")
+                    self._debug_dumped_batches += 1
+                except Exception as e:
+                    print(f"[GCC-Dev][debug] 导出相似度调试失败: {e}")
+
             numerator = (W * exp_sim).sum(dim=1)
             denominator = (denom_mask * denom_w * exp_sim).sum(dim=1).clamp_min(1e-12)
             valid = numerator > 0
@@ -535,6 +625,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
             total_loss += float(loss.detach().cpu().item())
             total_steps += 1
+            batch_idx += 1
 
         return total_loss / max(1, total_steps)
 
