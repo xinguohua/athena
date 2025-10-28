@@ -553,12 +553,12 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         dump['denom_w_row_pick'] = (denom_w[i, cols_pick_idx].detach().cpu().numpy()).astype(np.float32)
                         dump['denom_mask_row_pick'] = (denom_mask[i, cols_pick_idx].detach().cpu().numpy()).astype(np.float32)
                         dump['exp_sim_row_pick'] = (exp_sim[i, cols_pick_idx].detach().cpu().numpy()).astype(np.float32)
-                        # WL 调试：导出该 anchor 的计数 Top-K（若适用）
+                        # WL 调试：导出该 anchor 的完整 WL 核（计数向量）
                         if (getattr(self, 'sim_measure', 'wl') == 'wl') and (s < len(wl_counters)):
                             cnt = wl_counters[s]
-                            top_items = cnt.most_common(20)
-                            dump['wl_top20_keys'] = [k for k, _ in top_items]
-                            dump['wl_top20_vals'] = [int(v) for _, v in top_items]
+                            # 全量输出，按计数降序，其次按键名升序，便于阅读和对齐
+                            items_all = sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0]))
+                            dump['wl_all_items'] = [(str(k), int(v)) for k, v in items_all]
                         # 保存为简单 TXT 文本（便于直接查看）
                         base = os.path.join(self.debug_dump_dir, f"simdump_s{sidx}_b{batch_idx}_a{s}")
                         with open(base + '.txt', 'w', encoding='utf-8') as f:
@@ -591,10 +591,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
                             f.write("exp_sim_row_pick: ")
                             f.write(" ".join(map(lambda x: f"{x:.6f}", dump['exp_sim_row_pick'].tolist())))
                             f.write("\n")
-                            # WL Top-K（若存在）
-                            if 'wl_top20_keys' in dump and 'wl_top20_vals' in dump:
-                                f.write("wl_top20: \n")
-                                for k, v in zip(dump['wl_top20_keys'], dump['wl_top20_vals']):
+                            # WL 全量核（若存在）
+                            if 'wl_all_items' in dump:
+                                f.write("wl_all:\n")
+                                for k, v in dump['wl_all_items']:
                                     f.write(f"  {k}\t{v}\n")
                     self._debug_dumped_batches += 1
                 except Exception as e:
