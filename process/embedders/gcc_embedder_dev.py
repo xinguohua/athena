@@ -460,11 +460,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     rows.append(Z_neg_blocks[1][gi].unsqueeze(0))
             Z_batch = torch.cat(rows, dim=0)  # [views_per_graph*B, D]
 
-            # 与 Z 顺序对齐的样本权重
+            # 与 Z 顺序对齐的样本权重（恶意视角不追加额外权重，与 gcc_embedder.py 保持一致）
             w_list: List[float] = []
             for w in freq_weights:
-                for _ in range(views_per_graph):
-                    w_list.append(float(w))
+                w_list.append(float(w))
+                w_list.append(float(w))
             w_tensor = torch.tensor(w_list, dtype=torch.float32, device=device)
 
             # 多正样本 NT-Xent：相邻正对 + WL Top-K 相似子图映射到当前/配对视角
