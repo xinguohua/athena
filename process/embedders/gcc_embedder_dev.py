@@ -315,6 +315,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
         bsz = max(1, int(self.batch_size))
         total_batches = math.ceil(len(centers) / bsz)
+        print(f"  [Snapshot {sidx}] nodes={len(centers)}, batches={total_batches}")
         iterator = range(0, len(centers), bsz)
         iterator = _tqdm(iterator, total=total_batches, leave=False, desc=f"Snapshot {sidx} Batches")
 
