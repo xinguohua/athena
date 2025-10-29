@@ -140,9 +140,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
         gin_layers: int = 3,
         dropout: float = 0.1,
         # 训练
-        num_epochs: int = 3,
+        num_epochs: int = 1,
         steps_per_epoch: int = 200,
-        batch_size: int = 64,
+        batch_size: int = 1000,
+        # batch_size: int = 10,
         lr: float = 1e-3,
         # 对比学习
         temperature: float = 0.2,
@@ -276,298 +277,310 @@ class GCCEmbedderDev(GraphEmbedderBase):
             self._precollect_malicious_tokens()
 
         print(
-            f"[GCC-Dev] Pretrain on {len(self.train_snapshot_indices)} snapshots | batch={self.batch_size} | epochs={self.num_epochs} | steps_per_epoch={self.steps_per_epoch}")
+            f"[GCC-Dev] Pretrain on {len(self.train_snapshot_indices)} snapshots | batch={self.batch_size} | tau={self.temperature}")
 
         for epoch in range(self.num_epochs):
             self.temporal.reset()  # 每个 epoch 重置时序状态
             epoch_loss = 0.0
-            
-            # 每个 epoch 固定训练 steps_per_epoch 步（梯度更新次数）
-            for step in range(self.steps_per_epoch):
-                # 顺序循环遍历 snapshots（而不是随机采样）
-                sidx = self.train_snapshot_indices[step % len(self.train_snapshot_indices)]
+            steps_done = 0
+
+            # 按时间顺序遍历 snapshot
+            for sidx in sorted(self.train_snapshot_indices):
                 g = self.snapshots[sidx]
                 if g is None or g.vcount() == 0:
                     continue
-                
-                # 从当前 snapshot 中顺序取 batch_size 个节点
-                # 使用 step 作为偏移，确保每次取不同的节点
-                all_centers = list(range(g.vcount()))
-                start_idx = (step // len(self.train_snapshot_indices) * self.batch_size) % max(1, len(all_centers))
-                end_idx = min(start_idx + self.batch_size, len(all_centers))
-                batch_centers = all_centers[start_idx:end_idx]
-                
-                if not batch_centers:
-                    continue
-                
-                # 训练这一个 batch
-                batch_loss = self._train_one_batch(g, batch_centers, sidx)
-                epoch_loss += batch_loss
-                
-                if (step + 1) % 50 == 0:
-                    avg = epoch_loss / (step + 1)
-                    print(f"[GCC-Dev] Epoch {epoch + 1}/{self.num_epochs} | Step {step + 1}/{self.steps_per_epoch} | Loss={avg:.6f}")
 
-            avg = epoch_loss / max(1, self.steps_per_epoch)
+                # 对当前 snapshot 训练一次 batch
+                batch_loss = self._train_one_snapshot(g, sidx=sidx)
+                epoch_loss += batch_loss
+                steps_done += 1
+
+                print(f"[GCC-Dev] Epoch {epoch + 1}/{self.num_epochs} | Snapshot {sidx} | Loss={batch_loss:.6f}")
+
+            avg = epoch_loss / max(1, steps_done)
             print(f"[GCC-Dev] Epoch {epoch + 1}/{self.num_epochs} DONE | AvgLoss={avg:.6f}")
 
         # 训练结束后生成节点嵌入（静态路径，若需时序请调用 use_temporal=True）并保存模型
         self.generate_node_embeddings(use_temporal=False)
         self.save_model()
 
-    def _train_one_batch(self, g, batch_centers, sidx: Optional[int] = None) -> float:
-        """训练单个 batch：给定一组中心节点，构造子图并训练。"""
+    def _train_one_snapshot(self, g, sidx: Optional[int] = None) -> float:
+        """单个 snapshot 训练：按 batch 聚合多个中心子图，一次性 GNN 前向。"""
         device = self.device
+        centers = list(range(g.vcount()))
+        if not centers:
+            return 0.0
+        total_loss = 0.0
+        total_steps = 0
 
-        subs: List = []
-        x_list: List[np.ndarray] = []
-        e_list: List[torch.Tensor] = []
-        ids_list: List[List[str]] = []
-        node_counts: List[int] = []
-        freq_weights: List[float] = []
-        fps: List[np.ndarray] = []
-        semvecs: List[np.ndarray] = []
-        wl_counters: List[Counter] = []
+        bsz = max(1, int(self.batch_size))
+        total_batches = math.ceil(len(centers) / bsz)
+        print(f"  [Snapshot {sidx}] nodes={len(centers)}, batches={total_batches}")
+        iterator = range(0, len(centers), bsz)
+        iterator = _tqdm(iterator, total=total_batches, leave=False, desc=f"Snapshot {sidx} Batches")
 
-        for center in batch_centers:
-            sub = self._ego_subgraph(g, center, r=self.r_hop, max_nodes=self.ego_max_nodes)
-            if sub.vcount() == 0:
+        batch_idx = 0
+        for start in iterator:
+            end = min(len(centers), start + bsz)
+            batch_centers = centers[start:end]
+
+            subs: List = []
+            x_list: List[np.ndarray] = []
+            e_list: List[torch.Tensor] = []
+            ids_list: List[List[str]] = []
+            node_counts: List[int] = []
+            freq_weights: List[float] = []
+            fps: List[np.ndarray] = []
+            semvecs: List[np.ndarray] = []
+            wl_counters: List[Counter] = []
+
+            for center in batch_centers:
+                sub = self._ego_subgraph(g, center, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                if sub.vcount() == 0:
+                    continue
+                subs.append(sub)
+                xi = self._build_node_features(sub)
+                ei = self._igraph_edges_to_edge_index(sub)
+                ids = [sub.vs[i]['name'] for i in range(sub.vcount())]
+                x_list.append(xi)
+                e_list.append(ei)
+                ids_list.append(ids)
+                node_counts.append(sub.vcount())
+                freq = float(g.vs[center]['frequency'])
+                freq_weights.append(1.0 + max(0.0, self.anomaly_alpha) * freq)
+                # 准备相似度特征（按配置）
+                if getattr(self, 'sim_measure', 'wl') == 'tanimoto':
+                    try:
+                        fp = self._subgraph_fingerprint(sub, m_bits=int(self.sem_fp_bits)) if int(self.sem_fp_bits) > 0 else np.zeros(0, dtype=np.float32)
+                    except Exception:
+                        fp = np.zeros(int(max(1, self.sem_fp_bits)), dtype=np.float32)
+                    fps.append(fp)
+                elif getattr(self, 'sim_measure', 'wl') == 'cosine':
+                    try:
+                        sv = self._subgraph_semantic_vector(sub)
+                    except Exception:
+                        sv = np.zeros(int(self.prop_feat_dim), dtype=np.float32)
+                    semvecs.append(sv)
+                else:  # 'wl'
+                    try:
+                        cnt = self._wl_subtree_counter(sub, h=int(getattr(self, 'wl_height', 2)))
+                    except Exception:
+                        cnt = Counter()
+                    wl_counters.append(cnt)
+
+            if not subs:
                 continue
-            subs.append(sub)
-            xi = self._build_node_features(sub)
-            ei = self._igraph_edges_to_edge_index(sub)
-            ids = [sub.vs[i]['name'] for i in range(sub.vcount())]
-            x_list.append(xi)
-            e_list.append(ei)
-            ids_list.append(ids)
-            node_counts.append(sub.vcount())
-            freq = float(g.vs[center]['frequency'])
-            freq_weights.append(1.0 + max(0.0, self.anomaly_alpha) * freq)
-            # 准备相似度特征（按配置）
-            if getattr(self, 'sim_measure', 'wl') == 'tanimoto':
-                try:
-                    fp = self._subgraph_fingerprint(sub, m_bits=int(self.sem_fp_bits)) if int(self.sem_fp_bits) > 0 else np.zeros(0, dtype=np.float32)
-                except Exception:
-                    fp = np.zeros(int(max(1, self.sem_fp_bits)), dtype=np.float32)
-                fps.append(fp)
-            elif getattr(self, 'sim_measure', 'wl') == 'cosine':
-                try:
-                    sv = self._subgraph_semantic_vector(sub)
-                except Exception:
-                    sv = np.zeros(int(self.prop_feat_dim), dtype=np.float32)
-                semvecs.append(sv)
-            else:  # 'wl'
-                try:
-                    cnt = self._wl_subtree_counter(sub, h=int(getattr(self, 'wl_height', 2)))
-                except Exception:
-                    cnt = Counter()
-                wl_counters.append(cnt)
 
-        if not subs:
-            return 0.0
+            # ===== 经典 NT-Xent：为每个子图构造两种增强视角，正对为同一子图的两视角；可选再追加基于相似度的 Top-K 正对 =====
+            # 索引与展平信息
+            offsets = np.cumsum([0] + node_counts[:-1]).tolist()
+            flat_ids = [nid for ids in ids_list for nid in ids]
+            graph_ids = torch.tensor([gi for gi, n in enumerate(node_counts) for _ in range(n)], dtype=torch.long, device=device)
 
-        # ===== 经典 NT-Xent：为每个子图构造两种增强视角，正对为同一子图的两视角；可选再追加基于相似度的 Top-K 正对 =====
-        # 索引与展平信息
-        offsets = np.cumsum([0] + node_counts[:-1]).tolist()
-        flat_ids = [nid for ids in ids_list for nid in ids]
-        graph_ids = torch.tensor([gi for gi, n in enumerate(node_counts) for _ in range(n)], dtype=torch.long, device=device)
+            # 取上一次时刻的隐藏状态（按当前顺序对齐）
+            H_prev = self.temporal.fetch(flat_ids, device=device)
 
-        # 取上一次时刻的隐藏状态（按当前顺序对齐）
-        H_prev = self.temporal.fetch(flat_ids, device=device)
+            # 两个视角的边/特征增强（逐子图，再合并）
+            x_tensors = [torch.from_numpy(xi).to(device) for xi in x_list]
+            e_tensors = e_list
+            x1_list = [self._augment_features(xi, mask_p=self.feat_mask_p) for xi in x_tensors]
+            x2_list = [self._augment_features(xi, mask_p=self.feat_mask_p) for xi in x_tensors]
+            e1_cols = []
+            e2_cols = []
+            for ei, off in zip(e_tensors, offsets):
+                if ei.numel() > 0:
+                    e1_cols.append(self._augment_edges(ei, drop_p=self.drop_edge_p) + off)
+                    e2_cols.append(self._augment_edges(ei, drop_p=self.drop_edge_p) + off)
+            E1 = torch.cat(e1_cols, dim=1) if e1_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
+            E2 = torch.cat(e2_cols, dim=1) if e2_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
+            X1 = torch.cat(x1_list, dim=0) if x1_list else torch.empty(0, int(self.prop_feat_dim), device=device)
+            X2 = torch.cat(x2_list, dim=0) if x2_list else torch.empty(0, int(self.prop_feat_dim), device=device)
 
-        # 两个视角的边/特征增强（逐子图，再合并）
-        x_tensors = [torch.from_numpy(xi).to(device) for xi in x_list]
-        e_tensors = e_list
-        x1_list = [self._augment_features(xi, mask_p=self.feat_mask_p) for xi in x_tensors]
-        x2_list = [self._augment_features(xi, mask_p=self.feat_mask_p) for xi in x_tensors]
-        e1_cols = []
-        e2_cols = []
-        for ei, off in zip(e_tensors, offsets):
-            if ei.numel() > 0:
-                e1_cols.append(self._augment_edges(ei, drop_p=self.drop_edge_p) + off)
-                e2_cols.append(self._augment_edges(ei, drop_p=self.drop_edge_p) + off)
-        E1 = torch.cat(e1_cols, dim=1) if e1_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
-        E2 = torch.cat(e2_cols, dim=1) if e2_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
-        X1 = torch.cat(x1_list, dim=0) if x1_list else torch.empty(0, int(self.prop_feat_dim), device=device)
-        X2 = torch.cat(x2_list, dim=0) if x2_list else torch.empty(0, int(self.prop_feat_dim), device=device)
+            # 视角1前向
+            Z1_list = self.encoder(X1, E1, return_all=True)
+            H1_list = self.temporal(Z1_list, H_prev)
+            H1_last = H1_list[-1]
+            Bc = len(node_counts)
+            sums1 = torch.zeros((Bc, H1_last.size(1)), dtype=H1_last.dtype, device=device)
+            cnts1 = torch.zeros((Bc,), dtype=torch.float32, device=device)
+            sums1.index_add_(0, graph_ids, H1_last)
+            cnts1.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
+            means1 = sums1 / (cnts1.clamp_min(1e-6).unsqueeze(1))
+            Z_view1 = F.normalize(self.proj_head(means1), dim=-1)
 
-        # 视角1前向
-        Z1_list = self.encoder(X1, E1, return_all=True)
-        H1_list = self.temporal(Z1_list, H_prev)
-        H1_last = H1_list[-1]
-        Bc = len(node_counts)
-        sums1 = torch.zeros((Bc, H1_last.size(1)), dtype=H1_last.dtype, device=device)
-        cnts1 = torch.zeros((Bc,), dtype=torch.float32, device=device)
-        sums1.index_add_(0, graph_ids, H1_last)
-        cnts1.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
-        means1 = sums1 / (cnts1.clamp_min(1e-6).unsqueeze(1))
-        Z_view1 = F.normalize(self.proj_head(means1), dim=-1)
+            # 视角2前向（使用相同 H_prev 以保持同一时刻的对比）
+            Z2_list = self.encoder(X2, E2, return_all=True)
+            H2_list = self.temporal(Z2_list, H_prev)
+            H2_last = H2_list[-1]
+            sums2 = torch.zeros((Bc, H2_last.size(1)), dtype=H2_last.dtype, device=device)
+            cnts2 = torch.zeros((Bc,), dtype=torch.float32, device=device)
+            sums2.index_add_(0, graph_ids, H2_last)
+            cnts2.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
+            means2 = sums2 / (cnts2.clamp_min(1e-6).unsqueeze(1))
+            Z_view2 = F.normalize(self.proj_head(means2), dim=-1)
 
-        # 视角2前向（使用相同 H_prev 以保持同一时刻的对比）
-        Z2_list = self.encoder(X2, E2, return_all=True)
-        H2_list = self.temporal(Z2_list, H_prev)
-        H2_last = H2_list[-1]
-        sums2 = torch.zeros((Bc, H2_last.size(1)), dtype=H2_last.dtype, device=device)
-        cnts2 = torch.zeros((Bc,), dtype=torch.float32, device=device)
-        sums2.index_add_(0, graph_ids, H2_last)
-        cnts2.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
-        means2 = sums2 / (cnts2.clamp_min(1e-6).unsqueeze(1))
-        Z_view2 = F.normalize(self.proj_head(means2), dim=-1)
+            # ===== 基于恶意语料：为每个子图再构造两组“恶意视角”，直接作为完整样本对拼进 batch =====
+            Z_neg_blocks: List[torch.Tensor] = []
+            if getattr(self, 'use_malicious_negatives', False) and len(self.malicious_token_counter) > 0:
+                # 按子图构造恶意特征（节点级），再按 batch 展平
+                X_neg_list = []
+                for sub, xi in zip(subs, x_list):
+                    xneg_np = self._corrupt_features_with_malicious(
+                        sub, xi, ratio=float(getattr(self, 'mal_neg_ratio', 0.3)), token_len=int(getattr(self, 'mal_neg_token_len', 16))
+                    )
+                    X_neg_list.append(torch.from_numpy(xneg_np).to(device))
+                X_neg = torch.cat(X_neg_list, dim=0) if X_neg_list else torch.empty(0, int(self.prop_feat_dim), device=device)
 
-        # ===== 基于恶意语料：为每个子图再构造两组“恶意视角”，直接作为完整样本对拼进 batch =====
-        Z_neg_blocks: List[torch.Tensor] = []
-        if getattr(self, 'use_malicious_negatives', False) and len(self.malicious_token_counter) > 0:
-            # 按子图构造恶意特征（节点级），再按 batch 展平
-            X_neg_list = []
-            for sub, xi in zip(subs, x_list):
-                xneg_np = self._corrupt_features_with_malicious(
-                    sub, xi, ratio=float(getattr(self, 'mal_neg_ratio', 0.3)), token_len=int(getattr(self, 'mal_neg_token_len', 16))
-                )
-                X_neg_list.append(torch.from_numpy(xneg_np).to(device))
-            X_neg = torch.cat(X_neg_list, dim=0) if X_neg_list else torch.empty(0, int(self.prop_feat_dim), device=device)
+                # 生成两组恶意视角（与原实现一致，保证相邻配对）
+                # 注意：恶意视角不使用时序记忆，因为它们是虚构的腐化数据
+                for _ in range(2):
+                    en_cols = []
+                    for ei, off in zip(e_tensors, offsets):
+                        if ei.numel() > 0:
+                            en_cols.append(self._augment_edges(ei, drop_p=self.drop_edge_p) + off)
+                    EN = torch.cat(en_cols, dim=1) if en_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
+                    XN = self._augment_features(X_neg, mask_p=self.feat_mask_p)
 
-            # 生成两组恶意视角（与原实现一致，保证相邻配对）
-            # 注意：恶意视角不使用时序记忆，因为它们是虚构的腐化数据
-            for _ in range(2):
-                en_cols = []
-                for ei, off in zip(e_tensors, offsets):
-                    if ei.numel() > 0:
-                        en_cols.append(self._augment_edges(ei, drop_p=self.drop_edge_p) + off)
-                EN = torch.cat(en_cols, dim=1) if en_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
-                XN = self._augment_features(X_neg, mask_p=self.feat_mask_p)
+                    # 恶意视角：直接用 GNN 编码，不经过时序记忆
+                    ZN_list = self.encoder(XN, EN, return_all=True)
+                    NL = ZN_list[-1]  # 直接使用最后一层的输出，不用时序记忆
+                    sums_n = torch.zeros((Bc, NL.size(1)), dtype=NL.dtype, device=device)
+                    cnts_n = torch.zeros((Bc,), dtype=torch.float32, device=device)
+                    sums_n.index_add_(0, graph_ids, NL)
+                    cnts_n.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
+                    means_n = sums_n / (cnts_n.clamp_min(1e-6).unsqueeze(1))
+                    Z_neg_blocks.append(F.normalize(self.proj_head(means_n), dim=-1))
 
-                # 恶意视角：直接用 GNN 编码，不经过时序记忆
-                ZN_list = self.encoder(XN, EN, return_all=True)
-                NL = ZN_list[-1]  # 直接使用最后一层的输出，不用时序记忆
-                sums_n = torch.zeros((Bc, NL.size(1)), dtype=NL.dtype, device=device)
-                cnts_n = torch.zeros((Bc,), dtype=torch.float32, device=device)
-                sums_n.index_add_(0, graph_ids, NL)
-                cnts_n.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
-                means_n = sums_n / (cnts_n.clamp_min(1e-6).unsqueeze(1))
-                Z_neg_blocks.append(F.normalize(self.proj_head(means_n), dim=-1))
+            # 以相邻为正对的顺序把所有视角（正常+恶意）拼接进 Z，并一次性计算 sim/损失
+            rows: List[torch.Tensor] = []
+            views_per_graph = 2 + (2 if len(Z_neg_blocks) == 2 else 0)
+            for gi in range(Bc):
+                rows.append(Z_view1[gi].unsqueeze(0))
+                rows.append(Z_view2[gi].unsqueeze(0))
+                if len(Z_neg_blocks) == 2:
+                    rows.append(Z_neg_blocks[0][gi].unsqueeze(0))
+                    rows.append(Z_neg_blocks[1][gi].unsqueeze(0))
+            Z_batch = torch.cat(rows, dim=0)  # [views_per_graph*B, D]
 
-        # 以相邻为正对的顺序把所有视角（正常+恶意）拼接进 Z，并一次性计算 sim/损失
-        rows: List[torch.Tensor] = []
-        views_per_graph = 2 + (2 if len(Z_neg_blocks) == 2 else 0)
-        for gi in range(Bc):
-            rows.append(Z_view1[gi].unsqueeze(0))
-            rows.append(Z_view2[gi].unsqueeze(0))
-            if len(Z_neg_blocks) == 2:
-                rows.append(Z_neg_blocks[0][gi].unsqueeze(0))
-                rows.append(Z_neg_blocks[1][gi].unsqueeze(0))
-        Z_batch = torch.cat(rows, dim=0)  # [views_per_graph*B, D]
-
-        # 与 Z 顺序对齐的样本权重：为所有视角（正常+恶意）都添加权重
-        w_list: List[float] = []
-        for w in freq_weights:
-            # 正常视角的两个增强
-            w_list.append(float(w))
-            w_list.append(float(w))
-            # 如果有恶意视角，也添加相同的权重
-            if len(Z_neg_blocks) == 2:
+            # 与 Z 顺序对齐的样本权重：为所有视角（正常+恶意）都添加权重
+            w_list: List[float] = []
+            for w in freq_weights:
+                # 正常视角的两个增强
                 w_list.append(float(w))
                 w_list.append(float(w))
-        
-        # 转换为 tensor（正确写法：权重数量应该与 Z_batch 行数一致）
-        if len(w_list) == Z_batch.size(0):
-            w_tensor = torch.tensor(w_list, dtype=torch.float32, device=device)
-        else:
-            # 长度不匹配时报警告但继续训练（使用均匀权重）
-            print(f"Warning: weight mismatch, w_list={len(w_list)} vs Z_batch={Z_batch.size(0)}, using uniform weights")
-            w_tensor = None
-
-        # 多正样本 NT-Xent：相邻正对 + WL Top-K 相似子图映射到当前/配对视角
-        N = Z_batch.size(0)
-        sim_mat = torch.mm(Z_batch, Z_batch.t()) / float(self.temperature)
-        eye_mask = torch.eye(N, dtype=torch.bool, device=device)
-        sim_mat = sim_mat.masked_fill(eye_mask, -1e9)
-        exp_sim = torch.exp(sim_mat)
-
-        # 计算 WL 子图相似度矩阵 S（子图级 B×B）
-        Bcur = Bc
-        S = None
-        if Bcur >= 2:
-            if wl_counters:
-                vocab = sorted(set().union(*[set(c.keys()) for c in wl_counters[:Bcur]]))
+                # 如果有恶意视角，也添加相同的权重
+                if len(Z_neg_blocks) == 2:
+                    w_list.append(float(w))
+                    w_list.append(float(w))
+            
+            # 转换为 tensor（正确写法：权重数量应该与 Z_batch 行数一致）
+            if len(w_list) == Z_batch.size(0):
+                w_tensor = torch.tensor(w_list, dtype=torch.float32, device=device)
             else:
-                vocab = []
-            if len(vocab) > 0:
-                vid = {k: i for i, k in enumerate(vocab)}
-                Fw = np.zeros((Bcur, len(vocab)), dtype=np.float32)
-                for rr, cnt in enumerate(wl_counters[:Bcur]):
-                    for k, v in cnt.items():
-                        idx = vid.get(k)
-                        if idx is not None:
-                            Fw[rr, idx] = float(v)
-                Fw_t = torch.tensor(Fw, dtype=torch.float32, device=device)
-                K = Fw_t @ Fw_t.t()
-                d = torch.diag(K).clamp_min(1e-12).sqrt()
-                S = K / (d.unsqueeze(1) * d.unsqueeze(0) + 1e-12)
-                S.fill_diagonal_(0.0)
+                # 长度不匹配时报警告但继续训练（使用均匀权重）
+                print(f"Warning: weight mismatch, w_list={len(w_list)} vs Z_batch={Z_batch.size(0)}, using uniform weights")
+                w_tensor = None
 
-        # 构造多正样本掩码
-        pos_mask = torch.zeros((N, N), dtype=torch.float32, device=device)
-        views_per_graph = 2 + (2 if len(Z_neg_blocks) == 2 else 0)
-        def pair_slot(vs: int) -> int:
-            return vs ^ 1  # 0<->1, 2<->3
-        # Top-K 配置
-        if S is not None and isinstance(getattr(self, 'topk_pos', None), int) and int(getattr(self, 'topk_pos')) > 0:
-            kpos = min(int(getattr(self, 'topk_pos')), max(0, Bcur - 1))
-        else:
-            kpos = 0
-        tau_sim = float(getattr(self, 'topk_pos_min_sim', 0.0))
+            # 多正样本 NT-Xent：相邻正对 + WL Top-K 相似子图映射到当前/配对视角
+            N = Z_batch.size(0)
+            sim_mat = torch.mm(Z_batch, Z_batch.t()) / float(self.temperature)
+            eye_mask = torch.eye(N, dtype=torch.bool, device=device)
+            sim_mat = sim_mat.masked_fill(eye_mask, -1e9)
+            exp_sim = torch.exp(sim_mat)
 
-        for r in range(N):
-            gidx = r // views_per_graph
-            vslot = r % views_per_graph
-            pos_idx: List[int] = []
-            # 主正对（相邻）
-            if views_per_graph >= 2:
-                pos_idx.append(gidx * views_per_graph + pair_slot(vslot))
-            # WL Top-K 扩增正样本：仅对正常视角（vslot=0,1）扩增，恶意视角不参与
-            if S is not None and kpos > 0 and vslot < 2:
-                rowS = S[gidx, :Bcur].clone()
-                rowS[gidx] = -1e9
-                vals, idxs = torch.topk(rowS, k=kpos, largest=True)
-                if vals.numel() > 0:
-                    m = vals > tau_sim
-                    neigh = idxs[m].tolist() if m.any() else []
-                    for t in neigh:
-                        pos_idx.append(t * views_per_graph + vslot)
-                        pos_idx.append(t * views_per_graph + pair_slot(vslot))
-            if pos_idx:
-                pos_mask[r, torch.tensor(pos_idx, dtype=torch.long, device=device)] = 1.0
+            # 计算 WL 子图相似度矩阵 S（子图级 B×B）
+            Bcur = Bc
+            S = None
+            if Bcur >= 2:
+                if wl_counters:
+                    vocab = sorted(set().union(*[set(c.keys()) for c in wl_counters[:Bcur]]))
+                else:
+                    vocab = []
+                if len(vocab) > 0:
+                    vid = {k: i for i, k in enumerate(vocab)}
+                    Fw = np.zeros((Bcur, len(vocab)), dtype=np.float32)
+                    for rr, cnt in enumerate(wl_counters[:Bcur]):
+                        for k, v in cnt.items():
+                            idx = vid.get(k)
+                            if idx is not None:
+                                Fw[rr, idx] = float(v)
+                    Fw_t = torch.tensor(Fw, dtype=torch.float32, device=device)
+                    K = Fw_t @ Fw_t.t()
+                    d = torch.diag(K).clamp_min(1e-12).sqrt()
+                    S = K / (d.unsqueeze(1) * d.unsqueeze(0) + 1e-12)
+                    S.fill_diagonal_(0.0)
 
-        neg_mask = 1.0 - pos_mask
-        neg_mask = neg_mask.masked_fill(eye_mask, 0.0)
-        numerator = (pos_mask * exp_sim).sum(dim=1)
-        denominator = (neg_mask * exp_sim).sum(dim=1).clamp_min(1e-12)
-        valid = numerator > 0
-        if not valid.any():
-            # 若无有效正样本，返回 0.0
-            return 0.0
-        loss_vec = -torch.log(numerator[valid] / denominator[valid])
-        if w_tensor is not None:
-            w_t = w_tensor[valid]
-            loss = (w_t * loss_vec).sum() / w_t.sum().clamp_min(1e-6)
-        else:
-            loss = loss_vec.mean()
+            # 构造多正样本掩码
+            pos_mask = torch.zeros((N, N), dtype=torch.float32, device=device)
+            views_per_graph = 2 + (2 if len(Z_neg_blocks) == 2 else 0)
+            def pair_slot(vs: int) -> int:
+                return vs ^ 1  # 0<->1, 2<->3
+            # Top-K 配置
+            if S is not None and isinstance(getattr(self, 'topk_pos', None), int) and int(getattr(self, 'topk_pos')) > 0:
+                kpos = min(int(getattr(self, 'topk_pos')), max(0, Bcur - 1))
+            else:
+                kpos = 0
+            tau_sim = float(getattr(self, 'topk_pos_min_sim', 0.0))
 
-        self.optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(
-            list(self.encoder.parameters()) + list(self.proj_head.parameters()) + list(self.temporal.parameters()),
-            max_norm=5.0,
-        )
-        self.optimizer.step()
+            for r in range(N):
+                gidx = r // views_per_graph
+                vslot = r % views_per_graph
+                pos_idx: List[int] = []
+                # 主正对（相邻）
+                if views_per_graph >= 2:
+                    pos_idx.append(gidx * views_per_graph + pair_slot(vslot))
+                # WL Top-K 扩增正样本：仅对正常视角（vslot=0,1）扩增，恶意视角不参与
+                if S is not None and kpos > 0 and vslot < 2:
+                    rowS = S[gidx, :Bcur].clone()
+                    rowS[gidx] = -1e9
+                    vals, idxs = torch.topk(rowS, k=kpos, largest=True)
+                    if vals.numel() > 0:
+                        m = vals > tau_sim
+                        neigh = idxs[m].tolist() if m.any() else []
+                        for t in neigh:
+                            pos_idx.append(t * views_per_graph + vslot)
+                            pos_idx.append(t * views_per_graph + pair_slot(vslot))
+                if pos_idx:
+                    pos_mask[r, torch.tensor(pos_idx, dtype=torch.long, device=device)] = 1.0
 
-        # 更新时序记忆（采用视角1的隐状态作为当期提交）
-        for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
-            beg, endi = offsets[gi], offsets[gi] + n
-            slice_H = [Hl[beg:endi].detach() for Hl in H1_list]
-            self.temporal.commit(ids, slice_H)
+            neg_mask = 1.0 - pos_mask
+            neg_mask = neg_mask.masked_fill(eye_mask, 0.0)
+            numerator = (pos_mask * exp_sim).sum(dim=1)
+            denominator = (neg_mask * exp_sim).sum(dim=1).clamp_min(1e-12)
+            valid = numerator > 0
+            if not valid.any():
+                # 若无有效正样本，跳过并提交一次记忆
+                for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
+                    beg, endi = offsets[gi], offsets[gi] + n
+                    slice_H = [Hl[beg:endi].detach() for Hl in H1_list]
+                    self.temporal.commit(ids, slice_H)
+                continue
+            loss_vec = -torch.log(numerator[valid] / denominator[valid])
+            if w_tensor is not None:
+                w_t = w_tensor[valid]
+                loss = (w_t * loss_vec).sum() / w_t.sum().clamp_min(1e-6)
+            else:
+                loss = loss_vec.mean()
 
-        return float(loss.detach().cpu().item())
+            self.optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                list(self.encoder.parameters()) + list(self.proj_head.parameters()) + list(self.temporal.parameters()),
+                max_norm=5.0,
+            )
+            self.optimizer.step()
+
+            # 更新时序记忆（采用视角1的隐状态作为当期提交）
+            for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
+                beg, endi = offsets[gi], offsets[gi] + n
+                slice_H = [Hl[beg:endi].detach() for Hl in H1_list]
+                self.temporal.commit(ids, slice_H)
+
+            total_loss += float(loss.detach().cpu().item())
+            total_steps += 1
+            batch_idx += 1
+
+        return total_loss / max(1, total_steps)
 
 
     # ---------- 恶意 tokens 支持（用于负样本） ----------
