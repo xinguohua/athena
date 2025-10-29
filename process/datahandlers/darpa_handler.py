@@ -216,10 +216,17 @@ class DARPAHandler(BaseProcessor):
         if unique_edges:
             edge_idx = [(index_map[a], index_map[b]) for (a, b) in unique_edges]
             G.add_edges(edge_idx)
-            G.es["actions"] = [str(list(edges_map[(a, b)])) for (a, b) in unique_edges]
-            G.es["timestamp"] = [max(edges_map[(a, b)]["timestamp"]) for (a, b) in unique_edges]
-
-            # === 下游需要的结构 ===
+            G.es["actions"] = [
+                ",".join(sorted(edges_map[(a, b)]["actions"]))
+                if not isinstance(edges_map[(a, b)]["actions"], str)
+                else edges_map[(a, b)]["actions"]
+                for (a, b) in unique_edges
+            ]
+            G.es["timestamp"] = [
+                max(edges_map[(a, b)]["timestamp"])
+                for (a, b) in unique_edges
+            ]
+        # === 下游需要的结构 ===
         features = [nodes_props[nid] for nid in node_ids]
         edge_index = [[], []]
         relations_index = {}
