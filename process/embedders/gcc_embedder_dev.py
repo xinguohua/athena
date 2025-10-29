@@ -437,16 +437,16 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 X_neg_list.append(torch.from_numpy(feats).to(device))
             X_neg = torch.cat(X_neg_list, dim=0) if X_neg_list else torch.empty(0, int(self.prop_feat_dim), device=device)
             E_neg = torch.zeros((2, 0), dtype=torch.long, device=device)
-            # 为降低显存占用：显式负样本不参与时序单元的前向；并且不保留梯度
-            with torch.no_grad():
-                Z_list_n = self.encoder(X_neg, E_neg, return_all=True)
-                ZN_last = Z_list_n[-1]
-                sums_n = torch.zeros((Bc, ZN_last.size(1)), dtype=ZN_last.dtype, device=device)
-                cnts_n = torch.zeros((Bc,), dtype=torch.float32, device=device)
-                sums_n.index_add_(0, graph_ids, ZN_last)
-                cnts_n.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
-                means_n = sums_n / (cnts_n.clamp_min(1e-6).unsqueeze(1))
-                Z_neg = F.normalize(self.proj_head(means_n), dim=-1)
+            Z_list_n = self.encoder(X_neg, E_neg, return_all=True)
+            H_prev_zero = [torch.zeros_like(h) for h in H_prev]
+            H_list_n = self.temporal(Z_list_n, H_prev_zero)
+            H_last_n = H_list_n[-1]
+            sums_n = torch.zeros((Bc, H_last_n.size(1)), dtype=H_last_n.dtype, device=device)
+            cnts_n = torch.zeros((Bc,), dtype=torch.float32, device=device)
+            sums_n.index_add_(0, graph_ids, H_last_n)
+            cnts_n.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
+            means_n = sums_n / (cnts_n.clamp_min(1e-6).unsqueeze(1))
+            Z_neg = F.normalize(self.proj_head(means_n), dim=-1)
 
             # 合并三视角：[B, D] -> [3B, D]
             Z_batch = torch.cat([Z_view1, Z_view2, Z_neg], dim=0)
