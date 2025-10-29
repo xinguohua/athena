@@ -173,9 +173,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
         mal_neg_ratio: float = 0.3,
         mal_neg_token_len: int = 16,
         mal_neg_push_gamma: float = 3.0,
-        # Top-K 相似/不相似选择（可选）
+        # Top-K 相似（可选）
         topk_pos: Optional[int] = 3,   # 每个 anchor 选择的 Top-K 相似正样本（基于 S）
-        topk_neg: Optional[int] = 3,   # 每个 anchor 选择的 Top-K 最不相似主视角列作为“负例”（基于 S）
+        topk_pos_min_sim: float = 0.0, # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
     ):
         super().__init__(snapshots, features, mapp)
         self.snapshots = snapshots
@@ -223,7 +223,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
         # Top-K 采样配置
         self.topk_pos = int(topk_pos) if topk_pos is not None else None
-        self.topk_neg = int(topk_neg) if topk_neg is not None else None
+        self.topk_pos_min_sim = float(topk_pos_min_sim)
 
         # 调试参数（只保留一个开关，其它使用内置默认值；默认关闭，可运行时直接改属性开启）
         self.debug_sim_dump = True
@@ -370,87 +370,63 @@ class GCCEmbedderDev(GraphEmbedderBase):
             if not subs:
                 continue
 
-            X_pos = torch.from_numpy(np.vstack(x_list)).to(device)
+            # ===== 经典 NT-Xent：为每个子图构造两种增强视角，正对为同一子图的两视角；可选再追加基于相似度的 Top-K 正对 =====
+            # 索引与展平信息
             offsets = np.cumsum([0] + node_counts[:-1]).tolist()
-            E_cols = []
-            for ei, off in zip(e_list, offsets):
-                if ei.numel() == 0:
-                    continue
-                E_cols.append(ei + off)
-            E_pos = torch.cat(E_cols, dim=1) if E_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
             flat_ids = [nid for ids in ids_list for nid in ids]
             graph_ids = torch.tensor([gi for gi, n in enumerate(node_counts) for _ in range(n)], dtype=torch.long, device=device)
 
+            # 取上一次时刻的隐藏状态（按当前顺序对齐）
             H_prev = self.temporal.fetch(flat_ids, device=device)
-            Z_list = self.encoder(X_pos, E_pos, return_all=True)
-            H_list = self.temporal(Z_list, H_prev)
-            H_last = H_list[-1]
+
+            # 两个视角的边/特征增强（逐子图，再合并）
+            x_tensors = [torch.from_numpy(xi).to(device) for xi in x_list]
+            e_tensors = e_list
+            x1_list = [self._augment_features(xi, mask_p=self.feat_mask_p) for xi in x_tensors]
+            x2_list = [self._augment_features(xi, mask_p=self.feat_mask_p) for xi in x_tensors]
+            e1_cols = []
+            e2_cols = []
+            for ei, off in zip(e_tensors, offsets):
+                if ei.numel() > 0:
+                    e1_cols.append(self._augment_edges(ei, drop_p=self.drop_edge_p) + off)
+                    e2_cols.append(self._augment_edges(ei, drop_p=self.drop_edge_p) + off)
+            E1 = torch.cat(e1_cols, dim=1) if e1_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
+            E2 = torch.cat(e2_cols, dim=1) if e2_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
+            X1 = torch.cat(x1_list, dim=0) if x1_list else torch.empty(0, int(self.prop_feat_dim), device=device)
+            X2 = torch.cat(x2_list, dim=0) if x2_list else torch.empty(0, int(self.prop_feat_dim), device=device)
+
+            # 视角1前向
+            Z1_list = self.encoder(X1, E1, return_all=True)
+            H1_list = self.temporal(Z1_list, H_prev)
+            H1_last = H1_list[-1]
             Bc = len(node_counts)
-            sums = torch.zeros((Bc, H_last.size(1)), dtype=H_last.dtype, device=device)
-            cnts = torch.zeros((Bc,), dtype=torch.float32, device=device)
-            sums.index_add_(0, graph_ids, H_last)
-            cnts.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
-            means = sums / (cnts.clamp_min(1e-6).unsqueeze(1))
-            Z_pos = self.proj_head(means)
-            Z_pos = F.normalize(Z_pos, dim=-1)
+            sums1 = torch.zeros((Bc, H1_last.size(1)), dtype=H1_last.dtype, device=device)
+            cnts1 = torch.zeros((Bc,), dtype=torch.float32, device=device)
+            sums1.index_add_(0, graph_ids, H1_last)
+            cnts1.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
+            means1 = sums1 / (cnts1.clamp_min(1e-6).unsqueeze(1))
+            Z_view1 = F.normalize(self.proj_head(means1), dim=-1)
 
-            batch_sample_rows = [[i] for i in range(Z_pos.size(0))]
-            batch_neg_rows = [[] for _ in range(Z_pos.size(0))]
-            batch_weights = list(freq_weights)
-            # 相似度特征（fps/semvecs/wl_counters）已在上方按需收集
-            batch_commit_payloads = []
-            for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
-                beg, endi = offsets[gi], offsets[gi] + n
-                slice_H = [Hl[beg:endi].detach() for Hl in H_list]
-                batch_commit_payloads.append((ids, slice_H))
+            # 视角2前向（使用相同 H_prev 以保持同一时刻的对比）
+            Z2_list = self.encoder(X2, E2, return_all=True)
+            H2_list = self.temporal(Z2_list, H_prev)
+            H2_last = H2_list[-1]
+            sums2 = torch.zeros((Bc, H2_last.size(1)), dtype=H2_last.dtype, device=device)
+            cnts2 = torch.zeros((Bc,), dtype=torch.float32, device=device)
+            sums2.index_add_(0, graph_ids, H2_last)
+            cnts2.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
+            means2 = sums2 / (cnts2.clamp_min(1e-6).unsqueeze(1))
+            Z_view2 = F.normalize(self.proj_head(means2), dim=-1)
 
-            Z_neg = None
-            if self.use_malicious_negatives and len(self.malicious_token_counter) > 0:
-                # 负样本完全使用恶意语料：
-                # - 特征：每个节点用恶意 tokens 生成语义向量；不引用原子图特征
-                # - 结构：不使用原图边（空图），避免引用原图结构
-                xneg_list: List[torch.Tensor] = []
-                eneg_list: List[torch.Tensor] = []
-                for sub in subs:
-                    n = sub.vcount()
-                    # 构建纯恶意特征矩阵
-                    feats = np.zeros((n, int(self.prop_feat_dim)), dtype=np.float32)
-                    for i_local in range(n):
-                        tokens = self._sample_malicious_tokens(max(1, int(self.mal_neg_token_len)))
-                        vec = self._w2v_vector_from_tokens(tokens)
-                        feats[i_local] = vec.astype(np.float32)
-                    x_neg = torch.from_numpy(feats).to(device)
-                    # 空边集（不使用原图结构）
-                    e_neg = torch.zeros((2, 0), dtype=torch.long, device=device)
-                    # 可选：特征遮蔽增强
-                    # x_neg = self._augment_features(x_neg, mask_p=self.feat_mask_p)
-                    xneg_list.append(x_neg)
-                    eneg_list.append(e_neg)
-                X_neg = torch.cat(xneg_list, dim=0) if xneg_list else torch.empty(0, X_pos.size(1), device=device)
-                # 所有 e_neg 都为空，整体负图边集为空
-                E_neg = torch.zeros((2, 0), dtype=torch.long, device=device)
-                Z_list_n = self.encoder(X_neg, E_neg, return_all=True)
-                # 负样本时序初值用零，避免引用原图节点的时序状态
-                H_prev_zero = [torch.zeros_like(h) for h in H_prev]
-                H_list_n = self.temporal(Z_list_n, H_prev_zero)
-                H_last_n = H_list_n[-1]
-                sums_n = torch.zeros((Bc, H_last_n.size(1)), dtype=H_last_n.dtype, device=device)
-                cnts_n = torch.zeros((Bc,), dtype=torch.float32, device=device)
-                sums_n.index_add_(0, graph_ids, H_last_n)
-                cnts_n.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
-                means_n = sums_n / (cnts_n.clamp_min(1e-6).unsqueeze(1))
-                Z_neg = self.proj_head(means_n)
-                Z_neg = F.normalize(Z_neg, dim=-1)
-                for gi in range(Bc):
-                    batch_neg_rows[gi].append(Z_pos.size(0) + gi)
-
-            Z_batch = torch.cat([Z_pos, Z_neg], dim=0) if Z_neg is not None else Z_pos
+            # 合并两视角：[B, D] -> [2B, D]
+            Z_batch = torch.cat([Z_view1, Z_view2], dim=0)
             N = Z_batch.size(0)
             sim = torch.mm(Z_batch, Z_batch.t()) / float(self.temperature)
-            sim = sim.masked_fill(torch.eye(N, device=device, dtype=torch.bool), -1e9)
+            mask_eye = torch.eye(N, device=device, dtype=torch.bool)
+            sim = sim.masked_fill(mask_eye, -1e9)
             exp_sim = torch.exp(sim)
 
-            Bcur = len(batch_sample_rows)
+            Bcur = Bc
             S = None
             if Bcur >= 2:
                 simm = getattr(self, 'sim_measure', 'wl')
@@ -485,233 +461,48 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         S = K / (d.unsqueeze(1) * d.unsqueeze(0) + 1e-12)
                         S.fill_diagonal_(0.0)
 
-            W = torch.zeros((N, N), dtype=torch.float32, device=device)
-            # 根据是否指定 topk_pos 来构造分子权重 W
-            if S is not None:
-                if isinstance(self.topk_pos, int) and self.topk_pos > 0:
-                    kpos = min(self.topk_pos, max(0, Bcur - 1))
-                    for s in range(Bcur):
-                        i = batch_sample_rows[s][0]
-                        # 取该行对主视角的相似度，并屏蔽自身
-                        rowS = S[s, :Bcur].clone()
-                        if Bcur > s:
-                            rowS[s] = -1e9
-                        if kpos > 0:
-                            vals, idxs = torch.topk(rowS, k=kpos, largest=True)
-                            for val, t in zip(vals.tolist(), idxs.tolist()):
-                                if val <= 0:
-                                    continue
-                                j = batch_sample_rows[t][0]
-                                W[i, j] = float(val)
+            # 基于相似度的 Top-K 额外正样本（按 anchor 样本级别选 K 个）；对每个视角 r，正样本集合=配对视角 + (top-k 样本的两视角)
+            pos_mask = torch.zeros((N, N), dtype=torch.float32, device=device)
+            if S is not None and isinstance(getattr(self, 'topk_pos', None), int) and int(getattr(self, 'topk_pos')) > 0:
+                kpos = min(int(getattr(self, 'topk_pos')), max(0, Bcur - 1))
+            else:
+                kpos = 0
+            for r in range(N):
+                a = r % Bcur  # anchor 样本索引
+                pair = r + Bcur if r < Bcur else r - Bcur
+                pos_idx = [pair]
+                if S is not None and kpos > 0:
+                    rowS = S[a, :Bcur].clone()
+                    rowS[a] = -1e9
+                    tau = float(getattr(self, 'topk_pos_min_sim', 0.0))
+                    vals, idxs = torch.topk(rowS, k=kpos, largest=True)
+                    if vals.numel() > 0:
+                        mask = vals > tau
+                        neigh = idxs[mask].tolist() if mask.any() else []
+                        # 将这些样本的两种视角都加入正样本（仅当相似度>tau）
+                        for t in neigh:
+                            pos_idx.append(t)
+                            pos_idx.append(t + Bcur)
+                pos_mask[r, torch.tensor(pos_idx, device=device, dtype=torch.long)] = 1.0
+            # 负样本掩码：其余（排除自身与正样本）
+            neg_mask = 1.0 - pos_mask
+            neg_mask = neg_mask.masked_fill(mask_eye, 0.0)
 
-            denom_w = torch.ones((N, N), dtype=torch.float32, device=device)
-            beta = float(getattr(self, 'sem_push_weight', 2))
-            if beta > 0 and S is not None:
-                for s in range(Bcur):
-                    i = batch_sample_rows[s][0]
-                    for t in range(Bcur):
-                        if s == t:
-                            continue
-                        j = batch_sample_rows[t][0]
-                        scale = 1.0 + beta * torch.clamp(1.0 - S[s, t], min=0.0)
-                        denom_w[i, j] *= scale
-
-            denom_mask = torch.ones((N, N), dtype=torch.float32, device=device)
-            # 先屏蔽“别人”的负样本（与原逻辑一致）
-            for s in range(Bcur):
-                i = batch_sample_rows[s][0]
-                neg_other = [idx for t in range(Bcur) if t != s for idx in batch_neg_rows[t]]
-                if neg_other:
-                    denom_mask[i, torch.tensor(neg_other, device=device, dtype=torch.long)] = 0.0
-
-            # 若设置了 topk_neg：仅保留“Top-K 不相似”的主视角列和（可选）Top-K 相似列在分母中
-            # 注意：自有负样本默认保留；并强制 Top-K 正负集合互斥，避免重合
-            if S is not None and isinstance(self.topk_neg, int) and self.topk_neg > 0:
-                knew = min(self.topk_neg, max(0, Bcur - 1))
-                for s in range(Bcur):
-                    i = batch_sample_rows[s][0]
-                    # 先计算 Top-K 相似（正样本集合）
-                    pos_main_cols = []
-                    pos_idxs_list = []
-                    if isinstance(self.topk_pos, int) and self.topk_pos > 0:
-                        kpos = min(self.topk_pos, max(0, Bcur - 1))
-                        rowS_pos = S[s, :Bcur].clone()
-                        if Bcur > s:
-                            rowS_pos[s] = -1e9
-                        if kpos > 0:
-                            pos_vals, pos_idxs = torch.topk(rowS_pos, k=kpos, largest=True)
-                            pos_idxs_list = pos_idxs.tolist()
-                            pos_main_cols = [batch_sample_rows[t][0] for t in pos_idxs_list]
-                    # 再计算 Top-K 不相似（负样本集合），并排除正样本集合
-                    neg_main_cols = []
-                    if knew > 0:
-                        rowS_neg = S[s, :Bcur].clone()
-                        if Bcur > s:
-                            rowS_neg[s] = 1e9  # 排除自身
-                        # 排除正样本索引，确保互斥
-                        for t in pos_idxs_list:
-                            rowS_neg[t] = 1e9
-                        knew_eff = min(knew, max(0, Bcur - 1 - len(pos_idxs_list)))
-                        if knew_eff > 0:
-                            neg_vals, neg_idxs = torch.topk(-rowS_neg, k=knew_eff, largest=True)
-                            neg_main_cols = [batch_sample_rows[t][0] for t in neg_idxs.tolist()]
-                    # 构造允许留下的主视角列集合（互斥并集）
-                    allow_set = set(neg_main_cols) | set(pos_main_cols)
-                    # 将未被允许的主视角列全部屏蔽出分母（注意使用绝对列索引）
-                    for t in range(Bcur):
-                        if t == s:
-                            continue
-                        j_main = batch_sample_rows[t][0]
-                        if j_main not in allow_set:
-                            denom_mask[i, j_main] = 0.0
-
-            gamma_neg = float(getattr(self, 'mal_neg_push_gamma',10))
-            if gamma_neg > 1.0:
-                for s in range(Bcur):
-                    i = batch_sample_rows[s][0]
-                    for j in batch_neg_rows[s]:
-                        denom_w[i, j] *= gamma_neg
-
-            # 可选：导出调试信息（行级别，避免 NxN 过大）
-            if self.debug_sim_dump and self._debug_dumped_batches < int(self.debug_max_batches):
-                try:
-                    os.makedirs(self.debug_dump_dir, exist_ok=True)
-                    sel_rows = list(range(min(Bcur, max(1, int(self.debug_rows_per_batch)))))
-                    main_cols = [batch_sample_rows[t][0] for t in range(Bcur)]
-                    for s in sel_rows:
-                        i = batch_sample_rows[s][0]
-                        own_neg_cols = list(batch_neg_rows[s])
-                        # 其他负样本数（通过 denom_mask 的 0 统计，可视为 neg_other）
-                        zeros_other = int((denom_mask[i] == 0).sum().item())
-                        # 选取列索引进行行裁剪 dump：主视角列 + 自己的负样本列
-                        cols_pick = main_cols + own_neg_cols
-                        cols_pick_idx = torch.tensor(cols_pick, dtype=torch.long, device=device)
-                        dump = {
-                            'sidx': int(sidx if sidx is not None else -1),
-                            'batch_idx': int(batch_idx),
-                            'anchor_s': int(s),
-                            'center_idx': int(batch_centers[s]) if s < len(batch_centers) else -1,
-                            'center_name': str(g.vs[batch_centers[s]]['name']) if s < len(batch_centers) else '',
-                            'sim_measure': str(getattr(self, 'sim_measure', 'wl')),
-                            'Bcur': int(Bcur),
-                            'N_total': int(Z_batch.size(0)),
-                            'own_neg_count': int(len(own_neg_cols)),
-                            'other_neg_count': int(zeros_other),
-                            'main_cols': main_cols,
-                            'own_neg_cols': own_neg_cols,
-                        }
-                        # 若启用 Top-K，记录当次 anchor 的 Top-K 选择（主视角的绝对列）
-                        pos_idxs_dbg = []
-                        if S is not None and isinstance(getattr(self, 'topk_pos', None), int) and int(getattr(self, 'topk_pos')) > 0:
-                            kpos_dbg = min(int(getattr(self, 'topk_pos')), max(0, Bcur - 1))
-                            rowS_pos_dbg = S[s, :Bcur].clone()
-                            if Bcur > s:
-                                rowS_pos_dbg[s] = -1e9
-                            if kpos_dbg > 0:
-                                _, pos_idxs_dbg_t = torch.topk(rowS_pos_dbg, k=kpos_dbg, largest=True)
-                                pos_idxs_dbg = pos_idxs_dbg_t.tolist()
-                                dump['topk_pos_cols'] = [batch_sample_rows[t][0] for t in pos_idxs_dbg]
-                        if S is not None and isinstance(getattr(self, 'topk_neg', None), int) and int(getattr(self, 'topk_neg')) > 0:
-                            knew_dbg = min(int(getattr(self, 'topk_neg')), max(0, Bcur - 1))
-                            rowS_neg_dbg = S[s, :Bcur].clone()
-                            if Bcur > s:
-                                rowS_neg_dbg[s] = 1e9
-                            # 排除正样本集合，确保互斥
-                            for t in pos_idxs_dbg:
-                                rowS_neg_dbg[t] = 1e9
-                            knew_eff_dbg = min(knew_dbg, max(0, Bcur - 1 - len(pos_idxs_dbg)))
-                            if knew_eff_dbg > 0:
-                                _, neg_idxs_dbg = torch.topk(-rowS_neg_dbg, k=knew_eff_dbg, largest=True)
-                                dump['topk_neg_main_cols'] = [batch_sample_rows[t][0] for t in neg_idxs_dbg.tolist()]
-                        # 将数值矩阵对应行裁剪为 numpy
-                        if S is not None:
-                            dump['S_row_main'] = (S[s, :Bcur].detach().cpu().numpy()).astype(np.float32)
-                        dump['W_row_pick'] = (W[i, cols_pick_idx].detach().cpu().numpy()).astype(np.float32)
-                        dump['denom_w_row_pick'] = (denom_w[i, cols_pick_idx].detach().cpu().numpy()).astype(np.float32)
-                        dump['denom_mask_row_pick'] = (denom_mask[i, cols_pick_idx].detach().cpu().numpy()).astype(np.float32)
-                        dump['exp_sim_row_pick'] = (exp_sim[i, cols_pick_idx].detach().cpu().numpy()).astype(np.float32)
-                        # WL 调试：导出该 anchor 的完整 WL 核（计数向量）
-                        if (getattr(self, 'sim_measure', 'wl') == 'wl') and (s < len(wl_counters)):
-                            cnt = wl_counters[s]
-                            # 全量输出，按计数降序，其次按键名升序，便于阅读和对齐
-                            items_all = sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0]))
-                            dump['wl_all_items'] = [(str(k), int(v)) for k, v in items_all]
-                        # 保存为简单 TXT 文本（便于直接查看）
-                        base = os.path.join(self.debug_dump_dir, f"simdump_s{sidx}_b{batch_idx}_a{s}")
-                        with open(base + '.txt', 'w', encoding='utf-8') as f:
-                            f.write(f"sidx: {dump['sidx']}\n")
-                            f.write(f"batch_idx: {dump['batch_idx']}\n")
-                            f.write(f"anchor_s: {dump['anchor_s']}\n")
-                            f.write(f"center_idx: {dump['center_idx']}\n")
-                            f.write(f"center_name: {dump['center_name']}\n")
-                            f.write(f"sim_measure: {dump['sim_measure']}\n")
-                            f.write(f"Bcur: {dump['Bcur']}\n")
-                            f.write(f"N_total: {dump['N_total']}\n")
-                            f.write(f"own_neg_count: {dump['own_neg_count']}\n")
-                            f.write(f"other_neg_count: {dump['other_neg_count']}\n")
-                            f.write(f"main_cols: {','.join(map(str, dump['main_cols']))}\n")
-                            f.write(f"own_neg_cols: {','.join(map(str, dump['own_neg_cols']))}\n")
-                            if 'topk_pos_cols' in dump:
-                                f.write(f"topk_pos_cols: {','.join(map(str, dump['topk_pos_cols']))}\n")
-                            if 'topk_neg_main_cols' in dump:
-                                f.write(f"topk_neg_main_cols: {','.join(map(str, dump['topk_neg_main_cols']))}\n")
-                            # 数值向量按空格分隔，单行展示
-                            if 'S_row_main' in dump and dump['S_row_main'] is not None:
-                                f.write("S_row_main: ")
-                                f.write(" ".join(map(lambda x: f"{x:.6f}", dump['S_row_main'].tolist())))
-                                f.write("\n")
-                            f.write("W_row_pick: ")
-                            f.write(" ".join(map(lambda x: f"{x:.6f}", dump['W_row_pick'].tolist())))
-                            f.write("\n")
-                            f.write("denom_w_row_pick: ")
-                            f.write(" ".join(map(lambda x: f"{x:.6f}", dump['denom_w_row_pick'].tolist())))
-                            f.write("\n")
-                            f.write("denom_mask_row_pick: ")
-                            f.write(" ".join(map(lambda x: f"{x:.6f}", dump['denom_mask_row_pick'].tolist())))
-                            f.write("\n")
-                            f.write("exp_sim_row_pick: ")
-                            f.write(" ".join(map(lambda x: f"{x:.6f}", dump['exp_sim_row_pick'].tolist())))
-                            f.write("\n")
-                            # 自身负样本细节（按设计每个 anchor 只有 1 个）
-                            if own_neg_cols:
-                                denom_sum = float((denom_mask[i] * denom_w[i] * exp_sim[i]).sum().item())
-                                num_sum = float((W[i] * exp_sim[i]).sum().item())
-                                j = own_neg_cols[0]
-                                wv = float(W[i, j].item())
-                                dw = float(denom_w[i, j].item())
-                                dm = float(denom_mask[i, j].item())
-                                ev = float(exp_sim[i, j].item())
-                                denom_term = dm * dw * ev
-                                f.write(f"neg_detail: col={j} W={wv:.6f} denom_w={dw:.6f} denom_mask={dm:.6f} exp={ev:.6f} denom_term={denom_term:.6f}\\n")
-                                # 该 anchor 的 z_neg 向量（行向量，归一化后）
-                                if Z_neg is not None:
-                                    neg_row = j - Z_pos.size(0)
-                                    if 0 <= neg_row < Z_neg.size(0):
-                                        zneg = Z_neg[neg_row].detach().cpu().numpy().astype(np.float32)
-                                        f.write("z_neg: ")
-                                        f.write(" ".join(map(lambda x: f"{x:.6f}", zneg.tolist())))
-                                        f.write("\\n")
-                                f.write(f"numerator_row: {num_sum:.6f}\n")
-                                f.write(f"denominator_row: {denom_sum:.6f}\n")
-                            # WL 全量核（若存在）
-                            if 'wl_all_items' in dump:
-                                f.write("wl_all:\n")
-                                for k, v in dump['wl_all_items']:
-                                    f.write(f"  {k}\t{v}\n")
-                    self._debug_dumped_batches += 1
-                except Exception as e:
-                    print(f"[GCC-Dev][debug] 导出相似度调试失败: {e}")
-
-            numerator = (W * exp_sim).sum(dim=1)
-            denominator = (denom_mask * denom_w * exp_sim).sum(dim=1).clamp_min(1e-12)
+            # 计算 NT-Xent 多正样本形式
+            numerator = (pos_mask * exp_sim).sum(dim=1)
+            denominator = (neg_mask * exp_sim).sum(dim=1).clamp_min(1e-12)
             valid = numerator > 0
             if not valid.any():
-                # 仍然提交时间记忆，再跳过本 batch 的反向传播
-                for ids, H in batch_commit_payloads:
-                    self.temporal.commit(ids, H)
+                # 提交一次记忆后跳过
+                for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
+                    beg, endi = offsets[gi], offsets[gi] + n
+                    slice_H = [Hl[beg:endi].detach() for Hl in H1_list]
+                    self.temporal.commit(ids, slice_H)
                 continue
             loss_vec = -torch.log(numerator[valid] / denominator[valid])
-            w_t = torch.tensor(batch_weights, dtype=torch.float32, device=device)[valid[:len(batch_weights)]]
+            # 样本权重：子图级别的权重复制到两视角
+            w_views = torch.tensor(freq_weights, dtype=torch.float32, device=device).repeat(2)
+            w_t = w_views[valid]
             loss = (w_t * loss_vec).sum() / w_t.sum().clamp_min(1e-6)
 
             self.optimizer.zero_grad(set_to_none=True)
@@ -722,8 +513,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
             )
             self.optimizer.step()
 
-            for ids, H in batch_commit_payloads:
-                self.temporal.commit(ids, H)
+            # 更新时序记忆（采用视角1的隐状态作为当期提交）
+            for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
+                beg, endi = offsets[gi], offsets[gi] + n
+                slice_H = [Hl[beg:endi].detach() for Hl in H1_list]
+                self.temporal.commit(ids, slice_H)
 
             total_loss += float(loss.detach().cpu().item())
             total_steps += 1
