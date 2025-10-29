@@ -449,97 +449,100 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     means_n = sums_n / (cnts_n.clamp_min(1e-6).unsqueeze(1))
                     Z_neg_blocks.append(F.normalize(self.proj_head(means_n), dim=-1))
 
-            # 合并视角：[B, D] -> [2B (+2B 恶意视角可选), D]
-            Z_batch = torch.cat([Z_view1, Z_view2] + Z_neg_blocks, dim=0)
-            N = Z_batch.size(0)
-            sim = torch.mm(Z_batch, Z_batch.t()) / float(self.temperature)
-            mask_eye = torch.eye(N, device=device, dtype=torch.bool)
-            sim = sim.masked_fill(mask_eye, -1e9)
-            exp_sim = torch.exp(sim)
+            # 以相邻为正对的顺序把所有视角（正常+恶意）拼接进 Z，并一次性计算 sim/损失
+            rows: List[torch.Tensor] = []
+            views_per_graph = 2 + (2 if len(Z_neg_blocks) == 2 else 0)
+            for gi in range(Bc):
+                rows.append(Z_view1[gi].unsqueeze(0))
+                rows.append(Z_view2[gi].unsqueeze(0))
+                if len(Z_neg_blocks) == 2:
+                    rows.append(Z_neg_blocks[0][gi].unsqueeze(0))
+                    rows.append(Z_neg_blocks[1][gi].unsqueeze(0))
+            Z_batch = torch.cat(rows, dim=0)  # [views_per_graph*B, D]
 
+            # 与 Z 顺序对齐的样本权重
+            w_list: List[float] = []
+            for w in freq_weights:
+                for _ in range(views_per_graph):
+                    w_list.append(float(w))
+            w_tensor = torch.tensor(w_list, dtype=torch.float32, device=device)
+
+            # 多正样本 NT-Xent：相邻正对 + WL Top-K 相似子图映射到当前/配对视角
+            N = Z_batch.size(0)
+            sim_mat = torch.mm(Z_batch, Z_batch.t()) / float(self.temperature)
+            eye_mask = torch.eye(N, dtype=torch.bool, device=device)
+            sim_mat = sim_mat.masked_fill(eye_mask, -1e9)
+            exp_sim = torch.exp(sim_mat)
+
+            # 计算 WL 子图相似度矩阵 S（子图级 B×B）
             Bcur = Bc
             S = None
             if Bcur >= 2:
-                simm = getattr(self, 'sim_measure', 'wl')
-                if simm == 'tanimoto' and fps:
-                    FP = torch.tensor(np.stack(fps[:Bcur]), dtype=torch.float32, device=device)
-                    inter = FP @ FP.t()
-                    a1 = FP.sum(1, keepdim=True)
-                    denom_fp = (a1 + a1.t() - inter).clamp_min(1e-6)
-                    S = inter / denom_fp
+                if wl_counters:
+                    vocab = sorted(set().union(*[set(c.keys()) for c in wl_counters[:Bcur]]))
+                else:
+                    vocab = []
+                if len(vocab) > 0:
+                    vid = {k: i for i, k in enumerate(vocab)}
+                    Fw = np.zeros((Bcur, len(vocab)), dtype=np.float32)
+                    for rr, cnt in enumerate(wl_counters[:Bcur]):
+                        for k, v in cnt.items():
+                            idx = vid.get(k)
+                            if idx is not None:
+                                Fw[rr, idx] = float(v)
+                    Fw_t = torch.tensor(Fw, dtype=torch.float32, device=device)
+                    K = Fw_t @ Fw_t.t()
+                    d = torch.diag(K).clamp_min(1e-12).sqrt()
+                    S = K / (d.unsqueeze(1) * d.unsqueeze(0) + 1e-12)
                     S.fill_diagonal_(0.0)
-                elif simm == 'cosine' and semvecs:
-                    SV = torch.tensor(np.stack(semvecs[:Bcur]), dtype=torch.float32, device=device)
-                    SV = F.normalize(SV, dim=1)
-                    S = SV @ SV.t()
-                    S.fill_diagonal_(0.0)
-                else:  # WL 子树核
-                    if wl_counters:
-                        vocab = sorted(set().union(*[set(c.keys()) for c in wl_counters[:Bcur]]))
-                    else:
-                        vocab = []
-                    if len(vocab) > 0:
-                        vid = {k: i for i, k in enumerate(vocab)}
-                        Fw = np.zeros((Bcur, len(vocab)), dtype=np.float32)
-                        for r, cnt in enumerate(wl_counters[:Bcur]):
-                            for k, v in cnt.items():
-                                idx = vid.get(k)
-                                if idx is not None:
-                                    Fw[r, idx] = float(v)
-                        Fw_t = torch.tensor(Fw, dtype=torch.float32, device=device)
-                        K = Fw_t @ Fw_t.t()
-                        d = torch.diag(K).clamp_min(1e-12).sqrt()
-                        S = K / (d.unsqueeze(1) * d.unsqueeze(0) + 1e-12)
-                        S.fill_diagonal_(0.0)
 
-            # 基于相似度的 Top-K 额外正样本（按 anchor 样本级别选 K 个）；
-            # 对每个视角 r，正样本集合 = 同一块对中的配对视角 + (top-k 样本在该块对的两个视角)
+            # 构造多正样本掩码
             pos_mask = torch.zeros((N, N), dtype=torch.float32, device=device)
+            views_per_graph = 2 + (2 if len(Z_neg_blocks) == 2 else 0)
+            def pair_slot(vs: int) -> int:
+                return vs ^ 1  # 0<->1, 2<->3
+            # Top-K 配置
             if S is not None and isinstance(getattr(self, 'topk_pos', None), int) and int(getattr(self, 'topk_pos')) > 0:
                 kpos = min(int(getattr(self, 'topk_pos')), max(0, Bcur - 1))
             else:
                 kpos = 0
-            # 将所有视角行都当作锚点；块大小为 Bcur，块对成对排列：[0<->1]、[2<->3] …
-            block_size = Bcur
-            num_blocks = N // max(1, block_size)
+            tau_sim = float(getattr(self, 'topk_pos_min_sim', 0.0))
+
             for r in range(N):
-                a = r % block_size  # 归一到原始样本索引 [0, Bcur)
-                b = r // block_size  # 所在块索引
-                pb = b ^ 1           # 同一对的配对块（0<->1, 2<->3, ...）
-                pair = pb * block_size + a
-                pos_idx = [pair]
+                gidx = r // views_per_graph
+                vslot = r % views_per_graph
+                pos_idx: List[int] = []
+                # 主正对（相邻）
+                if views_per_graph >= 2:
+                    pos_idx.append(gidx * views_per_graph + pair_slot(vslot))
+                # WL Top-K 扩增正样本：当前 slot 与其配对 slot
                 if S is not None and kpos > 0:
-                    rowS = S[a, :block_size].clone()
-                    rowS[a] = -1e9
-                    tau = float(getattr(self, 'topk_pos_min_sim', 0.0))
+                    rowS = S[gidx, :Bcur].clone()
+                    rowS[gidx] = -1e9
                     vals, idxs = torch.topk(rowS, k=kpos, largest=True)
                     if vals.numel() > 0:
-                        m = vals > tau
+                        m = vals > tau_sim
                         neigh = idxs[m].tolist() if m.any() else []
-                        # 将这些样本在当前块 b 与配对块 pb 中的视角都加入正样本
                         for t in neigh:
-                            pos_idx.append(b * block_size + t)
-                            pos_idx.append(pb * block_size + t)
-                pos_mask[r, torch.tensor(pos_idx, device=device, dtype=torch.long)] = 1.0
-            # 负样本掩码：其余（排除自身与正样本）
-            neg_mask = 1.0 - pos_mask
-            neg_mask = neg_mask.masked_fill(mask_eye, 0.0)
+                            pos_idx.append(t * views_per_graph + vslot)
+                            pos_idx.append(t * views_per_graph + pair_slot(vslot))
+                if pos_idx:
+                    pos_mask[r, torch.tensor(pos_idx, dtype=torch.long, device=device)] = 1.0
 
-            # 计算 NT-Xent（所有视角行都作为锚点）
+            neg_mask = 1.0 - pos_mask
+            neg_mask = neg_mask.masked_fill(eye_mask, 0.0)
             numerator = (pos_mask * exp_sim).sum(dim=1)
             denominator = (neg_mask * exp_sim).sum(dim=1).clamp_min(1e-12)
             valid = numerator > 0
             if not valid.any():
-                # 提交一次记忆后跳过
+                # 若无有效正样本，跳过并提交一次记忆
                 for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
                     beg, endi = offsets[gi], offsets[gi] + n
                     slice_H = [Hl[beg:endi].detach() for Hl in H1_list]
                     self.temporal.commit(ids, slice_H)
                 continue
             loss_vec = -torch.log(numerator[valid] / denominator[valid])
-            # 样本权重：子图级别的权重复制到所有块（两视角 + 恶意视角对）
-            w_views = torch.tensor(freq_weights, dtype=torch.float32, device=device).repeat(max(1, num_blocks))
-            w_t = w_views[valid]
+            w_t = w_tensor[valid]
             loss = (w_t * loss_vec).sum() / w_t.sum().clamp_min(1e-6)
 
             self.optimizer.zero_grad(set_to_none=True)
