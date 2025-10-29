@@ -461,12 +461,15 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     rows.append(Z_neg_blocks[1][gi].unsqueeze(0))
             Z_batch = torch.cat(rows, dim=0)  # [views_per_graph*B, D]
 
-            # 与 Z 顺序对齐的样本权重（恶意视角不追加额外权重，与 gcc_embedder.py 保持一致）
+            # 与 Z 顺序对齐的样本权重（模仿 gcc_embedder.py：只为正常视角追加权重）
             w_list: List[float] = []
             for w in freq_weights:
                 w_list.append(float(w))
                 w_list.append(float(w))
-            w_tensor = torch.tensor(w_list, dtype=torch.float32, device=device)
+            # 检查长度是否匹配，不匹配时设为 None（与 gcc_embedder.py 行为一致）
+            w_tensor = None
+            if len(w_list) == Z_batch.size(0):
+                w_tensor = torch.tensor(w_list, dtype=torch.float32, device=device)
 
             # 多正样本 NT-Xent：相邻正对 + WL Top-K 相似子图映射到当前/配对视角
             N = Z_batch.size(0)
@@ -543,8 +546,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     self.temporal.commit(ids, slice_H)
                 continue
             loss_vec = -torch.log(numerator[valid] / denominator[valid])
-            w_t = w_tensor[valid]
-            loss = (w_t * loss_vec).sum() / w_t.sum().clamp_min(1e-6)
+            if w_tensor is not None:
+                w_t = w_tensor[valid]
+                loss = (w_t * loss_vec).sum() / w_t.sum().clamp_min(1e-6)
+            else:
+                loss = loss_vec.mean()
 
             self.optimizer.zero_grad(set_to_none=True)
             loss.backward()
