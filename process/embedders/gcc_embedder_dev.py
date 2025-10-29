@@ -542,10 +542,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             # 计算 NT-Xent 多正样本形式
             numerator = (pos_mask * exp_sim).sum(dim=1)
             denominator = (neg_mask * exp_sim).sum(dim=1).clamp_min(1e-12)
-            # 仅对两视角行（前 2B 行）计算 NT-Xent 损失；显式负样本行不作为锚点
-            numerator_view = numerator[: 2 * Bcur]
-            denominator_view = denominator[: 2 * Bcur]
-            valid = numerator_view > 0
+            valid = numerator > 0
             if not valid.any():
                 # 提交一次记忆后跳过
                 for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
@@ -553,7 +550,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     slice_H = [Hl[beg:endi].detach() for Hl in H1_list]
                     self.temporal.commit(ids, slice_H)
                 continue
-            loss_vec = -torch.log(numerator_view[valid] / denominator_view[valid])
+            loss_vec = -torch.log(numerator[valid] / denominator[valid])
             # 样本权重：子图级别的权重复制到两视角
             w_views = torch.tensor(freq_weights, dtype=torch.float32, device=device).repeat(2)
             w_t = w_views[valid]
