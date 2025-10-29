@@ -418,38 +418,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
             means2 = sums2 / (cnts2.clamp_min(1e-6).unsqueeze(1))
             Z_view2 = F.normalize(self.proj_head(means2), dim=-1)
 
-            # 为每个样本构造一个显式负样本（恶意语料生成），聚合为图级表示
-            # 若恶意语料为空，则用高斯噪声向量作为降级负样本
-            X_neg_list = []
-            for sub in subs:
-                n = sub.vcount()
-                if len(self.malicious_token_counter) > 0:
-                    feats = np.zeros((n, int(self.prop_feat_dim)), dtype=np.float32)
-                    for i_local in range(n):
-                        tokens = self._sample_malicious_tokens(max(1, int(getattr(self, 'mal_neg_token_len', 16))))
-                        vec = self._w2v_vector_from_tokens(tokens)
-                        feats[i_local] = vec.astype(np.float32)
-                else:
-                    # 降级：标准高斯噪声后归一化
-                    feats = np.random.normal(loc=0.0, scale=1.0, size=(n, int(self.prop_feat_dim))).astype(np.float32)
-                    norms = np.linalg.norm(feats, axis=1, keepdims=True) + 1e-12
-                    feats = (feats / norms).astype(np.float32)
-                X_neg_list.append(torch.from_numpy(feats).to(device))
-            X_neg = torch.cat(X_neg_list, dim=0) if X_neg_list else torch.empty(0, int(self.prop_feat_dim), device=device)
-            E_neg = torch.zeros((2, 0), dtype=torch.long, device=device)
-            Z_list_n = self.encoder(X_neg, E_neg, return_all=True)
-            H_prev_zero = [torch.zeros_like(h) for h in H_prev]
-            H_list_n = self.temporal(Z_list_n, H_prev_zero)
-            H_last_n = H_list_n[-1]
-            sums_n = torch.zeros((Bc, H_last_n.size(1)), dtype=H_last_n.dtype, device=device)
-            cnts_n = torch.zeros((Bc,), dtype=torch.float32, device=device)
-            sums_n.index_add_(0, graph_ids, H_last_n)
-            cnts_n.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
-            means_n = sums_n / (cnts_n.clamp_min(1e-6).unsqueeze(1))
-            Z_neg = F.normalize(self.proj_head(means_n), dim=-1)
-
-            # 合并三视角：[B, D] -> [3B, D]
-            Z_batch = torch.cat([Z_view1, Z_view2, Z_neg], dim=0)
+            # 合并两视角：[B, D] -> [2B, D]
+            Z_batch = torch.cat([Z_view1, Z_view2], dim=0)
             N = Z_batch.size(0)
             sim = torch.mm(Z_batch, Z_batch.t()) / float(self.temperature)
             mask_eye = torch.eye(N, device=device, dtype=torch.bool)
@@ -499,15 +469,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 kpos = 0
             for r in range(N):
                 a = r % Bcur  # anchor 样本索引
-                # 配对视角：仅对正视角行（v1/v2）添加
-                pos_idx: List[int] = []
-                if r < Bcur:  # view1 行，配对为 view2
-                    pair = r + Bcur
-                    pos_idx.append(pair)
-                elif r < 2 * Bcur:  # view2 行，配对为 view1
-                    pair = r - Bcur
-                    pos_idx.append(pair)
-                # r >= 2B 的显式负样本行没有正对，后续 valid 会排除
+                pair = r + Bcur if r < Bcur else r - Bcur
+                pos_idx = [pair]
                 if S is not None and kpos > 0:
                     rowS = S[a, :Bcur].clone()
                     rowS[a] = -1e9
@@ -518,26 +481,12 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         neigh = idxs[mask].tolist() if mask.any() else []
                         # 将这些样本的两种视角都加入正样本（仅当相似度>tau）
                         for t in neigh:
-                            pos_idx.append(t)           # 该样本的 view1
-                            pos_idx.append(t + Bcur)    # 该样本的 view2
+                            pos_idx.append(t)
+                            pos_idx.append(t + Bcur)
                 pos_mask[r, torch.tensor(pos_idx, device=device, dtype=torch.long)] = 1.0
             # 负样本掩码：其余（排除自身与正样本）
             neg_mask = 1.0 - pos_mask
             neg_mask = neg_mask.masked_fill(mask_eye, 0.0)
-
-            # 仅让“显式构造的负样本”与其对应的 anchor 拉远：
-            # 对于任意 anchor 的两视角行 r∈[0, 2B)，只保留列 j=2B+a（其自身的显式负样本），
-            # 并屏蔽掉其它所有样本的显式负样本列，防止跨样本互相充当负样本。
-            if Bcur > 0:
-                neg_block_beg = 2 * Bcur
-                neg_block_end = neg_block_beg + Bcur
-                # 仅处理 anchor 视角的行（view1/view2），显式负样本行本身不作为锚点参与损失
-                for r in range(min(2 * Bcur, N)):
-                    a = r % Bcur
-                    # 先屏蔽全部显式负样本列
-                    neg_mask[r, neg_block_beg:neg_block_end] = 0.0
-                    # 仅保留该 anchor 对应的显式负样本列
-                    neg_mask[r, neg_block_beg + a] = 1.0
 
             # 计算 NT-Xent 多正样本形式
             numerator = (pos_mask * exp_sim).sum(dim=1)
