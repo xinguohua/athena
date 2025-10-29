@@ -140,10 +140,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         gin_layers: int = 3,
         dropout: float = 0.1,
         # 训练
-        num_epochs: int = 1,
-        steps_per_epoch: int = 200,
-        batch_size: int = 1000,
-        # batch_size: int = 10,
+        num_epochs: int = 3,
+        batch_size: int = 64,
         lr: float = 1e-3,
         # 对比学习
         temperature: float = 0.2,
@@ -185,7 +183,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.gin_layers = int(gin_layers)
         self.dropout = float(dropout)
         self.num_epochs = int(num_epochs)
-        self.steps_per_epoch = int(steps_per_epoch)
         self.batch_size = int(batch_size)
         self.lr = float(lr)
         self.temperature = float(temperature)
@@ -771,7 +768,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 'gin_layers': self.gin_layers,
                 'dropout': self.dropout,
                 'num_epochs': self.num_epochs,
-                'steps_per_epoch': self.steps_per_epoch,
                 'batch_size': self.batch_size,
                 'lr': self.lr,
                 'temperature': self.temperature,
@@ -809,7 +805,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         raw_params = dict(state.get('params', {}))
         allowed = {
             'prop_feat_dim','enc_hidden_dim','enc_out_dim','gin_layers','dropout',
-            'num_epochs','steps_per_epoch','batch_size','lr','temperature',
+            'num_epochs','batch_size','lr','temperature',
             'r_hop','ego_max_nodes','drop_edge_p','feat_mask_p','train_indices','model_path',
             'anomaly_alpha',
             # W2V 配置
