@@ -461,15 +461,24 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     rows.append(Z_neg_blocks[1][gi].unsqueeze(0))
             Z_batch = torch.cat(rows, dim=0)  # [views_per_graph*B, D]
 
-            # 与 Z 顺序对齐的样本权重（模仿 gcc_embedder.py：只为正常视角追加权重）
+            # 与 Z 顺序对齐的样本权重：为所有视角（正常+恶意）都添加权重
             w_list: List[float] = []
             for w in freq_weights:
+                # 正常视角的两个增强
                 w_list.append(float(w))
                 w_list.append(float(w))
-            # 检查长度是否匹配，不匹配时设为 None（与 gcc_embedder.py 行为一致）
-            w_tensor = None
+                # 如果有恶意视角，也添加相同的权重
+                if len(Z_neg_blocks) == 2:
+                    w_list.append(float(w))
+                    w_list.append(float(w))
+            
+            # 转换为 tensor（正确写法：权重数量应该与 Z_batch 行数一致）
             if len(w_list) == Z_batch.size(0):
                 w_tensor = torch.tensor(w_list, dtype=torch.float32, device=device)
+            else:
+                # 长度不匹配时报警告但继续训练（使用均匀权重）
+                print(f"Warning: weight mismatch, w_list={len(w_list)} vs Z_batch={Z_batch.size(0)}, using uniform weights")
+                w_tensor = None
 
             # 多正样本 NT-Xent：相邻正对 + WL Top-K 相似子图映射到当前/配对视角
             N = Z_batch.size(0)
