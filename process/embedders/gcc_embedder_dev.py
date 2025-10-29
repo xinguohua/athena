@@ -142,7 +142,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 训练
         num_epochs: int = 1,
         steps_per_epoch: int = 200,
-        batch_size: int = 2000,
+        batch_size: int = 1000,
         # batch_size: int = 10,
         lr: float = 1e-3,
         # 对比学习
@@ -169,7 +169,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         sem_push_weight: float = 0.0,
         sem_fp_bits: int = 1024,
         # 恶意负样本与推开强度
-        use_malicious_negatives: bool = False,
+        use_malicious_negatives: bool = True,
         mal_neg_ratio: float = 0.3,
         mal_neg_token_len: int = 16,
         mal_neg_push_gamma: float = 3.0,
