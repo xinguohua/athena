@@ -525,22 +525,14 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     denom_mask[i, torch.tensor(neg_other, device=device, dtype=torch.long)] = 0.0
 
             # 若设置了 topk_neg：仅保留“Top-K 不相似”的主视角列和（可选）Top-K 相似列在分母中
-            # 注意：自有负样本默认保留
+            # 注意：自有负样本默认保留；并强制 Top-K 正负集合互斥，避免重合
             if S is not None and isinstance(self.topk_neg, int) and self.topk_neg > 0:
                 knew = min(self.topk_neg, max(0, Bcur - 1))
                 for s in range(Bcur):
                     i = batch_sample_rows[s][0]
-                    rowS = S[s, :Bcur].clone()
-                    if Bcur > s:
-                        rowS[s] = 1e9  # 排除自身，取最小值时不会选到自身
-                    # 选最不相似（S 最小）的 K 个主视角列
-                    if knew > 0:
-                        neg_vals, neg_idxs = torch.topk(-rowS, k=knew, largest=True)
-                        neg_main_cols = [batch_sample_rows[t][0] for t in neg_idxs.tolist()]
-                    else:
-                        neg_main_cols = []
-                    # 如果指定了 topk_pos，也把它们保留在分母（InfoNCE 标准包含正对）
+                    # 先计算 Top-K 相似（正样本集合）
                     pos_main_cols = []
+                    pos_idxs_list = []
                     if isinstance(self.topk_pos, int) and self.topk_pos > 0:
                         kpos = min(self.topk_pos, max(0, Bcur - 1))
                         rowS_pos = S[s, :Bcur].clone()
@@ -548,15 +540,30 @@ class GCCEmbedderDev(GraphEmbedderBase):
                             rowS_pos[s] = -1e9
                         if kpos > 0:
                             pos_vals, pos_idxs = torch.topk(rowS_pos, k=kpos, largest=True)
-                            pos_main_cols = [batch_sample_rows[t][0] for t in pos_idxs.tolist()]
-                    # 构造允许留下的主视角列集合
+                            pos_idxs_list = pos_idxs.tolist()
+                            pos_main_cols = [batch_sample_rows[t][0] for t in pos_idxs_list]
+                    # 再计算 Top-K 不相似（负样本集合），并排除正样本集合
+                    neg_main_cols = []
+                    if knew > 0:
+                        rowS_neg = S[s, :Bcur].clone()
+                        if Bcur > s:
+                            rowS_neg[s] = 1e9  # 排除自身
+                        # 排除正样本索引，确保互斥
+                        for t in pos_idxs_list:
+                            rowS_neg[t] = 1e9
+                        knew_eff = min(knew, max(0, Bcur - 1 - len(pos_idxs_list)))
+                        if knew_eff > 0:
+                            neg_vals, neg_idxs = torch.topk(-rowS_neg, k=knew_eff, largest=True)
+                            neg_main_cols = [batch_sample_rows[t][0] for t in neg_idxs.tolist()]
+                    # 构造允许留下的主视角列集合（互斥并集）
                     allow_set = set(neg_main_cols) | set(pos_main_cols)
-                    # 将未被允许的主视角列全部屏蔽出分母
+                    # 将未被允许的主视角列全部屏蔽出分母（注意使用绝对列索引）
                     for t in range(Bcur):
                         if t == s:
                             continue
-                        if t not in allow_set:
-                            denom_mask[s, t] = 0.0
+                        j_main = batch_sample_rows[t][0]
+                        if j_main not in allow_set:
+                            denom_mask[i, j_main] = 0.0
 
             gamma_neg = float(getattr(self, 'mal_neg_push_gamma',10))
             if gamma_neg > 1.0:
@@ -594,21 +601,27 @@ class GCCEmbedderDev(GraphEmbedderBase):
                             'own_neg_cols': own_neg_cols,
                         }
                         # 若启用 Top-K，记录当次 anchor 的 Top-K 选择（主视角的绝对列）
+                        pos_idxs_dbg = []
                         if S is not None and isinstance(getattr(self, 'topk_pos', None), int) and int(getattr(self, 'topk_pos')) > 0:
                             kpos_dbg = min(int(getattr(self, 'topk_pos')), max(0, Bcur - 1))
                             rowS_pos_dbg = S[s, :Bcur].clone()
                             if Bcur > s:
                                 rowS_pos_dbg[s] = -1e9
                             if kpos_dbg > 0:
-                                _, pos_idxs_dbg = torch.topk(rowS_pos_dbg, k=kpos_dbg, largest=True)
-                                dump['topk_pos_cols'] = [batch_sample_rows[t][0] for t in pos_idxs_dbg.tolist()]
+                                _, pos_idxs_dbg_t = torch.topk(rowS_pos_dbg, k=kpos_dbg, largest=True)
+                                pos_idxs_dbg = pos_idxs_dbg_t.tolist()
+                                dump['topk_pos_cols'] = [batch_sample_rows[t][0] for t in pos_idxs_dbg]
                         if S is not None and isinstance(getattr(self, 'topk_neg', None), int) and int(getattr(self, 'topk_neg')) > 0:
                             knew_dbg = min(int(getattr(self, 'topk_neg')), max(0, Bcur - 1))
                             rowS_neg_dbg = S[s, :Bcur].clone()
                             if Bcur > s:
                                 rowS_neg_dbg[s] = 1e9
-                            if knew_dbg > 0:
-                                _, neg_idxs_dbg = torch.topk(-rowS_neg_dbg, k=knew_dbg, largest=True)
+                            # 排除正样本集合，确保互斥
+                            for t in pos_idxs_dbg:
+                                rowS_neg_dbg[t] = 1e9
+                            knew_eff_dbg = min(knew_dbg, max(0, Bcur - 1 - len(pos_idxs_dbg)))
+                            if knew_eff_dbg > 0:
+                                _, neg_idxs_dbg = torch.topk(-rowS_neg_dbg, k=knew_eff_dbg, largest=True)
                                 dump['topk_neg_main_cols'] = [batch_sample_rows[t][0] for t in neg_idxs_dbg.tolist()]
                         # 将数值矩阵对应行裁剪为 numpy
                         if S is not None:
