@@ -174,8 +174,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         mal_neg_token_len: int = 16,
         mal_neg_push_gamma: float = 3.0,
         # Top-K 相似/不相似选择（可选）
-        topk_pos: Optional[int] = None,   # 每个 anchor 选择的 Top-K 相似正样本（基于 S）
-        topk_neg: Optional[int] = None,   # 每个 anchor 选择的 Top-K 最不相似主视角列作为“负例”（基于 S）
+        topk_pos: Optional[int] = 3,   # 每个 anchor 选择的 Top-K 相似正样本（基于 S）
+        topk_neg: Optional[int] = 3,   # 每个 anchor 选择的 Top-K 最不相似主视角列作为“负例”（基于 S）
     ):
         super().__init__(snapshots, features, mapp)
         self.snapshots = snapshots
@@ -485,7 +485,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         S = K / (d.unsqueeze(1) * d.unsqueeze(0) + 1e-12)
                         S.fill_diagonal_(0.0)
 
-            # TODO 相似度算的有问题
             W = torch.zeros((N, N), dtype=torch.float32, device=device)
             # 根据是否指定 topk_pos 来构造分子权重 W
             if S is not None:
@@ -553,9 +552,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     # 构造允许留下的主视角列集合
                     allow_set = set(neg_main_cols) | set(pos_main_cols)
                     # 将未被允许的主视角列全部屏蔽出分母
-                    for j_main in [batch_sample_rows[t][0] for t in range(Bcur) if t != s]:
-                        if j_main not in allow_set:
-                            denom_mask[i, j_main] = 0.0
+                    for t in range(Bcur):
+                        if t == s:
+                            continue
+                        if t not in allow_set:
+                            denom_mask[s, t] = 0.0
 
             gamma_neg = float(getattr(self, 'mal_neg_push_gamma',10))
             if gamma_neg > 1.0:
