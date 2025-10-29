@@ -519,8 +519,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 # 主正对（相邻）
                 if views_per_graph >= 2:
                     pos_idx.append(gidx * views_per_graph + pair_slot(vslot))
-                # WL Top-K 扩增正样本：当前 slot 与其配对 slot
-                if S is not None and kpos > 0:
+                # WL Top-K 扩增正样本：仅对正常视角（vslot=0,1）扩增，恶意视角不参与
+                if S is not None and kpos > 0 and vslot < 2:
                     rowS = S[gidx, :Bcur].clone()
                     rowS[gidx] = -1e9
                     vals, idxs = torch.topk(rowS, k=kpos, largest=True)
