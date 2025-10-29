@@ -418,8 +418,39 @@ class GCCEmbedderDev(GraphEmbedderBase):
             means2 = sums2 / (cnts2.clamp_min(1e-6).unsqueeze(1))
             Z_view2 = F.normalize(self.proj_head(means2), dim=-1)
 
-            # 合并两视角：[B, D] -> [2B, D]
-            Z_batch = torch.cat([Z_view1, Z_view2], dim=0)
+            # ===== 基于恶意语料：为每个子图再构造两组“恶意视角”，直接作为完整样本对拼进 batch =====
+            Z_neg_blocks: List[torch.Tensor] = []
+            if getattr(self, 'use_malicious_negatives', False) and len(self.malicious_token_counter) > 0:
+                # 按子图构造恶意特征（节点级），再按 batch 展平
+                X_neg_list = []
+                for sub, xi in zip(subs, x_list):
+                    xneg_np = self._corrupt_features_with_malicious(
+                        sub, xi, ratio=float(getattr(self, 'mal_neg_ratio', 0.3)), token_len=int(getattr(self, 'mal_neg_token_len', 16))
+                    )
+                    X_neg_list.append(torch.from_numpy(xneg_np).to(device))
+                X_neg = torch.cat(X_neg_list, dim=0) if X_neg_list else torch.empty(0, int(self.prop_feat_dim), device=device)
+
+                # 生成两组恶意视角（与原实现一致，保证相邻配对）
+                for _ in range(2):
+                    en_cols = []
+                    for ei, off in zip(e_tensors, offsets):
+                        if ei.numel() > 0:
+                            en_cols.append(self._augment_edges(ei, drop_p=self.drop_edge_p) + off)
+                    EN = torch.cat(en_cols, dim=1) if en_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
+                    XN = self._augment_features(X_neg, mask_p=self.feat_mask_p)
+
+                    ZN_list = self.encoder(XN, EN, return_all=True)
+                    HN_list = self.temporal(ZN_list, H_prev)
+                    NL = HN_list[-1]
+                    sums_n = torch.zeros((Bc, NL.size(1)), dtype=NL.dtype, device=device)
+                    cnts_n = torch.zeros((Bc,), dtype=torch.float32, device=device)
+                    sums_n.index_add_(0, graph_ids, NL)
+                    cnts_n.index_add_(0, graph_ids, torch.ones_like(graph_ids, dtype=torch.float32))
+                    means_n = sums_n / (cnts_n.clamp_min(1e-6).unsqueeze(1))
+                    Z_neg_blocks.append(F.normalize(self.proj_head(means_n), dim=-1))
+
+            # 合并视角：[B, D] -> [2B (+2B 恶意视角可选), D]
+            Z_batch = torch.cat([Z_view1, Z_view2] + Z_neg_blocks, dim=0)
             N = Z_batch.size(0)
             sim = torch.mm(Z_batch, Z_batch.t()) / float(self.temperature)
             mask_eye = torch.eye(N, device=device, dtype=torch.bool)
@@ -461,34 +492,40 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         S = K / (d.unsqueeze(1) * d.unsqueeze(0) + 1e-12)
                         S.fill_diagonal_(0.0)
 
-            # 基于相似度的 Top-K 额外正样本（按 anchor 样本级别选 K 个）；对每个视角 r，正样本集合=配对视角 + (top-k 样本的两视角)
+            # 基于相似度的 Top-K 额外正样本（按 anchor 样本级别选 K 个）；
+            # 对每个视角 r，正样本集合 = 同一块对中的配对视角 + (top-k 样本在该块对的两个视角)
             pos_mask = torch.zeros((N, N), dtype=torch.float32, device=device)
             if S is not None and isinstance(getattr(self, 'topk_pos', None), int) and int(getattr(self, 'topk_pos')) > 0:
                 kpos = min(int(getattr(self, 'topk_pos')), max(0, Bcur - 1))
             else:
                 kpos = 0
+            # 将所有视角行都当作锚点；块大小为 Bcur，块对成对排列：[0<->1]、[2<->3] …
+            block_size = Bcur
+            num_blocks = N // max(1, block_size)
             for r in range(N):
-                a = r % Bcur  # anchor 样本索引
-                pair = r + Bcur if r < Bcur else r - Bcur
+                a = r % block_size  # 归一到原始样本索引 [0, Bcur)
+                b = r // block_size  # 所在块索引
+                pb = b ^ 1           # 同一对的配对块（0<->1, 2<->3, ...）
+                pair = pb * block_size + a
                 pos_idx = [pair]
                 if S is not None and kpos > 0:
-                    rowS = S[a, :Bcur].clone()
+                    rowS = S[a, :block_size].clone()
                     rowS[a] = -1e9
                     tau = float(getattr(self, 'topk_pos_min_sim', 0.0))
                     vals, idxs = torch.topk(rowS, k=kpos, largest=True)
                     if vals.numel() > 0:
-                        mask = vals > tau
-                        neigh = idxs[mask].tolist() if mask.any() else []
-                        # 将这些样本的两种视角都加入正样本（仅当相似度>tau）
+                        m = vals > tau
+                        neigh = idxs[m].tolist() if m.any() else []
+                        # 将这些样本在当前块 b 与配对块 pb 中的视角都加入正样本
                         for t in neigh:
-                            pos_idx.append(t)
-                            pos_idx.append(t + Bcur)
+                            pos_idx.append(b * block_size + t)
+                            pos_idx.append(pb * block_size + t)
                 pos_mask[r, torch.tensor(pos_idx, device=device, dtype=torch.long)] = 1.0
             # 负样本掩码：其余（排除自身与正样本）
             neg_mask = 1.0 - pos_mask
             neg_mask = neg_mask.masked_fill(mask_eye, 0.0)
 
-            # 计算 NT-Xent 多正样本形式
+            # 计算 NT-Xent（所有视角行都作为锚点）
             numerator = (pos_mask * exp_sim).sum(dim=1)
             denominator = (neg_mask * exp_sim).sum(dim=1).clamp_min(1e-12)
             valid = numerator > 0
@@ -500,8 +537,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     self.temporal.commit(ids, slice_H)
                 continue
             loss_vec = -torch.log(numerator[valid] / denominator[valid])
-            # 样本权重：子图级别的权重复制到两视角
-            w_views = torch.tensor(freq_weights, dtype=torch.float32, device=device).repeat(2)
+            # 样本权重：子图级别的权重复制到所有块（两视角 + 恶意视角对）
+            w_views = torch.tensor(freq_weights, dtype=torch.float32, device=device).repeat(max(1, num_blocks))
             w_t = w_views[valid]
             loss = (w_t * loss_vec).sum() / w_t.sum().clamp_min(1e-6)
 
