@@ -432,6 +432,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 X_neg = torch.cat(X_neg_list, dim=0) if X_neg_list else torch.empty(0, int(self.prop_feat_dim), device=device)
 
                 # 生成两组恶意视角（与原实现一致，保证相邻配对）
+                # 注意：恶意视角不使用时序记忆，因为它们是虚构的腐化数据
                 for _ in range(2):
                     en_cols = []
                     for ei, off in zip(e_tensors, offsets):
@@ -440,9 +441,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     EN = torch.cat(en_cols, dim=1) if en_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
                     XN = self._augment_features(X_neg, mask_p=self.feat_mask_p)
 
+                    # 恶意视角：直接用 GNN 编码，不经过时序记忆
                     ZN_list = self.encoder(XN, EN, return_all=True)
-                    HN_list = self.temporal(ZN_list, H_prev)
-                    NL = HN_list[-1]
+                    NL = ZN_list[-1]  # 直接使用最后一层的输出，不用时序记忆
                     sums_n = torch.zeros((Bc, NL.size(1)), dtype=NL.dtype, device=device)
                     cnts_n = torch.zeros((Bc,), dtype=torch.float32, device=device)
                     sums_n.index_add_(0, graph_ids, NL)
