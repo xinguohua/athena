@@ -171,7 +171,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         mal_neg_push_gamma: float = 3.0,
         mal_stopwords: Optional[List[str]] = [
             'event', 'read', 'write'
-            'execute', 'modify', 'process',
+            ,'execute'
         ],  # 恶意token停用词列表，传入[]表示不过滤
         mal_print_tokens: bool = True,  # 是否打印恶意token统计信息
         # Top-K 相似（可选）
