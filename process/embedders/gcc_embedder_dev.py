@@ -155,9 +155,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
         train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
         model_path: Optional[str] = None,
         # 异常活跃驱动损失参数（仅频率异常）
-    anomaly_alpha: float = 1,      # 加权强度，>0 表示异常越大权重越大
-    # 是否使用样本权重（基于频率/异常强度），关闭时统一使用均匀权重
-    use_sample_weights: bool = True,
+        anomaly_alpha: float = 1,      # 加权强度，>0 表示异常越大权重越大
+        # 是否使用样本权重（基于频率/异常强度），关闭时统一使用均匀权重
+        use_sample_weights: bool = True,
         w2v_window: int = 5,
         w2v_min_count: int = 1,
         w2v_sg: int = 1,
@@ -168,7 +168,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         wl_height: int = 2,
         sem_fp_bits: int = 1024,
         # 恶意负样本与推开强度
-        use_malicious_negatives: bool = True,
+        use_malicious_negatives: bool = False,
         mal_neg_ratio: float = 0.3,
         mal_neg_token_len: int = 16,
         mal_stopwords=None,
