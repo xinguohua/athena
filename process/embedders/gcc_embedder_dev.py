@@ -182,10 +182,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
     ):
         super().__init__(snapshots, features, mapp)
         if mal_stopwords is None:
-            mal_stopwords =  [
-            'event', 'read', 'write'
-            ,'execute'
-        ],
+            mal_stopwords = [
+                'event', 'read', 'write', 'execute'
+            ]
         self.snapshots = snapshots
         # 时序使用开关
         self.use_temporal = bool(use_temporal)
@@ -228,7 +227,21 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.mal_neg_token_len = int(mal_neg_token_len)  # 生成恶意向量时采样的恶意 token 数
         
         # 恶意token停用词：直接使用传入的列表转为set（[]表示不过滤）
-        self.mal_stopwords = set(mal_stopwords) if mal_stopwords else set()
+        # 归一化停用词：容忍嵌套(list/tuple/set)并转为扁平字符串集合，避免出现 list 内嵌 list 导致 set() 报错
+        def _flatten_to_str_set(obj):
+            out = []
+            if obj is None:
+                return set()
+            if isinstance(obj, (list, tuple, set)):
+                for it in obj:
+                    if isinstance(it, (list, tuple, set)):
+                        out.extend(str(x) for x in it)
+                    else:
+                        out.append(str(it))
+                return set(out)
+            return {str(obj)}
+
+        self.mal_stopwords = _flatten_to_str_set(mal_stopwords)
         self.mal_print_tokens = bool(mal_print_tokens)  # 是否打印恶意token统计
 
         # Top-K 采样配置
