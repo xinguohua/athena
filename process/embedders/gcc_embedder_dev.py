@@ -167,7 +167,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         sim_measure: str = 'wl',            # 'tanimoto' | 'cosine' | 'wl'
         wl_height: int = 2,
         sem_fp_bits: int = 1024,
-        use_malicious_negatives: bool = False,
+        use_malicious_negatives: bool = True,
         mal_neg_ratio: float = 0.3,
         mal_neg_token_len: int = 16,
         mal_stopwords=None,
