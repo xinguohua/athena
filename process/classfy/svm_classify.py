@@ -23,6 +23,11 @@ class SVMConfig:
     # 模型保存
     model_save_path: str = "svm_detector.pkl"
     scaler_save_path: str = "svm_scaler.pkl"
+    meta_save_path: str = "svm_meta.pkl"  # 存储阈值等元数据
+    # 推断阈值：
+    # - 若为 None：允许训练阶段自动标定（按 nu 分位数）
+    # - 若为具体数值：固定使用该阈值，训练阶段跳过自动标定
+    decision_threshold: Optional[float] = -0.1
 
 
 # ========== Trainer 实现 ==========
@@ -37,6 +42,8 @@ class SVMClassify(BaseClassify):
         
         self.scaler = StandardScaler() if self.cfg.use_scaler else None
         self.model = self._build_model()
+        # 运行期阈值（优先级：predict(threshold) > self.threshold > 0.0）
+        self.threshold: Optional[float] = self.cfg.decision_threshold
 
     def _build_model(self):
         """返回具体模型"""
@@ -81,14 +88,32 @@ class SVMClassify(BaseClassify):
         self.model.fit(X_normal)
         
         # 在训练数据上评估
-        train_pred = self.model.predict(X_normal)
-        n_outliers = np.sum(train_pred == -1)
-        n_inliers = np.sum(train_pred == 1)
+        decision_train = self.model.decision_function(X_normal)
+        train_pred = (decision_train < 0.0).astype(int)  # 仅用于统计（默认0阈值）
+        n_outliers = int(np.sum(train_pred == 1))
+        n_inliers = int(np.sum(train_pred == 0))
         
         print("\n[One-Class SVM] 训练集预测:")
         print(f"  内点(正常): {n_inliers}")
         print(f"  离群点(异常): {n_outliers}")
         print(f"  离群点比例: {n_outliers/len(train_pred):.4f}")
+        print(f"  决策分数: mean={np.mean(decision_train):.6f} std={np.std(decision_train):.6f} min={np.min(decision_train):.6f} max={np.max(decision_train):.6f}")
+
+        # === 阈值策略 ===
+        # 若用户已在配置中给出固定阈值，则跳过自动标定；否则按 nu 分位数自动标定
+        if self.cfg.decision_threshold is None:
+            try:
+                q = float(np.clip(self.cfg.nu, 0.001, 0.5))  # 安全范围
+                thr = float(np.quantile(decision_train, q))
+                self.threshold = thr
+                self.cfg.decision_threshold = thr
+                print(f"[Calibrate] 基于训练集分位数自动标定阈值: nu={self.cfg.nu} -> threshold={thr:+.6f}")
+            except Exception as e:
+                print(f"[Calibrate] 阈值标定失败，使用默认0.0：{e}")
+                self.threshold = self.threshold if self.threshold is not None else 0.0
+        else:
+            self.threshold = float(self.cfg.decision_threshold)
+            print(f"[Calibrate] 跳过自动标定，使用固定阈值: {self.threshold:+.6f}")
         
         history = {"train_info": [{
             "n_inliers": int(n_inliers),
@@ -109,6 +134,18 @@ class SVMClassify(BaseClassify):
             with open(cfg.scaler_save_path, 'wb') as f:
                 pickle.dump(self.scaler, f)
             print(f"[Save] scaler -> {cfg.scaler_save_path}")
+
+        # 保存元数据（阈值、配置快照）
+        try:
+            meta = {
+                "decision_threshold": self.threshold,
+                "config": self.cfg.__dict__,
+            }
+            with open(cfg.meta_save_path, 'wb') as f:
+                pickle.dump(meta, f)
+            print(f"[Save] meta -> {cfg.meta_save_path} (threshold={self.threshold})")
+        except Exception as e:
+            print(f"[Save] meta 失败：{e}")
         
         return history
 
@@ -137,10 +174,15 @@ class SVMClassify(BaseClassify):
         
         # One-Class SVM
         if threshold is None:
-            threshold = 0.0
+            threshold = self.threshold if self.threshold is not None else 0.0
         
         # 决策函数: 正值=内点(正常), 负值=离群点(异常)
         decision = self.model.decision_function(X)
+        if float(np.std(decision)) < 1e-8:
+            print("[Warn] 所有决策分数几乎相同，可能存在以下情况：\n"
+                  "  - 嵌入向量近乎常数/坍缩（请检查编码器/embedding生成）\n"
+                  "  - 训练/测试使用的标准化器不匹配（请确认在同一流程训练/加载）\n"
+                  "  - SVM 参数不当（尝试调整 gamma/nu 或关闭标准化）")
         pred_labels = (decision < threshold).astype(int)
         
         for i in range(len(X)):
@@ -175,7 +217,17 @@ class SVMClassify(BaseClassify):
             with open(scaler_path, 'rb') as f:
                 self.scaler = pickle.load(f)
             print(f"[Load] scaler <- {scaler_path}")
+
+        # 加载阈值元数据（可选）
+        meta_path = self.cfg.meta_save_path
+        if os.path.exists(meta_path):
+            try:
+                with open(meta_path, 'rb') as f:
+                    meta = pickle.load(f)
+                self.threshold = meta.get("decision_threshold", self.threshold)
+                print(f"[Load] meta <- {meta_path} (threshold={self.threshold})")
+            except Exception as e:
+                print(f"[Load] meta 失败：{e}")
         
         return self.model
-        
-        return self.model
+
