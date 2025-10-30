@@ -27,7 +27,7 @@ class SVMConfig:
     # 推断阈值：
     # - 若为 None：允许训练阶段自动标定（按 nu 分位数）
     # - 若为具体数值：固定使用该阈值，训练阶段跳过自动标定
-    decision_threshold: Optional[float] = -0.1
+    decision_threshold: Optional[float] = None
 
 
 # ========== Trainer 实现 ==========
