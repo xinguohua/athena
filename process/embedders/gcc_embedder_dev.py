@@ -176,8 +176,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
             # ],
             # 恶意token停用词列表，传入[]表示不过滤
         mal_print_tokens: bool = True,  # 是否打印恶意token统计信息
-        # Top-K 相似（可选）
-        topk_pos: Optional[int] = 3,   # 每个 anchor 选择的 Top-K 相似正样本（基于 S）
+    # Top-K 相似（可选，先关闭）
+    topk_pos: Optional[int] = 0,   # 先关闭 Top-K 扩增，回到经典 NT-Xent
         topk_pos_min_sim: float = 0.5, # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
     ):
         super().__init__(snapshots, features, mapp)
@@ -533,12 +533,36 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 print(f"Warning: weight mismatch, w_list={len(w_list)} vs Z_batch={Z_batch.size(0)}, using uniform weights")
                 w_tensor = None
 
-            # 多正样本 NT-Xent：相邻正对 + WL Top-K 相似子图映射到当前/配对视角
+            # 多分类（稳定版）NT-Xent：相邻为唯一正对，使用交叉熵
             N = Z_batch.size(0)
             sim_mat = torch.mm(Z_batch, Z_batch.t()) / float(self.temperature)
             eye_mask = torch.eye(N, dtype=torch.bool, device=device)
             sim_mat = sim_mat.masked_fill(eye_mask, -1e9)
-            exp_sim = torch.exp(sim_mat)
+            # 若关闭 Top-K，则直接按稳定版 gcc_embedder 的经典 NT-Xent（相邻为唯一正对）计算并继续下一批
+            kpos_eff = int(getattr(self, 'topk_pos', 0) or 0)
+            if kpos_eff <= 0:
+                # 完全复用稳定版接口：直接喂入 Z_batch + 可选权重，到 _nt_xent_loss 里计算 sim 与 CE
+                loss = self._nt_xent_loss(Z_batch, temperature=self.temperature, sample_weights=w_tensor)
+
+                self.optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(
+                    list(self.encoder.parameters()) + list(self.proj_head.parameters()) + (list(self.temporal.parameters()) if self.use_temporal else []),
+                    max_norm=5.0,
+                )
+                self.optimizer.step()
+
+                # 更新时序记忆（采用视角1的隐状态作为当期提交；仅开启时序时）
+                if self.use_temporal:
+                    for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
+                        beg, endi = offsets[gi], offsets[gi] + n
+                        slice_H = [Hl[beg:endi].detach() for Hl in H1_list]
+                        self.temporal.commit(ids, slice_H)
+
+                total_loss += float(loss.detach().cpu().item())
+                total_steps += 1
+                batch_idx += 1
+                continue
 
             # 计算 WL 子图相似度矩阵 S（子图级 B×B）
             Bcur = Bc
@@ -599,11 +623,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 if pos_idx:
                     pos_mask[r, torch.tensor(pos_idx, dtype=torch.long, device=device)] = 1.0
 
-            neg_mask = 1.0 - pos_mask
-            neg_mask = neg_mask.masked_fill(eye_mask, 0.0)
-            numerator = (pos_mask * exp_sim).sum(dim=1)
-            denominator = (neg_mask * exp_sim).sum(dim=1).clamp_min(1e-12)
-            valid = numerator > 0
+            # 多正样本的“多分类”交叉熵：log_softmax + 软目标（正样本均分）
+            pos_cnt = pos_mask.sum(dim=1, keepdim=True)
+            valid = (pos_cnt.squeeze(1) > 0)
             if not valid.any():
                 # 若无有效正样本，跳过；在开启时序时提交一次记忆
                 if self.use_temporal:
@@ -612,12 +634,15 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         slice_H = [Hl[beg:endi].detach() for Hl in H1_list]
                         self.temporal.commit(ids, slice_H)
                 continue
-            loss_vec = -torch.log(numerator[valid] / denominator[valid])
-            if w_tensor is not None:
+
+            soft_targets = pos_mask / pos_cnt.clamp_min(1e-12)
+            log_probs = F.log_softmax(sim_mat, dim=1)
+            loss_row = -(soft_targets[valid] * log_probs[valid]).sum(dim=1)
+            if w_tensor is not None and w_tensor.numel() == N:
                 w_t = w_tensor[valid]
-                loss = (w_t * loss_vec).sum() / w_t.sum().clamp_min(1e-6)
+                loss = (w_t * loss_row).sum() / w_t.sum().clamp_min(1e-6)
             else:
-                loss = loss_vec.mean()
+                loss = loss_row.mean()
 
             self.optimizer.zero_grad(set_to_none=True)
             loss.backward()
