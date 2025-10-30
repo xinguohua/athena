@@ -322,10 +322,32 @@ class GCCEmbedderDev(GraphEmbedderBase):
         iterator = range(0, len(centers), bsz)
         iterator = _tqdm(iterator, total=total_batches, leave=False, desc=f"Snapshot {sidx} Batches")
 
+        # 为每个 batch 独立按频率权重“有放回”抽样做准备：计算一次权重向量 p
+        try:
+            freqs_all = np.array([float(g.vs[i]['frequency']) for i in centers], dtype=np.float64)
+        except Exception:
+            freqs_all = np.ones(len(centers), dtype=np.float64)
+        valid_mask = np.isfinite(freqs_all) & (freqs_all > 0)
+        freqs_all = np.where(valid_mask, freqs_all, 0.0)
+        total_freq = float(freqs_all.sum())
+        p = (freqs_all / total_freq) if total_freq > 0.0 else None
+
         batch_idx = 0
         for start in iterator:
             end = min(len(centers), start + bsz)
-            batch_centers = centers[start:end]
+            curr_bsz = end - start
+            if curr_bsz <= 0:
+                continue
+            # 每个 batch 独立按权重“有放回”抽样 curr_bsz 个中心
+            try:
+                if p is not None:
+                    batch_indices = np.random.choice(len(centers), size=curr_bsz, replace=True, p=p)
+                else:
+                    batch_indices = np.random.choice(len(centers), size=curr_bsz, replace=True)
+            except Exception:
+                batch_indices = [random.randrange(0, len(centers)) for _ in range(curr_bsz)]
+            # 将抽样到的局部索引映射回原始节点索引
+            batch_centers = [centers[int(i)] for i in batch_indices]
 
             subs: List = []
             x_list: List[np.ndarray] = []
