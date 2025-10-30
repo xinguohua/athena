@@ -2,6 +2,9 @@ from .base import BaseClassify
 from .prographer_classify import PrographerClassify, PrographerConfig
 from .unicorn_classify import UnicornClassify, UnicornConfig
 from .svm_classify import TopKDeviationClassify, TopKDeviationConfig
+# 兼容旧名：SVMClassify/SVMConfig 指向 Top-K 偏离度实现
+SVMClassify = TopKDeviationClassify
+SVMConfig = TopKDeviationConfig
 
 __all__ = [
     "BaseClassify",
@@ -9,6 +12,9 @@ __all__ = [
     "UnicornClassify",
     "TopKDeviationClassify",
     "TopKDeviationConfig",
+    # 兼容旧名
+    "SVMClassify",
+    "SVMConfig",
 ]
 
 def get_classfy(name: str, **kwargs) -> BaseClassify:

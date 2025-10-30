@@ -38,11 +38,7 @@ class TopKDeviationConfig:
     k: int = 5
     # 数据预处理
     use_scaler: bool = True  # 是否对特征做标准化（z-score）
-    # 中心选择策略：
-    # - 'batch': 始终使用当前输入批次的均值作为中心（推荐用于“全是恶意样本”的场景）
-    # - 'trained': 始终使用训练得到的中心（若无则报错）
-    # - 'auto': 优先使用训练中心，若无则退回 batch 均值
-    center_mode: str = "batch"
+    # 说明：训练中心已移除，预测时一律使用当前批次均值作为中心
     # 保存路径（沿用原结构，便于集成）
     scaler_save_path: str = "topk_scaler.pkl"
     meta_save_path: str = "topk_meta.pkl"  # 存储中心向量/配置等
@@ -67,12 +63,15 @@ class TopKDeviationClassify(BaseClassify):
         # 轻量标准化器（避免额外依赖）
         self.scaler = _NumpyScaler() if self.cfg.use_scaler else None
         self.model = self._build_model()
-        # 中心向量（标准化空间下）
-        self.center = None  # type: Optional[np.ndarray]
 
     def _build_model(self):
         """Top-K 偏离度不需要具体模型，这里返回 None 作为占位。"""
         return None
+
+    # 覆盖父类训练：Top-K 偏离度无需训练，直接返回自身
+    def train(self, embeddings, **kwargs):
+        print("[TopK] 跳过训练：该分类器无需训练，预测时直接以批次均值为中心计算偏离度。")
+        return self
 
     def _train_loop(self, snapshot_embeddings: Any, labels: Optional[np.ndarray] = None, **kwargs) -> Dict[str, list]:
         """训练循环：估计中心向量（标准化后）并保存元数据"""
@@ -95,11 +94,7 @@ class TopKDeviationClassify(BaseClassify):
             X_normal = X
             print(f"[TopK] 使用全部样本估计中心: {X_normal.shape}")
 
-        # 中心向量
-        self.center = np.mean(X_normal, axis=0).astype(np.float32)
-        print(f"[TopK] 中心范数: {np.linalg.norm(self.center):.6f}")
-
-        # 保存 scaler 与元数据
+        # 保存 scaler 与元数据（不再保存中心）
         if self.scaler is not None:
             with open(cfg.scaler_save_path, 'wb') as f:
                 pickle.dump(self.scaler, f)
@@ -107,7 +102,6 @@ class TopKDeviationClassify(BaseClassify):
 
         try:
             meta = {
-                "center": self.center,
                 "k": int(cfg.k),
                 "config": self.cfg.__dict__,
             }
@@ -119,12 +113,22 @@ class TopKDeviationClassify(BaseClassify):
 
         return {"train_info": [{"n_samples": int(X_normal.shape[0])}]}
 
-    def predict(self, embeddings: np.ndarray, k: Optional[int] = None) -> Tuple[np.ndarray, Dict]:
+    def predict(
+        self,
+        embeddings: np.ndarray,
+        k: Optional[int] = None,
+        plot: bool = False,
+        plot_path: Optional[str] = None,
+        title: Optional[str] = None,
+    ) -> Tuple[np.ndarray, Dict]:
         """基于 Top-K 偏离度的预测（无阈值，支持“无需训练”的直接测试）
 
         Args:
             embeddings: 快照嵌入向量
             k: 取偏离度前 k 个（默认使用训练配置的 k）
+            plot: 是否绘制偏离度可视化（柱状图，按偏离度降序）
+            plot_path: 若提供则将图保存到该路径（优先级高于弹窗显示）
+            title: 图标题，可选
 
         Returns:
             pred_labels: 预测标签 (0=正常, 1=异常)
@@ -135,15 +139,8 @@ class TopKDeviationClassify(BaseClassify):
             # 若标准化器未拟合，则跳过标准化，允许直接测试
             X = self.scaler.transform(X)
 
-        # 选择中心参考：按配置中心模式
-        mode = (self.cfg.center_mode or "auto").lower()
-        if mode == "trained":
-            assert self.center is not None, "中心模式为 'trained' 但未训练中心。可改为 center_mode='batch' 或先调用 train()。"
-            center_ref = self.center
-        elif mode == "batch":
-            center_ref = np.mean(X, axis=0).astype(np.float32)
-        else:  # 'auto'
-            center_ref = self.center if self.center is not None else np.mean(X, axis=0).astype(np.float32)
+        # 选择中心参考：始终使用当前输入批次的均值（训练中心已移除）
+        center_ref = np.mean(X, axis=0).astype(np.float32)
 
         # 计算每个样本的偏离度（与参考中心的 L2 距离）
         diffs = X - center_ref
@@ -171,7 +168,56 @@ class TopKDeviationClassify(BaseClassify):
             status = "🔴 异常" if pred_labels[i] == 1 else "🟢 正常"
             print(f"快照 {i:2d}   | {d:.6f} | {status}")
         print("-" * 40 + "\n")
+        # 可视化（可选）
+        if plot or plot_path:
+            try:
+                self._plot_deviation(dev, k_eff, plot_path=plot_path, title=title)
+            except Exception as e:
+                print(f"[Plot] 可视化失败：{e}")
         return pred_labels, diff_vectors
+
+    def _plot_deviation(self, dev: np.ndarray, k: int, plot_path: Optional[str] = None, title: Optional[str] = None):
+        """绘制偏离度柱状图：按偏离度降序，Top-K 用红色，其余用灰色。
+
+        若提供 plot_path 则保存到文件，否则弹窗显示。
+        若未安装 matplotlib，将给出友好提示并打印 Top-10 偏离度。
+        """
+        try:
+            import matplotlib.pyplot as plt  # type: ignore
+        except Exception:
+            top_idx = np.argsort(-dev)[:min(k, len(dev))]
+            print("[Plot] 未安装 matplotlib，打印 Top-偏离度替代：")
+            for rank, i in enumerate(top_idx, 1):
+                print(f"  #{rank:2d} idx={i:3d} deviation={dev[i]:.6f}")
+            return
+
+        n = len(dev)
+        order = np.argsort(-dev)
+        dev_sorted = dev[order]
+        colors = ["crimson" if i < min(k, n) else "#cccccc" for i in range(n)]
+
+        width = max(6.0, min(16.0, 0.2 * n + 2))
+        fig, ax = plt.subplots(figsize=(width, 4.5))
+        ax.bar(range(n), dev_sorted, color=colors, alpha=0.9, edgecolor="#444444", linewidth=0.4)
+        ax.set_xlabel("samples (sorted by deviation)")
+        ax.set_ylabel("L2 deviation")
+        ax.set_title(title or f"Deviation ranking (Top-{min(k, n)})")
+        ax.grid(axis="y", linestyle=":", alpha=0.4)
+
+        # 辅助线：Top-K 阈值
+        if n > 0 and k is not None and k > 0:
+            thr = dev_sorted[min(k - 1, n - 1)]
+            ax.axhline(thr, color="orange", linestyle="--", linewidth=1.0, alpha=0.8, label=f"Top-{min(k, n)} threshold")
+            ax.legend(loc="upper right")
+
+        fig.tight_layout()
+        if plot_path:
+            os.makedirs(os.path.dirname(plot_path) or ".", exist_ok=True)
+            fig.savefig(plot_path, dpi=150, bbox_inches="tight")
+            print(f"[Plot] 偏离度图已保存到: {plot_path}")
+            plt.close(fig)
+        else:
+            plt.show()
 
     def load(self, scaler_path: Optional[str] = None, meta_path: Optional[str] = None):
         """加载标准化器与中心元数据"""
@@ -187,11 +233,10 @@ class TopKDeviationClassify(BaseClassify):
             try:
                 with open(meta_path, 'rb') as f:
                     meta = pickle.load(f)
-                self.center = meta.get("center", None)
                 # 同步配置中的 k
                 if "k" in meta:
                     self.cfg.k = int(meta["k"])
-                print(f"[Load] meta <- {meta_path} (k={self.cfg.k}, center_dim={None if self.center is None else len(self.center)})")
+                print(f"[Load] meta <- {meta_path} (k={self.cfg.k})")
             except Exception as e:
                 print(f"[Load] meta 失败：{e}")
         return self
