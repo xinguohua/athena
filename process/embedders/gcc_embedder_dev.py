@@ -169,7 +169,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
         mal_neg_ratio: float = 0.3,
         mal_neg_token_len: int = 16,
         mal_neg_push_gamma: float = 3.0,
-        mal_stopwords: Optional[List[str]] = None,  # 恶意token停用词列表，默认不过滤
+        mal_stopwords: Optional[List[str]] = [
+            'event', 'open', 'read', 'write', 'close', 
+            'sendto', 'recvfrom', 'execute', 'modify', 'process', 
+            'connect'
+        ],  # 恶意token停用词列表，传入[]表示不过滤
         mal_print_tokens: bool = True,  # 是否打印恶意token统计信息
         # Top-K 相似（可选）
         topk_pos: Optional[int] = 3,   # 每个 anchor 选择的 Top-K 相似正样本（基于 S）
@@ -217,7 +221,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.mal_neg_ratio = float(mal_neg_ratio)  # 每个子图中替换为恶意向量的节点比例
         self.mal_neg_token_len = int(mal_neg_token_len)  # 生成恶意向量时采样的恶意 token 数
         self.mal_neg_push_gamma = float(mal_neg_push_gamma)
-        self.mal_stopwords = set(mal_stopwords) if mal_stopwords else set()  # 恶意token停用词集合
+        
+        # 恶意token停用词：直接使用传入的列表转为set（[]表示不过滤）
+        self.mal_stopwords = set(mal_stopwords) if mal_stopwords else set()
         self.mal_print_tokens = bool(mal_print_tokens)  # 是否打印恶意token统计
 
         # Top-K 采样配置
