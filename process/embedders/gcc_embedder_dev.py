@@ -170,9 +170,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         mal_neg_token_len: int = 16,
         mal_neg_push_gamma: float = 3.0,
         mal_stopwords: Optional[List[str]] = [
-            'event', 'open', 'read', 'write', 'close', 
-            'sendto', 'recvfrom', 'execute', 'modify', 'process', 
-            'connect'
+            'event', 'read', 'write'
+            'execute', 'modify', 'process',
         ],  # 恶意token停用词列表，传入[]表示不过滤
         mal_print_tokens: bool = True,  # 是否打印恶意token统计信息
         # Top-K 相似（可选）
