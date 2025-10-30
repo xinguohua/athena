@@ -169,6 +169,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         mal_neg_ratio: float = 0.3,
         mal_neg_token_len: int = 16,
         mal_neg_push_gamma: float = 3.0,
+        mal_stopwords: Optional[List[str]] = None,  # 恶意token停用词列表，默认不过滤
+        mal_print_tokens: bool = True,  # 是否打印恶意token统计信息
         # Top-K 相似（可选）
         topk_pos: Optional[int] = 3,   # 每个 anchor 选择的 Top-K 相似正样本（基于 S）
         topk_pos_min_sim: float = 0.0, # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
@@ -215,6 +217,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.mal_neg_ratio = float(mal_neg_ratio)  # 每个子图中替换为恶意向量的节点比例
         self.mal_neg_token_len = int(mal_neg_token_len)  # 生成恶意向量时采样的恶意 token 数
         self.mal_neg_push_gamma = float(mal_neg_push_gamma)
+        self.mal_stopwords = set(mal_stopwords) if mal_stopwords else set()  # 恶意token停用词集合
+        self.mal_print_tokens = bool(mal_print_tokens)  # 是否打印恶意token统计
 
         # Top-K 采样配置
         self.topk_pos = int(topk_pos) if topk_pos is not None else None
@@ -580,25 +584,70 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
     # ---------- 恶意 tokens 支持（用于负样本） ----------
     def _precollect_malicious_tokens(self):
+        """收集恶意节点的 tokens，用于生成对比学习的负样本"""
         if getattr(self, 'malicious_token_counter', None) is None:
             return
         if len(self.malicious_token_counter) > 0:
             return
-        # 遍历全部快照，收集 label==1 的节点 tokens 与其 1-hop 邻域 tokens
+        
+        print("[恶意Token收集] 开始收集恶意节点的tokens...")
+        
+        # 统计信息
+        total_nodes = 0
+        malicious_nodes = 0
+        total_snapshots = 0
+        
+        # 遍历全部快照，收集 label==1 的节点 tokens
         for g in self.snapshots:
             if g is None or g.vcount() == 0:
                 continue
+            total_snapshots += 1
             for i in range(g.vcount()):
+                total_nodes += 1
                 try:
                     lab = int(g.vs[i].attributes().get('label', 0))
                 except Exception:
                     lab = 0
                 if lab != 1:
                     continue
+                malicious_nodes += 1
                 self_tokens = self._get_node_tokens(g, i)
-                _nei_tokens = self._gather_neighbor_tokens(g, i)
                 self.malicious_token_counter.update(self_tokens)
-                # self.malicious_token_counter.update(nei_tokens)
+        
+        # 应用停用词过滤
+        if self.mal_stopwords:
+            total_before = sum(self.malicious_token_counter.values())
+            filtered_counter = Counter()
+            for token, count in self.malicious_token_counter.items():
+                if token not in self.mal_stopwords:
+                    filtered_counter[token] = count
+            total_after = sum(filtered_counter.values())
+            self.malicious_token_counter = filtered_counter
+            if self.mal_print_tokens:
+                print(f"[恶意Token] 停用词过滤: {total_before} tokens -> {total_after} tokens (去除 {total_before - total_after} 个)")
+        
+        # 打印统计信息
+        if self.mal_print_tokens:
+            total_mal_tokens = sum(self.malicious_token_counter.values())
+            unique_mal_tokens = len(self.malicious_token_counter)
+            top_mal_tokens = self.malicious_token_counter.most_common(20)
+            
+            print(f"\n{'='*60}")
+            print("[恶意Token统计]")
+            print(f"  处理快照数: {total_snapshots}")
+            print(f"  总节点数: {total_nodes}")
+            print(f"  恶意节点数: {malicious_nodes} ({malicious_nodes/max(1,total_nodes)*100:.2f}%)")
+            print(f"  收集到的恶意token总数: {total_mal_tokens}")
+            print(f"  去重后恶意词汇量: {unique_mal_tokens}")
+            if malicious_nodes > 0:
+                print(f"  平均每个恶意节点的token数: {total_mal_tokens/malicious_nodes:.2f}")
+            print("  Top-20 高频恶意词:")
+            for word, count in top_mal_tokens:
+                print(f"    {word:20s} : {count:6d}")
+            if self.mal_stopwords:
+                print(f"  停用词数量: {len(self.mal_stopwords)}")
+                print(f"  停用词列表: {sorted(list(self.mal_stopwords))[:10]}{'...' if len(self.mal_stopwords) > 10 else ''}")
+            print(f"{'='*60}\n")
 
     def _sample_malicious_tokens(self, k: int) -> List[str]:
         if len(self.malicious_token_counter) == 0 or k <= 0:
@@ -785,6 +834,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 'w2v_sg': self.w2v_sg,
                 'w2v_epochs': self.w2v_epochs,
                 'w2v_pretrained_path': self.w2v_pretrained_path,
+                # 恶意Token配置
+                'mal_stopwords': list(self.mal_stopwords) if self.mal_stopwords else [],
+                'mal_print_tokens': self.mal_print_tokens,
             },
             'encoder': self.encoder.state_dict(),
             'proj_head': self.proj_head.state_dict(),
@@ -807,7 +859,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
             'r_hop','ego_max_nodes','drop_edge_p','feat_mask_p','train_indices','model_path',
             'anomaly_alpha',
             # W2V 配置
-            'w2v_window','w2v_min_count','w2v_sg','w2v_epochs','w2v_pretrained_path'
+            'w2v_window','w2v_min_count','w2v_sg','w2v_epochs','w2v_pretrained_path',
+            # 恶意Token配置
+            'mal_stopwords','mal_print_tokens'
         }
         params = {k: v for k, v in raw_params.items() if k in allowed}
         inst = cls(snapshot_sequence, **params)
