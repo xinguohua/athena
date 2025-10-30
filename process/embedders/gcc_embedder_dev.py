@@ -165,7 +165,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         sem_fp_bits: int = 1024,
         # 恶意负样本与推开强度
         use_malicious_negatives: bool = True,
-        mal_neg_ratio: float = 0.3,
+        mal_neg_ratio: float = 0.8,
         mal_neg_token_len: int = 16,
         mal_stopwords=None,
             # [
