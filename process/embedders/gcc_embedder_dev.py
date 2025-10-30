@@ -162,13 +162,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 相似度/权重相关可选参数
         sim_measure: str = 'wl',            # 'tanimoto' | 'cosine' | 'wl'
         wl_height: int = 2,
-        sem_push_weight: float = 0.0,
         sem_fp_bits: int = 1024,
         # 恶意负样本与推开强度
         use_malicious_negatives: bool = True,
         mal_neg_ratio: float = 0.3,
         mal_neg_token_len: int = 16,
-        mal_neg_push_gamma: float = 3.0,
         mal_stopwords: Optional[List[str]] = [
             'event', 'read', 'write'
             ,'execute'
@@ -176,7 +174,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         mal_print_tokens: bool = True,  # 是否打印恶意token统计信息
         # Top-K 相似（可选）
         topk_pos: Optional[int] = 3,   # 每个 anchor 选择的 Top-K 相似正样本（基于 S）
-        topk_pos_min_sim: float = 0.0, # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
+        topk_pos_min_sim: float = 0.7, # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
     ):
         super().__init__(snapshots, features, mapp)
         self.snapshots = snapshots
@@ -207,9 +205,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
         # 语义相似度参数
         # - sem_fp_bits: 指纹长度（哈希位数），用于快速近似 Tanimoto 计算
-        # - sem_push_weight: 对不相似对在分母端增强推开，0 表示不额外增强
         self.sem_fp_bits = int(sem_fp_bits)
-        self.sem_push_weight = float(sem_push_weight)
         # 相似度度量方式：'tanimoto' | 'cosine' | 'wl'
         self.sim_measure = str(sim_measure)
         # WL 子树核参数（用于 sim_measure='wl'）
@@ -219,7 +215,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.use_malicious_negatives = bool(use_malicious_negatives)
         self.mal_neg_ratio = float(mal_neg_ratio)  # 每个子图中替换为恶意向量的节点比例
         self.mal_neg_token_len = int(mal_neg_token_len)  # 生成恶意向量时采样的恶意 token 数
-        self.mal_neg_push_gamma = float(mal_neg_push_gamma)
         
         # 恶意token停用词：直接使用传入的列表转为set（[]表示不过滤）
         self.mal_stopwords = set(mal_stopwords) if mal_stopwords else set()
@@ -832,7 +827,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 'anomaly_alpha': self.anomaly_alpha,
                 # Semantic settings
                 'sem_fp_bits': self.sem_fp_bits,
-                'sem_push_weight': self.sem_push_weight,
                 # W2V 配置
                 'w2v_window': self.w2v_window,
                 'w2v_min_count': self.w2v_min_count,
@@ -873,10 +867,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 恢复语义拉近配置（不作为构造参数传入，以保持构造签名简洁）
         try:
             inst.sem_fp_bits = int(raw_params.get('sem_fp_bits', inst.sem_fp_bits))
-        except Exception:
-            pass
-        try:
-            inst.sem_push_weight = float(raw_params.get('sem_push_weight', inst.sem_push_weight))
         except Exception:
             pass
         inst.encoder.load_state_dict(state['encoder'])
