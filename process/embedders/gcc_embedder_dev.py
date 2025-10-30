@@ -650,11 +650,27 @@ class GCCEmbedderDev(GraphEmbedderBase):
             print(f"{'='*60}\n")
 
     def _sample_malicious_tokens(self, k: int) -> List[str]:
+        """按恶意 token 频次做加权随机采样（允许重复）。
+        - 权重来源：self.malicious_token_counter[token] 统计频次
+        - 回退策略：若权重异常（和为0等），退回到均匀随机
+        """
         if len(self.malicious_token_counter) == 0 or k <= 0:
             return []
+        k = int(k)
         toks = list(self.malicious_token_counter.keys())
-        # 完全随机采样 k 次（允许重复）
-        return [random.choice(toks) for _ in range(int(k))]
+        weights = [max(0, int(self.malicious_token_counter[t])) for t in toks]
+        try:
+            # Python 内置按权重抽样（有放回）
+            return random.choices(toks, weights=weights, k=k)
+        except Exception:
+            # 兼容回退：使用 numpy 实现；若权重无效则退回均匀随机
+            w = np.asarray(weights, dtype=np.float64)
+            s = float(w.sum())
+            if s <= 0:
+                return [random.choice(toks) for _ in range(k)]
+            p = (w / s).astype(np.float64)
+            idx = np.random.choice(len(toks), size=k, replace=True, p=p)
+            return [toks[i] for i in idx]
 
 
     def _corrupt_features_with_malicious(self, g, X_base: np.ndarray, ratio: float, token_len: int) -> np.ndarray:
