@@ -19,6 +19,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+from collections import defaultdict, Counter
+
 try:
     from tqdm import tqdm as _tqdm
 except Exception:
@@ -265,7 +267,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 特征缓存（properties -> 向量）
         self._prop_cache = {}
         # 恶意 token 容器：累计出现在恶意节点及其邻域的 tokens
-        self.malicious_token_counter = Counter()
+        self.malicious_node_tokens = []
 
         # 训练快照索引
         self.train_snapshot_indices = self._resolve_train_indices(train_indices)
@@ -338,7 +340,20 @@ class GCCEmbedderDev(GraphEmbedderBase):
         if num_nodes == 0:
             return 0.0
 
+        # ------- Step 1: 全局带权随机采样 (不降权) -------
         centers = list(range(num_nodes))
+        if 'frequency' in g.vs.attributes():
+            freqs = np.array([float(f) for f in g.vs['frequency']])
+            freqs = freqs + 1e-6  # 防止为0
+            probs = freqs / freqs.sum()
+        else:
+            probs = np.ones(num_nodes) / num_nodes
+
+        # 按频次随机采样 num_nodes 个节点，可重复
+        sampled_centers = np.random.choice(centers, size=num_nodes, replace=True, p=probs)
+        centers = sampled_centers.tolist()
+
+        # ------- Step 2: 初始化 -------
         total_loss, total_steps = 0.0, 0
         bsz = max(1, int(self.batch_size))
         total_batches = math.ceil(len(centers) / bsz)
@@ -348,6 +363,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         if not hasattr(self, "_ego_cache"):
             self._ego_cache = deque(maxlen=50)
 
+        # ------- Step 3: 按 batch 训练 -------
         for start in _tqdm(range(0, num_nodes, bsz), total=total_batches, leave=False, desc=f"Snapshot {sidx} Batches"):
             end = min(num_nodes, start + bsz)
             batch_centers = centers[start:end]
@@ -476,7 +492,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 dim=0
             )
 
-            # 权重：受 use_sample_weights 开关控制
+            # 权重：受 use_sample_weights 控制
             if self.use_sample_weights:
                 sample_weights = []
                 if len(Z_neg_blocks) == 2:
@@ -512,24 +528,31 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
     # ---------- 恶意 tokens 支持（用于负样本） ----------
     def _precollect_malicious_tokens(self):
-        """收集恶意节点的 tokens，用于生成对比学习的负样本"""
-        if getattr(self, 'malicious_token_counter', None) is None:
+        """收集恶意节点的 tokens（按节点或类型存储），用于生成负样本"""
+        if getattr(self, 'malicious_node_tokens', None) is not None and len(self.malicious_node_tokens) > 0:
             return
-        if len(self.malicious_token_counter) > 0:
-            return
-        
+
         print("[恶意Token收集] 开始收集恶意节点的tokens...")
-        
-        # 统计信息
+
         total_nodes = 0
         malicious_nodes = 0
         total_snapshots = 0
-        
-        # 遍历全部快照，收集 label==1 的节点 tokens
+
+        # 是否按类型组织
+        use_type_group = getattr(self, 'mal_use_type_group', False)
+
+        # 初始化容器
+        if use_type_group:
+            self.malicious_token_bank = defaultdict(list)
+        else:
+            self.malicious_node_tokens = []
+
+        # 遍历所有快照
         for g in self.snapshots:
             if g is None or g.vcount() == 0:
                 continue
             total_snapshots += 1
+
             for i in range(g.vcount()):
                 total_nodes += 1
                 try:
@@ -538,44 +561,55 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     lab = 0
                 if lab != 1:
                     continue
+
                 malicious_nodes += 1
-                self_tokens = self._get_node_tokens(g, i)
-                self.malicious_token_counter.update(self_tokens)
-        
-        # 应用停用词过滤
-        if self.mal_stopwords:
-            total_before = sum(self.malicious_token_counter.values())
-            filtered_counter = Counter()
-            for token, count in self.malicious_token_counter.items():
-                if token not in self.mal_stopwords:
-                    filtered_counter[token] = count
-            total_after = sum(filtered_counter.values())
-            self.malicious_token_counter = filtered_counter
-            if self.mal_print_tokens:
-                print(f"[恶意Token] 停用词过滤: {total_before} tokens -> {total_after} tokens (去除 {total_before - total_after} 个)")
-        
-        # 打印统计信息
+                tokens = self._get_node_tokens(g, i)
+                if not tokens:
+                    continue
+
+                # 去停用词
+                if self.mal_stopwords:
+                    tokens = [t for t in tokens if t not in self.mal_stopwords]
+
+                # 按类型 or 按节点存储
+                if use_type_group:
+                    ntype = g.vs[i].attributes().get('type', 'unknown')
+                    self.malicious_token_bank[ntype].append(tokens)
+                else:
+                    self.malicious_node_tokens.append(tokens)
+
+        # --- 打印统计信息 ---
         if self.mal_print_tokens:
-            total_mal_tokens = sum(self.malicious_token_counter.values())
-            unique_mal_tokens = len(self.malicious_token_counter)
-            top_mal_tokens = self.malicious_token_counter.most_common(20)
-            
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print("[恶意Token统计]")
             print(f"  处理快照数: {total_snapshots}")
             print(f"  总节点数: {total_nodes}")
-            print(f"  恶意节点数: {malicious_nodes} ({malicious_nodes/max(1,total_nodes)*100:.2f}%)")
-            print(f"  收集到的恶意token总数: {total_mal_tokens}")
-            print(f"  去重后恶意词汇量: {unique_mal_tokens}")
-            if malicious_nodes > 0:
-                print(f"  平均每个恶意节点的token数: {total_mal_tokens/malicious_nodes:.2f}")
-            print("  Top-20 高频恶意词:")
-            for word, count in top_mal_tokens:
-                print(f"    {word:20s} : {count:6d}")
+            print(f"  恶意节点数: {malicious_nodes} ({malicious_nodes / max(1, total_nodes) * 100:.2f}%)")
+
+            if use_type_group:
+                type_summary = {k: len(v) for k, v in self.malicious_token_bank.items()}
+                print(f"  使用类型分组模式，共 {len(self.malicious_token_bank)} 种类型:")
+                for k, v in sorted(type_summary.items(), key=lambda kv: kv[1], reverse=True):
+                    print(f"    {k:20s}: {v:5d} 恶意节点")
+            else:
+                all_tokens = [t for node in self.malicious_node_tokens for t in node]
+                counter = Counter(all_tokens)
+                total_mal_tokens = sum(counter.values())
+                unique_mal_tokens = len(counter)
+                top_mal_tokens = counter.most_common(20)
+                print(f"  收集到的恶意token总数: {total_mal_tokens}")
+                print(f"  去重后恶意词汇量: {unique_mal_tokens}")
+                if malicious_nodes > 0:
+                    print(f"  平均每个恶意节点的token数: {total_mal_tokens / malicious_nodes:.2f}")
+                print("  Top-20 高频恶意词:")
+                for word, count in top_mal_tokens:
+                    print(f"    {word:20s} : {count:6d}")
+
             if self.mal_stopwords:
                 print(f"  停用词数量: {len(self.mal_stopwords)}")
-                print(f"  停用词列表: {sorted(list(self.mal_stopwords))[:10]}{'...' if len(self.mal_stopwords) > 10 else ''}")
-            print(f"{'='*60}\n")
+                print(
+                    f"  停用词示例: {sorted(list(self.mal_stopwords))[:10]}{'...' if len(self.mal_stopwords) > 10 else ''}")
+            print(f"{'=' * 60}\n")
 
     def _sample_malicious_tokens(self, k: int) -> List[str]:
         """按恶意 token 频次做加权随机采样（允许重复）。
