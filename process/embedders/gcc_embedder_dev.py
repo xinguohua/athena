@@ -132,7 +132,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         features=None,
         mapp=None,
         # 是否使用时序记忆（TemporalPerLayer）
-        use_temporal: bool = True,
+        use_temporal: bool = False,
         # 输入/编码器尺寸
         prop_feat_dim: int = 128,
         enc_hidden_dim: int = 128,
