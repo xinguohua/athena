@@ -425,7 +425,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 X_neg_list = []
                 for sub, xi in zip(subs, x_list):
                     xneg_np = self._corrupt_features_with_malicious(
-                        sub, xi, ratio=float(getattr(self, 'mal_neg_ratio', 0.3)), token_len=int(getattr(self, 'mal_neg_token_len', 16))
+                        sub, xi, ratio=float(getattr(self, 'mal_neg_ratio', 0.8)), token_len=int(getattr(self, 'mal_neg_token_len', 20))
                     )
                     X_neg_list.append(torch.from_numpy(xneg_np).to(device))
                 X_neg = torch.cat(X_neg_list, dim=0) if X_neg_list else torch.empty(0, int(self.prop_feat_dim), device=device)
@@ -652,13 +652,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
     def _sample_malicious_tokens(self, k: int) -> List[str]:
         if len(self.malicious_token_counter) == 0 or k <= 0:
             return []
-        items = list(self.malicious_token_counter.items())
-        toks = [t for t, _ in items]
-        wts = np.array([max(1, int(c)) for _, c in items], dtype=np.float64)
-        wts = wts / (wts.sum() + 1e-12)
-        # 按权重独立采样 k 次（允许重复）
-        idx = np.random.choice(len(toks), size=int(k), replace=True, p=wts)
-        return [toks[j] for j in idx]
+        toks = list(self.malicious_token_counter.keys())
+        # 完全随机采样 k 次（允许重复）
+        return [random.choice(toks) for _ in range(int(k))]
+
 
     def _corrupt_features_with_malicious(self, g, X_base: np.ndarray, ratio: float, token_len: int) -> np.ndarray:
         n = g.vcount()
