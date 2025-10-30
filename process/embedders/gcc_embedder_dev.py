@@ -131,6 +131,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         snapshots,
         features=None,
         mapp=None,
+        # 是否使用时序记忆（TemporalPerLayer）
+        use_temporal: bool = True,
         # 输入/编码器尺寸
         prop_feat_dim: int = 128,
         enc_hidden_dim: int = 128,
@@ -178,6 +180,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
     ):
         super().__init__(snapshots, features, mapp)
         self.snapshots = snapshots
+        # 时序使用开关
+        self.use_temporal = bool(use_temporal)
         self.prop_feat_dim = int(prop_feat_dim)
         self.enc_hidden_dim = int(enc_hidden_dim)
         self.enc_out_dim = int(enc_out_dim)
@@ -252,12 +256,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
         ).to(self.device)
         # 分层时序单元（训练期使用，内置状态管理）
         self.temporal = TemporalPerLayer(self.encoder.layer_dims).to(self.device)
-        # 优化器包含 encoder、projection head、temporal
-        self.optimizer = torch.optim.Adam(
-            list(self.encoder.parameters()) + list(self.proj_head.parameters()) + list(self.temporal.parameters()),
-            lr=self.lr,
-            weight_decay=1e-4,
-        )
+        # 优化器包含 encoder、projection head，且在启用时包含 temporal
+        opt_params = list(self.encoder.parameters()) + list(self.proj_head.parameters())
+        if self.use_temporal:
+            opt_params += list(self.temporal.parameters())
+        self.optimizer = torch.optim.Adam(opt_params, lr=self.lr, weight_decay=1e-4)
 
         # 训练后缓存：每快照一个 {node_id: vec}
         self.snapshot_node_embeddings = []
@@ -279,7 +282,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
             f"[GCC-Dev] Pretrain on {len(self.train_snapshot_indices)} snapshots | batch={self.batch_size} | tau={self.temperature}")
 
         for epoch in range(self.num_epochs):
-            self.temporal.reset()  # 每个 epoch 重置时序状态
+            if self.use_temporal:
+                self.temporal.reset()  # 每个 epoch 重置时序状态（仅开启时）
             epoch_loss = 0.0
             steps_done = 0
 
@@ -299,8 +303,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
             avg = epoch_loss / max(1, steps_done)
             print(f"[GCC-Dev] Epoch {epoch + 1}/{self.num_epochs} DONE | AvgLoss={avg:.6f}")
 
-        # 训练结束后生成节点嵌入（静态路径，若需时序请调用 use_temporal=True）并保存模型
-        self.generate_node_embeddings(use_temporal=False)
+        # 训练结束后生成节点嵌入：遵循全局开关 self.use_temporal
+        self.generate_node_embeddings(use_temporal=self.use_temporal)
         self.save_model()
 
     def _train_one_snapshot(self, g, sidx: Optional[int] = None) -> float:
@@ -398,8 +402,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
             flat_ids = [nid for ids in ids_list for nid in ids]
             graph_ids = torch.tensor([gi for gi, n in enumerate(node_counts) for _ in range(n)], dtype=torch.long, device=device)
 
-            # 取上一次时刻的隐藏状态（按当前顺序对齐）
-            H_prev = self.temporal.fetch(flat_ids, device=device)
+            # 取上一次时刻的隐藏状态（按当前顺序对齐；仅在开启时序时）
+            if self.use_temporal:
+                H_prev = self.temporal.fetch(flat_ids, device=device)
 
             # 两个视角的边/特征增强（逐子图，再合并）
             x_tensors = [torch.from_numpy(xi).to(device) for xi in x_list]
@@ -419,8 +424,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
             # 视角1前向
             Z1_list = self.encoder(X1, E1, return_all=True)
-            H1_list = self.temporal(Z1_list, H_prev)
-            H1_last = H1_list[-1]
+            if self.use_temporal:
+                H1_list = self.temporal(Z1_list, H_prev)
+                H1_last = H1_list[-1]
+            else:
+                H1_last = Z1_list[-1]
             Bc = len(node_counts)
             sums1 = torch.zeros((Bc, H1_last.size(1)), dtype=H1_last.dtype, device=device)
             cnts1 = torch.zeros((Bc,), dtype=torch.float32, device=device)
@@ -429,10 +437,13 @@ class GCCEmbedderDev(GraphEmbedderBase):
             means1 = sums1 / (cnts1.clamp_min(1e-6).unsqueeze(1))
             Z_view1 = F.normalize(self.proj_head(means1), dim=-1)
 
-            # 视角2前向（使用相同 H_prev 以保持同一时刻的对比）
+            # 视角2前向（开启时序时使用相同 H_prev 以保持同一时刻的对比）
             Z2_list = self.encoder(X2, E2, return_all=True)
-            H2_list = self.temporal(Z2_list, H_prev)
-            H2_last = H2_list[-1]
+            if self.use_temporal:
+                H2_list = self.temporal(Z2_list, H_prev)
+                H2_last = H2_list[-1]
+            else:
+                H2_last = Z2_list[-1]
             sums2 = torch.zeros((Bc, H2_last.size(1)), dtype=H2_last.dtype, device=device)
             cnts2 = torch.zeros((Bc,), dtype=torch.float32, device=device)
             sums2.index_add_(0, graph_ids, H2_last)
@@ -574,11 +585,12 @@ class GCCEmbedderDev(GraphEmbedderBase):
             denominator = (neg_mask * exp_sim).sum(dim=1).clamp_min(1e-12)
             valid = numerator > 0
             if not valid.any():
-                # 若无有效正样本，跳过并提交一次记忆
-                for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
-                    beg, endi = offsets[gi], offsets[gi] + n
-                    slice_H = [Hl[beg:endi].detach() for Hl in H1_list]
-                    self.temporal.commit(ids, slice_H)
+                # 若无有效正样本，跳过；在开启时序时提交一次记忆
+                if self.use_temporal:
+                    for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
+                        beg, endi = offsets[gi], offsets[gi] + n
+                        slice_H = [Hl[beg:endi].detach() for Hl in H1_list]
+                        self.temporal.commit(ids, slice_H)
                 continue
             loss_vec = -torch.log(numerator[valid] / denominator[valid])
             if w_tensor is not None:
@@ -595,11 +607,12 @@ class GCCEmbedderDev(GraphEmbedderBase):
             )
             self.optimizer.step()
 
-            # 更新时序记忆（采用视角1的隐状态作为当期提交）
-            for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
-                beg, endi = offsets[gi], offsets[gi] + n
-                slice_H = [Hl[beg:endi].detach() for Hl in H1_list]
-                self.temporal.commit(ids, slice_H)
+            # 更新时序记忆（采用视角1的隐状态作为当期提交；仅开启时序时）
+            if self.use_temporal:
+                for gi, (ids, n) in enumerate(zip(ids_list, node_counts)):
+                    beg, endi = offsets[gi], offsets[gi] + n
+                    slice_H = [Hl[beg:endi].detach() for Hl in H1_list]
+                    self.temporal.commit(ids, slice_H)
 
             total_loss += float(loss.detach().cpu().item())
             total_steps += 1
@@ -848,6 +861,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         path = path or self.model_path
         state = {
             'params': {
+                'use_temporal': self.use_temporal,
                 'prop_feat_dim': self.prop_feat_dim,
                 'enc_hidden_dim': self.enc_hidden_dim,
                 'enc_out_dim': self.enc_out_dim,
@@ -892,6 +906,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         state = torch.load(path, map_location=device)
         raw_params = dict(state.get('params', {}))
         allowed = {
+            'use_temporal',
             'prop_feat_dim','enc_hidden_dim','enc_out_dim','gin_layers','dropout',
             'num_epochs','batch_size','lr','temperature',
             'r_hop','ego_max_nodes','drop_edge_p','feat_mask_p','train_indices','model_path',
