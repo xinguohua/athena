@@ -173,7 +173,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         ],  # 恶意token停用词列表，传入[]表示不过滤
         mal_print_tokens: bool = True,  # 是否打印恶意token统计信息
         # Top-K 相似（可选）
-        topk_pos: Optional[int] = 0,   # 每个 anchor 选择的 Top-K 相似正样本（基于 S）
+        topk_pos: Optional[int] = 3,   # 每个 anchor 选择的 Top-K 相似正样本（基于 S）
         topk_pos_min_sim: float = 0.7, # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
     ):
         super().__init__(snapshots, features, mapp)
