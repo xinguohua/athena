@@ -23,7 +23,7 @@ from process.embedders import get_embedder_by_name
 # EMBEDDER_NAME = "prographer"
 EMBEDDER_NAME = "gcc_dev"
 # EMBEDDER_NAME = "gcc"
-CLASSIFY_NAME = "svm"
+CLASSIFY_NAME = "prographer"
 # EMBEDDER_NAME = "unicorn"
 # CLASSIFY_NAME = "unicorn"
 
