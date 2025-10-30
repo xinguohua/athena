@@ -20,9 +20,14 @@ class _NumpyScaler:
         self.scale_ = std
         return (X - self.mean_) / self.scale_
 
+    def is_fitted(self) -> bool:
+        return (self.mean_ is not None) and (self.scale_ is not None)
+
     def transform(self, X: np.ndarray) -> np.ndarray:
-        assert self.mean_ is not None and self.scale_ is not None, "Scaler 未拟合"
         X = np.asarray(X, dtype=np.float32)
+        if not self.is_fitted():
+            # 未拟合则直接返回原数据（预测时允许无训练快速路径）
+            return X
         return (X - self.mean_) / self.scale_
 
 
@@ -33,6 +38,11 @@ class TopKDeviationConfig:
     k: int = 5
     # 数据预处理
     use_scaler: bool = True  # 是否对特征做标准化（z-score）
+    # 中心选择策略：
+    # - 'batch': 始终使用当前输入批次的均值作为中心（推荐用于“全是恶意样本”的场景）
+    # - 'trained': 始终使用训练得到的中心（若无则报错）
+    # - 'auto': 优先使用训练中心，若无则退回 batch 均值
+    center_mode: str = "batch"
     # 保存路径（沿用原结构，便于集成）
     scaler_save_path: str = "topk_scaler.pkl"
     meta_save_path: str = "topk_meta.pkl"  # 存储中心向量/配置等
@@ -110,7 +120,7 @@ class TopKDeviationClassify(BaseClassify):
         return {"train_info": [{"n_samples": int(X_normal.shape[0])}]}
 
     def predict(self, embeddings: np.ndarray, k: Optional[int] = None) -> Tuple[np.ndarray, Dict]:
-        """基于 Top-K 偏离度的预测（无阈值）
+        """基于 Top-K 偏离度的预测（无阈值，支持“无需训练”的直接测试）
 
         Args:
             embeddings: 快照嵌入向量
@@ -120,14 +130,23 @@ class TopKDeviationClassify(BaseClassify):
             pred_labels: 预测标签 (0=正常, 1=异常)
             diff_vectors: 异常详情字典（包含偏离度）
         """
-        assert self.center is not None, "尚未训练或未加载中心向量"
-
         X = np.asarray(embeddings, dtype=np.float32)
         if self.scaler is not None:
+            # 若标准化器未拟合，则跳过标准化，允许直接测试
             X = self.scaler.transform(X)
 
-        # 计算每个样本的偏离度（与中心的 L2 距离）
-        diffs = X - self.center
+        # 选择中心参考：按配置中心模式
+        mode = (self.cfg.center_mode or "auto").lower()
+        if mode == "trained":
+            assert self.center is not None, "中心模式为 'trained' 但未训练中心。可改为 center_mode='batch' 或先调用 train()。"
+            center_ref = self.center
+        elif mode == "batch":
+            center_ref = np.mean(X, axis=0).astype(np.float32)
+        else:  # 'auto'
+            center_ref = self.center if self.center is not None else np.mean(X, axis=0).astype(np.float32)
+
+        # 计算每个样本的偏离度（与参考中心的 L2 距离）
+        diffs = X - center_ref
         dev = np.linalg.norm(diffs, axis=1)
 
         k_eff = int(self.cfg.k if k is None else k)
