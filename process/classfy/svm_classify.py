@@ -127,7 +127,8 @@ class TopKDeviationClassify(BaseClassify):
             embeddings: 快照嵌入向量
             k: 取偏离度前 k 个（默认使用训练配置的 k）
             plot: 是否绘制偏离度可视化（柱状图，按偏离度降序）
-            plot_path: 若提供则将图保存到该路径（优先级高于弹窗显示）
+            plot_path: 若未提供且 plot=True，将默认保存至 "viz/deviation.png"；
+                       若提供则将图保存到该路径（优先级高于弹窗显示）
             title: 图标题，可选
 
         Returns:
@@ -170,6 +171,9 @@ class TopKDeviationClassify(BaseClassify):
         print("-" * 40 + "\n")
         # 可视化（可选）
         if plot or plot_path:
+            # 若开启绘图但未提供路径，则生成默认保存路径
+            if plot and not plot_path:
+                plot_path = os.path.join("viz", "deviation.png")
             try:
                 self._plot_deviation(dev, k_eff, plot_path=plot_path, title=title)
             except Exception as e:
