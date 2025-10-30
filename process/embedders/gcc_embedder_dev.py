@@ -86,14 +86,12 @@ class TemporalPerLayer(nn.Module):
         for t in self.tables:
             t.clear()
 
-    def state_dict(self):
-        return {'cells': self.cells.state_dict()}
+    def state_dict(self, *args, **kwargs):
+        base_state = super().state_dict(*args, **kwargs)
+        return base_state
 
-    def load_state_dict(self, state):
-        try:
-            self.cells.load_state_dict(state.get('cells', {}))
-        except Exception:
-            pass
+    def load_state_dict(self, state_dict, strict=True):
+        return super().load_state_dict(state_dict, strict=strict)
 
     def fetch(self, node_ids: List[str], device: torch.device) -> List[torch.Tensor]:
         H_prev: List[torch.Tensor] = []
