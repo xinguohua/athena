@@ -528,17 +528,21 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 # 主正对（相邻）
                 if views_per_graph >= 2:
                     pos_idx.append(gidx * views_per_graph + pair_slot(vslot))
-                # WL Top-K 扩增正样本：仅对正常视角（vslot=0,1）扩增，恶意视角不参与
+                # WL Top-K 扩增正样本：仅对正常视角（vslot=0,1）扩增，且被扩增的目标也必须是正常视角（仅0/1），恶意视角不参与
                 if S is not None and kpos > 0 and vslot < 2:
                     rowS = S[gidx, :Bcur].clone()
                     rowS[gidx] = -1e9
-                    vals, idxs = torch.topk(rowS, k=kpos, largest=True)
-                    if vals.numel() > 0:
-                        m = vals > tau_sim
-                        neigh = idxs[m].tolist() if m.any() else []
-                        for t in neigh:
-                            pos_idx.append(t * views_per_graph + vslot)
-                            pos_idx.append(t * views_per_graph + pair_slot(vslot))
+                    # 倒序遍历，早停：一旦低于阈值或已达到 kpos 就停止
+                    vals_sorted, idxs_sorted = torch.sort(rowS, descending=True)
+                    added = 0
+                    for val, t in zip(vals_sorted, idxs_sorted):
+                        if added >= kpos:
+                            break
+                        if float(val.item()) <= tau_sim:
+                            break
+                        # 仅加入同视角（且该视角必须为正常视角 0/1），每个邻居只贡献1个
+                        pos_idx.append(int(t.item()) * views_per_graph + vslot)
+                        added += 1
                 if pos_idx:
                     pos_mask[r, torch.tensor(pos_idx, dtype=torch.long, device=device)] = 1.0
 
