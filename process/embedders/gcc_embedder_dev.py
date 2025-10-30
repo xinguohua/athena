@@ -155,7 +155,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
         train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
         model_path: Optional[str] = None,
         # 异常活跃驱动损失参数（仅频率异常）
-        anomaly_alpha: float = 1,      # 加权强度，>0 表示异常越大权重越大
+    anomaly_alpha: float = 1,      # 加权强度，>0 表示异常越大权重越大
+    # 是否使用样本权重（基于频率/异常强度），关闭时统一使用均匀权重
+    use_sample_weights: bool = True,
         w2v_window: int = 5,
         w2v_min_count: int = 1,
         w2v_sg: int = 1,
@@ -204,6 +206,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.model_path = model_path or self._default_path
         # 异常活跃参数（仅频率异常）
         self.anomaly_alpha = float(anomaly_alpha)
+        # 样本权重开关
+        self.use_sample_weights = bool(use_sample_weights)
 
         # Word2Vec 配置（唯一特征来源）
         self.w2v_window = int(w2v_window)
@@ -472,18 +476,21 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 dim=0
             )
 
-            # 权重
-            sample_weights = []
-            if len(Z_neg_blocks) == 2:
-                for w_pos, w_neg in zip(freq_weights, freq_weights_neg):
-                    sample_weights.extend([w_pos, w_pos, w_neg, w_neg])
-            else:
-                for w_pos in freq_weights:
-                    sample_weights.extend([w_pos, w_pos])
+            # 权重：受 use_sample_weights 开关控制
+            if self.use_sample_weights:
+                sample_weights = []
+                if len(Z_neg_blocks) == 2:
+                    for w_pos, w_neg in zip(freq_weights, freq_weights_neg):
+                        sample_weights.extend([w_pos, w_pos, w_neg, w_neg])
+                else:
+                    for w_pos in freq_weights:
+                        sample_weights.extend([w_pos, w_pos])
 
-            w_tensor = torch.tensor(sample_weights, dtype=torch.float32, device=device)
-            assert Z_batch.shape[0] == w_tensor.shape[0], \
-                f"Weight mismatch: Z_batch={Z_batch.shape[0]}, w_tensor={w_tensor.shape[0]}"
+                w_tensor = torch.tensor(sample_weights, dtype=torch.float32, device=device)
+                assert Z_batch.shape[0] == w_tensor.shape[0], \
+                    f"Weight mismatch: Z_batch={Z_batch.shape[0]}, w_tensor={w_tensor.shape[0]}"
+            else:
+                w_tensor = None
 
             # 损失计算
             self.optimizer.zero_grad(set_to_none=True)
@@ -759,6 +766,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 'train_indices': self.train_snapshot_indices,
                 'model_path': self.model_path,
                 'anomaly_alpha': self.anomaly_alpha,
+                'use_sample_weights': self.use_sample_weights,
                 # Semantic settings
                 'sem_fp_bits': self.sem_fp_bits,
                 # W2V 配置
@@ -791,7 +799,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             'prop_feat_dim','enc_hidden_dim','enc_out_dim','gin_layers','dropout',
             'num_epochs','batch_size','lr','temperature',
             'r_hop','ego_max_nodes','drop_edge_p','feat_mask_p','train_indices','model_path',
-            'anomaly_alpha',
+            'anomaly_alpha','use_sample_weights',
             # W2V 配置
             'w2v_window','w2v_min_count','w2v_sg','w2v_epochs','w2v_pretrained_path',
             # 恶意Token配置
