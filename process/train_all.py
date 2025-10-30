@@ -13,7 +13,9 @@ DATASET_NAME = "cadets"          # 可切换数据集
 EMBEDDER_NAME = "gcc_dev"    # 嵌入器
 # EMBEDDER_NAME = "gcc"    # 嵌入器
 # EMBEDDER_NAME = "prographer"
-CLASSIFY_NAME = "prographer"     # 训练器
+# CLASSIFY_NAME = "prographer"     # 训练器
+CLASSIFY_NAME = "topk"     # 训练器
+
 # CLASSIFY_NAME = "svm"     # 训练器
 # EMBEDDER_NAME = "unicorn"    # 嵌入器
 # CLASSIFY_NAME = "unicorn"

@@ -117,7 +117,7 @@ class TopKDeviationClassify(BaseClassify):
         self,
         embeddings: np.ndarray,
         k: Optional[int] = None,
-        plot: bool = False,
+        plot: bool = True,
         plot_path: Optional[str] = None,
         title: Optional[str] = None,
     ) -> Tuple[np.ndarray, Dict]:

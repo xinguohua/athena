@@ -144,7 +144,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         batch_size: int = 64,
         lr: float = 1e-3,
         # 对比学习
-        temperature: float = 0.2,
+        temperature: float = 0.07,
         # 子图采样
         r_hop: int = 2,
         ego_max_nodes: int = 64,
@@ -183,9 +183,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
     ):
         super().__init__(snapshots, features, mapp)
         if mal_stopwords is None:
-            mal_stopwords = [
-                'event', 'read', 'write', 'execute'
-            ]
+            mal_stopwords = []
+            #     [
+            #     'event', 'read', 'write', 'execute'
+            # ]
         self.snapshots = snapshots
         # 时序使用开关
         self.use_temporal = bool(use_temporal)
