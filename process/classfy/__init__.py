@@ -1,13 +1,14 @@
 from .base import BaseClassify
 from .prographer_classify import PrographerClassify, PrographerConfig
 from .unicorn_classify import UnicornClassify, UnicornConfig
-from .svm_classify import SVMClassify, SVMConfig
+from .svm_classify import TopKDeviationClassify, TopKDeviationConfig
 
 __all__ = [
     "BaseClassify",
     "PrographerClassify",
     "UnicornClassify",
-    "SVMClassify"
+    "TopKDeviationClassify",
+    "TopKDeviationConfig",
 ]
 
 def get_classfy(name: str, **kwargs) -> BaseClassify:
@@ -17,7 +18,9 @@ def get_classfy(name: str, **kwargs) -> BaseClassify:
     trainers = {
         "prographer": PrographerClassify,
         "unicorn": UnicornClassify,
-        "svm": SVMClassify,  # SVM分类器（通过 svm_type='oneclass'/'binary' 控制模式）
+        # 新增显式名称
+        "topk": TopKDeviationClassify,
+        "topk_deviation": TopKDeviationClassify,
     }
     if name not in trainers:
         raise ValueError(f"未知训练器: {name}, 可选: {list(trainers.keys())}")
