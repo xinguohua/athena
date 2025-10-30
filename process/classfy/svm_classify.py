@@ -181,37 +181,39 @@ class TopKDeviationClassify(BaseClassify):
         return pred_labels, diff_vectors
 
     def _plot_deviation(self, dev: np.ndarray, k: int, plot_path: Optional[str] = None, title: Optional[str] = None):
-        """绘制偏离度柱状图：按偏离度降序，Top-K 用红色，其余用灰色。
+        """绘制偏离度柱状图：按快照原始顺序（0,1,2,...），Top-K 用红色，其余用灰色。
 
         若提供 plot_path 则保存到文件，否则弹窗显示。
-        若未安装 matplotlib，将给出友好提示并打印 Top-10 偏离度。
+        若未安装 matplotlib，将给出友好提示并打印 Top-K 偏离度。
         """
         try:
             import matplotlib.pyplot as plt  # type: ignore
         except Exception:
-            top_idx = np.argsort(-dev)[:min(k, len(dev))]
+            topk = min(k if k is not None else 0, len(dev))
+            top_idx = np.argsort(-dev)[:topk]
             print("[Plot] 未安装 matplotlib，打印 Top-偏离度替代：")
             for rank, i in enumerate(top_idx, 1):
                 print(f"  #{rank:2d} idx={i:3d} deviation={dev[i]:.6f}")
             return
 
         n = len(dev)
-        order = np.argsort(-dev)
-        dev_sorted = dev[order]
-        colors = ["crimson" if i < min(k, n) else "#cccccc" for i in range(n)]
+        topk = min(k if k is not None else 0, n)
+        top_idx = np.argsort(-dev)[:topk]
+        top_idx_set = set(top_idx.tolist())
+
+        colors = ["crimson" if i in top_idx_set else "#cccccc" for i in range(n)]
 
         width = max(6.0, min(16.0, 0.2 * n + 2))
         fig, ax = plt.subplots(figsize=(width, 4.5))
-        ax.bar(range(n), dev_sorted, color=colors, alpha=0.9, edgecolor="#444444", linewidth=0.4)
-        ax.set_xlabel("samples (sorted by deviation)")
+        ax.bar(range(n), dev, color=colors, alpha=0.9, edgecolor="#444444", linewidth=0.4)
+        ax.set_xlabel("samples (by index order)")
         ax.set_ylabel("L2 deviation")
-        ax.set_title(title or f"Deviation ranking (Top-{min(k, n)})")
+        ax.set_title(title or f"Deviation (Top-{topk} highlighted)")
         ax.grid(axis="y", linestyle=":", alpha=0.4)
 
-        # 辅助线：Top-K 阈值
-        if n > 0 and k is not None and k > 0:
-            thr = dev_sorted[min(k - 1, n - 1)]
-            ax.axhline(thr, color="orange", linestyle="--", linewidth=1.0, alpha=0.8, label=f"Top-{min(k, n)} threshold")
+        if n > 0 and topk > 0:
+            thr = np.sort(dev)[::-1][topk - 1]
+            ax.axhline(thr, color="orange", linestyle="--", linewidth=1.0, alpha=0.8, label=f"Top-{topk} threshold")
             ax.legend(loc="upper right")
 
         fig.tight_layout()
