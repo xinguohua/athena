@@ -171,7 +171,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         sem_fp_bits: int = 1024,
         use_malicious_negatives: bool = True,
         mal_neg_ratio: float = 0.3,
-        mal_neg_token_len: int = 16,
+        mal_neg_node_token_len: int = 1,
         mal_stopwords=None,
             # [
             # 'event', 'read', 'write'
@@ -230,7 +230,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 是否使用“恶意语料”来生成额外负样本；以及腐化强度与每个节点替换的 token 数
         self.use_malicious_negatives = bool(use_malicious_negatives)
         self.mal_neg_ratio = float(mal_neg_ratio)  # 每个子图中替换为恶意向量的节点比例
-        self.mal_neg_token_len = int(mal_neg_token_len)  # 生成恶意向量时采样的恶意 token 数
+        self.mal_neg_node_token_len = int(mal_neg_node_token_len)  # 生成恶意向量时采样的恶意节点数
+        self.mal_use_type_group = False
         
         # 恶意token停用词：直接使用传入的列表转为set（[]表示不过滤）
         # 归一化停用词：容忍嵌套(list/tuple/set)并转为扁平字符串集合，避免出现 list 内嵌 list 导致 set() 报错
@@ -329,6 +330,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             avg = epoch_loss / max(1, steps_done)
             print(f"[GCC-Dev] Epoch {epoch + 1}/{self.num_epochs} DONE | AvgLoss={avg:.6f}")
 
+        self.save_malicious_snapshot_stats()
         # 训练结束后生成节点嵌入：遵循全局开关 self.use_temporal
         self.generate_node_embeddings(use_temporal=self.use_temporal)
         self.save_model()
@@ -429,7 +431,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             freq_weights_neg = torch.zeros(Bc, device=device)
 
             if getattr(self, 'use_malicious_negatives', False) \
-                    and len(self.malicious_token_counter) > 0 \
+                    and len(self.malicious_node_tokens) > 0 \
                     and len(self._ego_cache) > 0:
 
                 all_subs, all_x, all_e, all_w = [], [], [], []
@@ -449,7 +451,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         xneg_np = self._corrupt_features_with_malicious(
                             sub, xi.cpu().numpy(),
                             ratio=float(getattr(self, 'mal_neg_ratio', 0.3)),
-                            token_len=int(getattr(self, 'mal_neg_token_len', 16))
+                            node_token_len=int(getattr(self, 'mal_neg_node_token_len', 1))
                         )
                         X_neg_list.append(torch.from_numpy(xneg_np).to(device))
                         E_neg_list.append(ei)
@@ -527,125 +529,171 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
 
     # ---------- 恶意 tokens 支持（用于负样本） ----------
-    def _precollect_malicious_tokens(self):
-        """收集恶意节点的 tokens（按节点或类型存储），用于生成负样本"""
-        if getattr(self, 'malicious_node_tokens', None) is not None and len(self.malicious_node_tokens) > 0:
-            return
-
-        print("[恶意Token收集] 开始收集恶意节点的tokens...")
-
-        total_nodes = 0
-        malicious_nodes = 0
-        total_snapshots = 0
-
-        # 是否按类型组织
-        use_type_group = getattr(self, 'mal_use_type_group', False)
-
-        # 初始化容器
-        if use_type_group:
-            self.malicious_token_bank = defaultdict(list)
-        else:
+    def _precollect_malicious_tokens(self, save_path: str = "malicious_tokens_log.txt"):
+        """收集恶意节点 tokens（节点级组织 + 可保存到文件），同时记录每个节点的来源快照索引。"""
+        if getattr(self, "malicious_node_tokens", None) is None:
             self.malicious_node_tokens = []
+        # 新增：一一对应的来源快照索引列表
+        if getattr(self, "malicious_node_origin", None) is None:
+            self.malicious_node_origin = []
 
-        # 遍历所有快照
-        for g in self.snapshots:
-            if g is None or g.vcount() == 0:
-                continue
-            total_snapshots += 1
+        total_nodes, malicious_nodes, total_snapshots = 0, 0, 0
+        stop = getattr(self, "mal_stopwords", set())
 
-            for i in range(g.vcount()):
-                total_nodes += 1
-                try:
-                    lab = int(g.vs[i].attributes().get('label', 0))
-                except Exception:
-                    lab = 0
-                if lab != 1:
+        with open(save_path, "w", encoding="utf-8") as f:
+            f.write("[恶意Token收集日志]\n")
+            f.write("=" * 60 + "\n")
+
+            for snap_idx, g in enumerate(self.snapshots):
+                if g is None or g.vcount() == 0:
                     continue
+                total_snapshots += 1
 
-                malicious_nodes += 1
-                tokens = self._get_node_tokens(g, i)
-                if not tokens:
-                    continue
+                snapshot_node_map = {}
 
-                # 去停用词
-                if self.mal_stopwords:
-                    tokens = [t for t in tokens if t not in self.mal_stopwords]
+                for i in range(g.vcount()):
+                    total_nodes += 1
+                    try:
+                        lab = int(g.vs[i].attributes().get("label", 0))
+                    except Exception:
+                        lab = 0
+                    if lab != 1:
+                        continue
 
-                # 按类型 or 按节点存储
-                if use_type_group:
-                    ntype = g.vs[i].attributes().get('type', 'unknown')
-                    self.malicious_token_bank[ntype].append(tokens)
-                else:
-                    self.malicious_node_tokens.append(tokens)
+                    malicious_nodes += 1
+                    toks = self._get_node_tokens(g, i)
+                    if stop:
+                        toks = [t for t in toks if t not in stop]
+                    if not toks:
+                        continue
 
-        # --- 打印统计信息 ---
-        if self.mal_print_tokens:
-            print(f"\n{'=' * 60}")
-            print("[恶意Token统计]")
-            print(f"  处理快照数: {total_snapshots}")
-            print(f"  总节点数: {total_nodes}")
-            print(f"  恶意节点数: {malicious_nodes} ({malicious_nodes / max(1, total_nodes) * 100:.2f}%)")
+                    # 存储 tokens，并记录该节点来自的 snapshot index
+                    self.malicious_node_tokens.append(toks)
+                    self.malicious_node_origin.append(snap_idx)
 
-            if use_type_group:
-                type_summary = {k: len(v) for k, v in self.malicious_token_bank.items()}
-                print(f"  使用类型分组模式，共 {len(self.malicious_token_bank)} 种类型:")
-                for k, v in sorted(type_summary.items(), key=lambda kv: kv[1], reverse=True):
-                    print(f"    {k:20s}: {v:5d} 恶意节点")
-            else:
-                all_tokens = [t for node in self.malicious_node_tokens for t in node]
-                counter = Counter(all_tokens)
-                total_mal_tokens = sum(counter.values())
-                unique_mal_tokens = len(counter)
-                top_mal_tokens = counter.most_common(20)
-                print(f"  收集到的恶意token总数: {total_mal_tokens}")
-                print(f"  去重后恶意词汇量: {unique_mal_tokens}")
-                if malicious_nodes > 0:
-                    print(f"  平均每个恶意节点的token数: {total_mal_tokens / malicious_nodes:.2f}")
-                print("  Top-20 高频恶意词:")
-                for word, count in top_mal_tokens:
-                    print(f"    {word:20s} : {count:6d}")
+                    snapshot_node_map[i] = toks
 
-            if self.mal_stopwords:
-                print(f"  停用词数量: {len(self.mal_stopwords)}")
-                print(
-                    f"  停用词示例: {sorted(list(self.mal_stopwords))[:10]}{'...' if len(self.mal_stopwords) > 10 else ''}")
-            print(f"{'=' * 60}\n")
+                # 打印 + 写文件
+                if snapshot_node_map:
+                    header = f"\n[Snapshot {snap_idx:02d}] 恶意节点token映射:"
+                    print(header)
+                    f.write(header + "\n")
+                    for nid, toks in snapshot_node_map.items():
+                        line = f"  {nid}: {toks}"
+                        print(line)
+                        f.write(line + "\n")
 
-    def _sample_malicious_tokens(self, k: int) -> List[str]:
-        """按恶意 token 频次做加权随机采样（允许重复）。
-        - 权重来源：self.malicious_token_counter[token] 统计频次
-        - 回退策略：若权重异常（和为0等），退回到均匀随机
+            # 汇总统计
+            from collections import Counter
+            counter = Counter(t for toks in self.malicious_node_tokens for t in toks)
+            total_mal_tokens = sum(counter.values())
+
+            summary = "\n" + "=" * 60 + "\n"
+            summary += "[恶意Token统计-节点级]\n"
+            summary += f"  快照数: {total_snapshots}\n"
+            summary += f"  总节点数: {total_nodes}\n"
+            summary += f"  恶意节点数: {malicious_nodes}\n"
+            summary += f"  恶意节点token集合数: {len(self.malicious_node_tokens)}\n"
+            summary += f"  收集到的token总数: {total_mal_tokens}\n"
+            summary += f"  Top-10: {counter.most_common(10)}\n"
+            if stop:
+                summary += f"  停用词数量: {len(stop)}\n"
+            summary += "=" * 60 + "\n"
+
+            print(summary)
+            f.write(summary)
+
+        print(f"[✅ 日志已保存到]: {save_path}")
+
+    def _sample_malicious_tokens(self, num_nodes: int) -> List[str]:
         """
-        if len(self.malicious_token_counter) == 0 or k <= 0:
+        从按节点组织的恶意语料中抽取 token 列表（每个被抽中的节点的全部 token 都会被收集）。
+        - num_nodes: 要抽取多少个恶意节点（尽量无重复）。若 num_nodes > 可用节点数，会补齐（允许重复）。
+        返回：flatten 后的 token 列表（长度 = sum(len(node_tokens) for chosen nodes)；若语料不足，返回已有的）。
+        --- 注意：不再按 token 数限制，每个被选节点的所有 token 都被采纳（整节点替换）。
+        """
+        num_nodes = int(max(0, num_nodes))
+        if num_nodes == 0:
             return []
-        k = int(k)
-        toks = list(self.malicious_token_counter.keys())
-        weights = [max(0, int(self.malicious_token_counter[t])) for t in toks]
-        try:
-            # Python 内置按权重抽样（有放回）
-            return random.choices(toks, weights=weights, k=k)
-        except Exception:
-            # 兼容回退：使用 numpy 实现；若权重无效则退回均匀随机
-            w = np.asarray(weights, dtype=np.float64)
-            s = float(w.sum())
-            if s <= 0:
-                return [random.choice(toks) for _ in range(k)]
-            p = (w / s).astype(np.float64)
-            idx = np.random.choice(len(toks), size=k, replace=True, p=p)
-            return [toks[i] for i in idx]
 
+        # 要求存在按节点存储的恶意语料
+        if not hasattr(self, "malicious_node_tokens") or not self.malicious_node_tokens:
+            return []
 
-    def _corrupt_features_with_malicious(self, g, X_base: np.ndarray, ratio: float, token_len: int) -> np.ndarray:
+        #  初始化全局统计计数器（一次性创建）
+        if not hasattr(self, "malicious_snapshot_stats"):
+            self.malicious_snapshot_stats = {}  # {snapshot_id: count}
+
+        node_lists = self.malicious_node_tokens  # List[List[str]]
+        node_origins = getattr(self, "malicious_node_origin", None)  # List[int]
+        total_nodes = len(node_lists)
+
+        # 先选节点索引：若足够则无重复抽样，否则先取全部再补齐（允许重复补齐）
+        if total_nodes >= num_nodes:
+            chosen_idx = random.sample(range(total_nodes), k=num_nodes)
+        else:
+            chosen_idx = list(range(total_nodes))
+            need = num_nodes - total_nodes
+            if total_nodes > 0 and need > 0:
+                chosen_idx.extend(random.choices(range(total_nodes), k=need))
+
+        out_tokens: List[str] = []
+        for idx in chosen_idx:
+            toks = node_lists[idx]
+            if not toks:
+                continue
+            # 把该节点的所有 token 全部加入（不做截断）
+            out_tokens.extend(toks)
+            if node_origins is not None:
+                sid = node_origins[idx]
+                self.malicious_snapshot_stats[sid] = self.malicious_snapshot_stats.get(sid, 0) + 1
+
+        # 兜底：若所有选节点都没有 token（极端），从所有节点打平随机抽若干补齐（保证非空时尽量返回东西）
+        if not out_tokens:
+            flat = [t for toks in node_lists for t in toks]
+            if not flat:
+                return []
+            out_tokens.append(random.choice(flat))
+
+        return out_tokens
+
+    def _corrupt_features_with_malicious(self, g, X_base: np.ndarray, ratio: float, node_token_len: int) -> np.ndarray:
         n = g.vcount()
         out = X_base.copy()
-        if ratio <= 0 or len(self.malicious_token_counter) == 0:
+        if ratio <= 0 or not hasattr(self, "malicious_node_tokens") or len(self.malicious_node_tokens) == 0:
             return out
         for i in range(n):
+            # 按比例随机替换部分节点
             if random.random() < ratio:
-                tokens = self._sample_malicious_tokens(max(1, int(token_len)))
+                # 从节点语料中抽取若干恶意token
+                tokens = self._sample_malicious_tokens(max(1, int(node_token_len)))
+                if not tokens:
+                    continue
+                # 转换为 embedding 向量（通过已有的 W2V 模型）
                 vec = self._w2v_vector_from_tokens(tokens)
                 out[i] = vec.astype(np.float32)
+
         return out
+
+    def save_malicious_snapshot_stats(self, save_path: str = "malicious_tokens_log.txt"):
+        """将全局恶意节点采样来源统计附加写入日志文件"""
+        stats = getattr(self, "malicious_snapshot_stats", None)
+        if not stats:
+            print("[⚠️ 没有可保存的恶意节点采样统计]")
+            return
+
+        total = sum(stats.values())
+
+        with open(save_path, "a", encoding="utf-8") as f:
+            f.write("\n[📊 全局恶意节点采样统计]\n")
+            for sid, cnt in sorted(stats.items()):
+                pct = cnt / total * 100
+                f.write(f"  Snapshot {sid:02d}: {cnt} 次 ({pct:.2f}%)\n")
+            f.write(f"  总计: {total} 次采样\n")
+            f.write("=" * 60 + "\n")
+
+        print(f"[✅ 已将采样统计附加保存到]: {save_path}")
+
 
     def _collect_subgraph_tokens(self, sub, max_tokens: int = 512) -> List[str]:
         """收集子图的领域 tokens（基于节点 properties），限制总量。
@@ -779,6 +827,96 @@ class GCCEmbedderDev(GraphEmbedderBase):
         print(f"[GCC-Dev] Snapshot embeddings: {arr.shape}")
         return arr
 
+    # 测试版 只聚合
+    # def get_snapshot_embeddings(self, snapshot_sequence=None):
+    #     """
+    #     生成快照级嵌入。
+    #     - 若快照中存在恶意节点(label==1)，则仅聚合恶意节点；
+    #     - 否则回退为全节点聚合。
+    #     """
+    #     if not self.snapshot_node_embeddings:
+    #         raise RuntimeError("还没有节点嵌入，请先调用 train()")
+    #     if snapshot_sequence is None:
+    #         snapshot_sequence = list(range(len(self.snapshots)))
+    #
+    #     result: List[np.ndarray] = []
+    #
+    #     for i in snapshot_sequence:
+    #         g = self.snapshots[i]
+    #         if g is None:
+    #             result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
+    #             continue
+    #
+    #         emb_dict = self.snapshot_node_embeddings[i] if i < len(self.snapshot_node_embeddings) else {}
+    #         if not emb_dict:
+    #             result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
+    #             continue
+    #
+    #         # 获取标签
+    #         try:
+    #             labels = [int(v) for v in g.vs['label']]
+    #         except Exception:
+    #             labels = [int(g.vs[idx].attributes().get('label', 0)) for idx in range(g.vcount())]
+    #
+    #         try:
+    #             freqs = g.vs['frequency'] if 'frequency' in g.vs.attributes() else None
+    #         except Exception:
+    #             freqs = None
+    #         degrees = g.degree()
+    #
+    #         weighted = np.zeros(self.enc_out_dim, dtype=np.float32)
+    #         total_w = 0.0
+    #
+    #         # 判断是否存在恶意节点
+    #         has_malicious = any(l == 1 for l in labels)
+    #         mal_nodes = 0
+    #
+    #         for local_idx in range(g.vcount()):
+    #             # ✅ 若存在恶意节点，只聚合恶意节点；否则全节点
+    #             if has_malicious and labels[local_idx] != 1:
+    #             # if has_malicious and labels[local_idx] != 1 and i != 49:
+    #                 continue
+    #
+    #             nid = g.vs[local_idx]['name']
+    #             vec = emb_dict.get(nid)
+    #             if vec is None:
+    #                 continue
+    #
+    #             if freqs is not None:
+    #                 try:
+    #                     w = float(freqs[local_idx])
+    #                 except Exception:
+    #                     w = 0.0
+    #                 if not np.isfinite(w) or w < 0:
+    #                     w = 0.0
+    #             else:
+    #                 w = float(degrees[local_idx])
+    #             if w <= 0:
+    #                 continue
+    #
+    #             weighted += (w * vec)
+    #             total_w += w
+    #             if labels[local_idx] == 1:
+    #                 mal_nodes += 1
+    #
+    #         if total_w <= 0:
+    #             gvec = np.zeros(self.enc_out_dim, dtype=np.float32)
+    #         else:
+    #             gvec = weighted / (total_w + 1e-12)
+    #
+    #         gvec = gvec / (np.linalg.norm(gvec) + 1e-12)
+    #         result.append(gvec.astype(np.float32))
+    #
+    #         if has_malicious:
+    #             print(
+    #                 f"[Snapshot {i:02d}] 聚合恶意节点: {mal_nodes}/{g.vcount()} ({mal_nodes / max(1, g.vcount()) * 100:.2f}%)")
+    #         else:
+    #             print(f"[Snapshot {i:02d}] 无恶意节点 → 聚合全部 {g.vcount()} 节点")
+    #
+    #     arr = np.vstack(result).astype(np.float32) if result else np.zeros((0, self.enc_out_dim), dtype=np.float32)
+    #     print(f"[GCC-Dev] Snapshot embeddings (conditional-malicious): {arr.shape}")
+    #     return arr
+
     def save_model(self, path: Optional[str] = None):
         path = path or self.model_path
         state = {
@@ -891,9 +1029,16 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
     # ---------- Word2Vec 支持 ----------
     def _tokenize_properties(self, text: str) -> List[str]:
+        """改进版 token 提取（保留路径、事件名、UUID、数字等结构，不去重）"""
         if not text:
             return []
-        return [t for t in re.split(r'[^A-Za-z0-9]+', str(text).lower()) if t]
+
+        s = str(text).strip()
+        # 使用正则提取连续的 [A-Za-z0-9_-.:/\] 段，保留路径、UUID、数字
+        tokens = re.findall(r"[A-Za-z0-9_\-./:\\]+", s)
+
+        # 直接返回，不去重
+        return tokens
 
     def _get_node_tokens(self, g, i: int) -> List[str]:
         try:
@@ -1030,10 +1175,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
             self._prop_cache[key] = vec
             X[i] = vec
         return X
-
-    def get_malicious_top_tokens(self, k: int = 50):
-        """返回收集到的恶意 token 的 Top-K 高频列表 [(token, count), ...]。"""
-        return self.malicious_token_counter.most_common(int(k))
 
     def _igraph_edges_to_edge_index(self, g) -> torch.Tensor:
         edges = g.get_edgelist()
