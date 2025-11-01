@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-from collections import defaultdict, Counter
+ 
 
 try:
     from tqdm import tqdm as _tqdm
@@ -171,7 +171,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         sem_fp_bits: int = 1024,
         use_malicious_negatives: bool = True,
         mal_neg_ratio: float = 0.3,
-        mal_neg_node_token_len: int = 1,
+    mal_neg_node_token_len: int = 1,
         mal_stopwords=None,
             # [
             # 'event', 'read', 'write'
@@ -304,6 +304,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self._ensure_w2v_model()
         if self.use_malicious_negatives:
             self._precollect_malicious_tokens()
+            # 简化版：预收集“恶意快照”池（包含恶意节点的整个快照），用于直接作为负样本
+            self._precollect_malicious_snapshots()
 
         print(
             f"[GCC-Dev] Pretrain on {len(self.train_snapshot_indices)} snapshots | batch={self.batch_size} | tau={self.temperature}")
@@ -430,9 +432,19 @@ class GCCEmbedderDev(GraphEmbedderBase):
             Z_neg_blocks = []
             freq_weights_neg = torch.zeros(Bc, device=device)
 
+            # 首选：使用“恶意快照”整体作为负样本（简单稳定）
             if getattr(self, 'use_malicious_negatives', False) \
-                    and len(self.malicious_node_tokens) > 0 \
-                    and len(self._ego_cache) > 0:
+                and hasattr(self, '_mal_snapshot_pool') and len(self._mal_snapshot_pool) > 0:
+
+                Z_neg_snap, w_neg = self._build_neg_block_from_snapshots(Bc, device=device)
+                if Z_neg_snap is not None:
+                    Z_neg_blocks.append(Z_neg_snap)
+                    freq_weights_neg = w_neg
+
+            # 否则：回退语料特征增强
+            elif getattr(self, 'use_malicious_negatives', False) \
+                        and len(self.malicious_node_tokens) > 0 \
+                        and len(self._ego_cache) > 0:
 
                 all_subs, all_x, all_e, all_w = [], [], [], []
                 for subs_prev, x_prev, e_prev, w_prev in self._ego_cache:
@@ -656,6 +668,96 @@ class GCCEmbedderDev(GraphEmbedderBase):
             out_tokens.append(random.choice(flat))
 
         return out_tokens
+
+    # ---------- 简化版：恶意快照池与负样本块 ----------
+    def _precollect_malicious_snapshots(self):
+        """收集包含恶意节点的快照索引，形成恶意快照池。"""
+        self._mal_snapshot_pool = []
+        for sidx in (self.train_snapshot_indices or list(range(len(self.snapshots)))):
+            g = self.snapshots[sidx]
+            if g is None or g.vcount() == 0:
+                continue
+            try:
+                labels = g.vs['label'] if 'label' in g.vs.attributes() else None
+            except Exception:
+                labels = None
+            has_mal = False
+            if labels is not None:
+                try:
+                    has_mal = any(int(v) == 1 for v in labels)
+                except Exception:
+                    has_mal = False
+            else:
+                # 逐节点兜底
+                for i in range(g.vcount()):
+                    try:
+                        if int(g.vs[i].attributes().get('label', 0)) == 1:
+                            has_mal = True
+                            break
+                    except Exception:
+                        pass
+            if has_mal:
+                self._mal_snapshot_pool.append(sidx)
+        if getattr(self, 'mal_print_tokens', False):
+            print(f"[恶意快照] 已收集: {len(self._mal_snapshot_pool)} 个包含恶意节点的快照")
+
+    def _build_neg_block_from_snapshots(self, Bc: int, device: torch.device):
+        """从恶意快照池中采样 Bc 个快照，编码为一个负样本块（大小 Bc×D）。
+        返回: (Z_neg_block[Bc,D], freq_weights_neg[Bc])
+        若池为空，返回 (None, zeros)
+        """
+        pool = getattr(self, '_mal_snapshot_pool', None)
+        if not pool:
+            return None, torch.zeros(Bc, device=device)
+
+        # 若池子不足，允许有放回采样
+        if len(pool) >= Bc:
+            chosen = random.sample(pool, k=Bc)
+        else:
+            chosen = [random.choice(pool) for _ in range(Bc)]
+
+        x_list, e_list, node_counts = [], [], []
+        for sidx in chosen:
+            g = self.snapshots[sidx]
+            if g is None or g.vcount() == 0:
+                # 占位一个空图（跳过）
+                x_list.append(torch.zeros((0, self.prop_feat_dim), dtype=torch.float32, device=device))
+                e_list.append(torch.zeros((2, 0), dtype=torch.long, device=device))
+                node_counts.append(0)
+                continue
+            x_np = self._build_node_features(g)
+            eidx = self._igraph_edges_to_edge_index(g)
+            x_list.append(torch.from_numpy(x_np).to(device))
+            e_list.append(eidx)
+            node_counts.append(g.vcount())
+
+        # 若全为空，返回空
+        if sum(node_counts) == 0:
+            return None, torch.zeros(Bc, device=device)
+
+        offsets_neg = np.cumsum([0] + node_counts[:-1]).tolist()
+        graph_ids_neg = torch.tensor(
+            [gi for gi, n in enumerate(node_counts) for _ in range(n)],
+            device=device
+        )
+        X_neg = torch.cat([xi for xi in x_list if xi.numel() > 0], dim=0) if any(n > 0 for n in node_counts) else torch.zeros((0, self.prop_feat_dim), device=device)
+
+        # 一次增强与编码（简单稳定）
+        e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in zip(e_list, offsets_neg)] if any(n > 0 for n in node_counts) else []
+        EN = torch.cat(e_cols, dim=1) if e_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
+        XN = self._augment_features(X_neg, self.feat_mask_p)
+        ZN_layers = self.encoder(XN, EN, return_all=True)
+        NL = ZN_layers[-1]
+        sums = torch.zeros((Bc, NL.size(1)), device=device)
+        cnts = torch.zeros(Bc, device=device)
+        sums.index_add_(0, graph_ids_neg, NL)
+        cnts.index_add_(0, graph_ids_neg, torch.ones_like(graph_ids_neg, dtype=torch.float32))
+        means = sums / (cnts.clamp_min(1e-6).unsqueeze(1))
+        Z_neg_block = F.normalize(self.proj_head(means), dim=-1)
+
+        # 简单起见，负样本权重统一为 1
+        w_neg = torch.ones(Bc, dtype=torch.float32, device=device)
+        return Z_neg_block, w_neg
 
     def _corrupt_features_with_malicious(self, g, X_base: np.ndarray, ratio: float, node_token_len: int) -> np.ndarray:
         n = g.vcount()
