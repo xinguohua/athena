@@ -432,13 +432,12 @@ class GCCEmbedderDev(GraphEmbedderBase):
             Z_neg_blocks = []
             freq_weights_neg = torch.zeros(Bc, device=device)
 
-            # 首选：使用“恶意快照”整体作为负样本（简单稳定）
+            # 首选：使用“恶意快照”整体作为负样本（简单稳定，返回两视角）
             if getattr(self, 'use_malicious_negatives', False) \
                 and hasattr(self, '_mal_snapshot_pool') and len(self._mal_snapshot_pool) > 0:
-
-                Z_neg_snap, w_neg = self._build_neg_block_from_snapshots(Bc, device=device)
-                if Z_neg_snap is not None:
-                    Z_neg_blocks.append(Z_neg_snap)
+                blocks, w_neg = self._build_neg_block_from_snapshots(Bc, device=device)
+                if blocks:
+                    Z_neg_blocks.extend(blocks)
                     freq_weights_neg = w_neg
 
             # 否则：回退语料特征增强
@@ -702,13 +701,13 @@ class GCCEmbedderDev(GraphEmbedderBase):
             print(f"[恶意快照] 已收集: {len(self._mal_snapshot_pool)} 个包含恶意节点的快照")
 
     def _build_neg_block_from_snapshots(self, Bc: int, device: torch.device):
-        """从恶意快照池中采样 Bc 个快照，编码为一个负样本块（大小 Bc×D）。
-        返回: (Z_neg_block[Bc,D], freq_weights_neg[Bc])
-        若池为空，返回 (None, zeros)
+        """从恶意快照池中采样 Bc 个快照，编码为两个视角的负样本块（每块大小 Bc×D）。
+        返回: ([Z_neg_block_view1[Bc,D], Z_neg_block_view2[Bc,D]], freq_weights_neg[Bc])
+        若池为空，返回 ([], zeros)
         """
         pool = getattr(self, '_mal_snapshot_pool', None)
         if not pool:
-            return None, torch.zeros(Bc, device=device)
+            return [], torch.zeros(Bc, device=device)
 
         # 若池子不足，允许有放回采样
         if len(pool) >= Bc:
@@ -733,7 +732,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
         # 若全为空，返回空
         if sum(node_counts) == 0:
-            return None, torch.zeros(Bc, device=device)
+            return [], torch.zeros(Bc, device=device)
 
         offsets_neg = np.cumsum([0] + node_counts[:-1]).tolist()
         graph_ids_neg = torch.tensor(
@@ -742,22 +741,25 @@ class GCCEmbedderDev(GraphEmbedderBase):
         )
         X_neg = torch.cat([xi for xi in x_list if xi.numel() > 0], dim=0) if any(n > 0 for n in node_counts) else torch.zeros((0, self.prop_feat_dim), device=device)
 
-        # 一次增强与编码（简单稳定）
-        e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in zip(e_list, offsets_neg)] if any(n > 0 for n in node_counts) else []
-        EN = torch.cat(e_cols, dim=1) if e_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
-        XN = self._augment_features(X_neg, self.feat_mask_p)
-        ZN_layers = self.encoder(XN, EN, return_all=True)
-        NL = ZN_layers[-1]
-        sums = torch.zeros((Bc, NL.size(1)), device=device)
-        cnts = torch.zeros(Bc, device=device)
-        sums.index_add_(0, graph_ids_neg, NL)
-        cnts.index_add_(0, graph_ids_neg, torch.ones_like(graph_ids_neg, dtype=torch.float32))
-        means = sums / (cnts.clamp_min(1e-6).unsqueeze(1))
-        Z_neg_block = F.normalize(self.proj_head(means), dim=-1)
+        # 两次增强与编码，得到两视角负样本块
+        Z_blocks: List[torch.Tensor] = []
+        for _ in range(2):
+            e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in zip(e_list, offsets_neg)] if any(n > 0 for n in node_counts) else []
+            EN = torch.cat(e_cols, dim=1) if e_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
+            XN = self._augment_features(X_neg, self.feat_mask_p)
+            ZN_layers = self.encoder(XN, EN, return_all=True)
+            NL = ZN_layers[-1]
+            sums = torch.zeros((Bc, NL.size(1)), device=device)
+            cnts = torch.zeros(Bc, device=device)
+            sums.index_add_(0, graph_ids_neg, NL)
+            cnts.index_add_(0, graph_ids_neg, torch.ones_like(graph_ids_neg, dtype=torch.float32))
+            means = sums / (cnts.clamp_min(1e-6).unsqueeze(1))
+            Z_block = F.normalize(self.proj_head(means), dim=-1)
+            Z_blocks.append(Z_block)
 
         # 简单起见，负样本权重统一为 1
         w_neg = torch.ones(Bc, dtype=torch.float32, device=device)
-        return Z_neg_block, w_neg
+        return Z_blocks, w_neg
 
     def _corrupt_features_with_malicious(self, g, X_base: np.ndarray, ratio: float, node_token_len: int) -> np.ndarray:
         n = g.vcount()
