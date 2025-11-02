@@ -53,8 +53,8 @@ def build_embeddings(handler):
     snapshot_embeddings = embedder.get_snapshot_embeddings()
     # 统计恶意节点偏离（仅当快照中存在恶意节点时会输出/写日志）
     try:
-        # 训练阶段同样仅统计“恶意节点在全体节点中的排名”，不输出 Top-K 列表
-        embedder.compute_malicious_deviation_per_snapshot(topk=0)
+        # 训练阶段同样仅统计“恶意节点在全体节点中的排名”，相对于“快照节点简单平均中心”
+        embedder.compute_malicious_deviation_per_snapshot(center_weighting='none')
     except Exception as ex:
         print(f"[Train] 恶意节点偏离统计失败：{ex}")
     print("\n--- Encoder 过程完成 ---")
