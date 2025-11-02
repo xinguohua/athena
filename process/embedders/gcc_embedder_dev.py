@@ -169,6 +169,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         sim_measure: str = 'wl',            # 'tanimoto' | 'cosine' | 'wl'
         wl_height: int = 2,
         sem_fp_bits: int = 1024,
+        use_malicious_snapshots: bool = False,
         use_malicious_negatives: bool = True,
         mal_neg_ratio: float = 0.3,
     mal_neg_node_token_len: int = 1,
@@ -227,6 +228,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # WL 子树核参数（用于 sim_measure='wl'）
         self.wl_height = int(wl_height)
 
+        self.use_malicious_snapshots = bool(use_malicious_snapshots)
         # 是否使用“恶意语料”来生成额外负样本；以及腐化强度与每个节点替换的 token 数
         self.use_malicious_negatives = bool(use_malicious_negatives)
         self.mal_neg_ratio = float(mal_neg_ratio)  # 每个子图中替换为恶意向量的节点比例
@@ -304,7 +306,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self._ensure_w2v_model()
         if self.use_malicious_negatives:
             self._precollect_malicious_tokens()
-            # 简化版：预收集“恶意快照”池（包含恶意节点的整个快照），用于直接作为负样本
+        if self.use_malicious_snapshots:
             self._precollect_malicious_snapshots()
 
         print(
@@ -433,7 +435,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             freq_weights_neg = torch.zeros(Bc, device=device)
 
             # 首选：使用“恶意快照”整体作为负样本（简单稳定，返回两视角）
-            if getattr(self, 'use_malicious_negatives', False) \
+            if getattr(self, 'use_malicious_snapshots', False) \
                 and hasattr(self, '_mal_snapshot_pool') and len(self._mal_snapshot_pool) > 0:
                 blocks, w_neg = self._build_neg_block_from_snapshots(Bc, device=device)
                 if blocks:
