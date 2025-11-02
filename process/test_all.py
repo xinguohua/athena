@@ -968,8 +968,8 @@ def run_evaluation(path_map: dict) -> None:
     snapshot_embeddings = embedder.get_snapshot_embeddings()
     # 统计恶意节点偏离（仅当快照中存在恶意节点时会输出/写日志）
     try:
-        # 这里只看“恶意节点在所有节点偏离中的排名”，不再取前 K 个，设置 topk=0 关闭 Top-K 列表
-        embedder.compute_malicious_deviation_per_snapshot(topk=0)
+        # 这里只看“恶意节点在所有节点偏离中的排名”，相对于“快照节点简单平均的中心向量”
+        embedder.compute_malicious_deviation_per_snapshot(center_weighting='none')
     except Exception as ex:
         print(f"[Test] 恶意节点偏离统计失败：{ex}")
     # snapshot_embeddings, info = inject_snapshots_deviation(snapshot_embeddings, target_idxs=[29, 43, 70, 71, 72, 73], mode="away", alpha=3.0)

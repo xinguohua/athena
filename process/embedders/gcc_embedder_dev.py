@@ -934,18 +934,17 @@ class GCCEmbedderDev(GraphEmbedderBase):
     def compute_malicious_deviation_per_snapshot(
         self,
         snapshot_sequence: Optional[List[int]] = None,
-        metric: str = 'cosine',            # 'cosine' | 'l2'
-        center_weighting: str = 'auto',    # 'auto'(freq->degree) | 'degree' | 'none'
-        topk: Optional[int] = None,
+                metric: str = 'cosine',            # 'cosine' | 'l2'
+        center_weighting: str = 'none',    # 默认 'none'：使用快照内所有节点的简单平均作为中心；可选 'auto'(freq->degree) | 'degree'
     ) -> List[Dict[str, object]]:
         """
         统计每个快照中“恶意节点”的偏离程度，相对于该快照的中心向量。
 
         定义：
         - 中心向量 center
-          - center_weighting='auto': 有频率用频率加权，否则用度数加权；若权重全为0则退化为均值。
-          - center_weighting='degree': 仅用度数加权；
-          - center_weighting='none': 简单平均。
+                    - center_weighting='none'（默认）：对快照中所有节点嵌入做简单平均。
+                    - center_weighting='auto': 有频率用频率加权，否则用度数加权；若权重全为0则退化为均值。
+                    - center_weighting='degree': 仅用度数加权。
         - 偏离 metric
           - 'cosine': 1 - cos(node, center)；
           - 'l2': ||node - center||_2。
@@ -957,7 +956,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
           'num_mal': int,
           'mean_dev_mal': float | None,
           'max_dev_mal': float | None,
-          'topk_mal': Optional[List[Tuple[str,float]]],  # [(node_name, deviation), ...]
           'mean_dev_all': float | None,  # 全体节点的平均偏离（用于参照）
     }
         """
@@ -1010,7 +1008,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 rows.append({
                     'snapshot': i, 'num_nodes': 0, 'num_mal': 0,
                     'mean_dev_mal': None, 'max_dev_mal': None,
-                    'topk_mal': [] if topk else None,
                     'mean_dev_all': None,
                 })
                 continue
@@ -1020,7 +1017,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 rows.append({
                     'snapshot': i, 'num_nodes': int(g.vcount()), 'num_mal': 0,
                     'mean_dev_mal': None, 'max_dev_mal': None,
-                    'topk_mal': [] if topk else None,
                     'mean_dev_all': None,
                 })
                 continue
@@ -1046,7 +1042,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 rows.append({
                     'snapshot': i, 'num_nodes': int(g.vcount()), 'num_mal': 0,
                     'mean_dev_mal': None, 'max_dev_mal': None,
-                    'topk_mal': [] if topk else None,
                     'mean_dev_all': None,
                 })
                 continue
@@ -1094,7 +1089,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     'num_mal': 0,
                     'mean_dev_mal': None,
                     'max_dev_mal': None,
-                    'topk_mal': [] if topk else None,
                     'mean_dev_all': mean_dev_all,
                 })
                 continue
@@ -1102,10 +1096,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
             deviations = [d for _, d in mal_devs]
             mean_dev_mal = float(np.mean(deviations))
             max_dev_mal = float(np.max(deviations))
-            topk_list = None
-            if topk is not None and topk > 0:
-                # 从大到小
-                topk_list = sorted(mal_devs, key=lambda x: x[1], reverse=True)[:topk]
 
             # 计算恶意节点在全体中的排名（偏离从大到小，1 为最大偏离）
             # 构造 idx->rank 的映射
@@ -1119,7 +1109,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 'num_mal': int(sum(1 for lab in labels if lab == 1)),
                 'mean_dev_mal': mean_dev_mal,
                 'max_dev_mal': max_dev_mal,
-                'topk_mal': topk_list,
                 'mal_ranks': mal_ranks,  # [(node_name, rank, deviation)]
                 'mean_dev_all': mean_dev_all,
             })
@@ -1142,10 +1131,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         f"mean_dev_mal={r['mean_dev_mal']}, max_dev_mal={r['max_dev_mal']}, "
                         f"mean_dev_all={r['mean_dev_all']}\n"
                     )
-                    if r.get('topk_mal'):
-                        f.write("  Top-K 恶意节点偏离: \n")
-                        for name, dev in r['topk_mal']:
-                            f.write(f"    - {name}: {dev:.6f}\n")
+                    # 不再输出 Top-K 恶意节点列表，仅输出恶意节点在全体中的排名
                     if r.get('mal_ranks'):
                         f.write("  恶意节点偏离排名(1=最大偏离):\n")
                         for name, rk, dev in r['mal_ranks']:
