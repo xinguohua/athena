@@ -931,6 +931,244 @@ class GCCEmbedderDev(GraphEmbedderBase):
         print(f"[GCC-Dev] Snapshot embeddings: {arr.shape}")
         return arr
 
+    def compute_malicious_deviation_per_snapshot(
+        self,
+        snapshot_sequence: Optional[List[int]] = None,
+        metric: str = 'cosine',            # 'cosine' | 'l2'
+        center_weighting: str = 'auto',    # 'auto'(freq->degree) | 'degree' | 'none'
+        topk: Optional[int] = None,
+    ) -> List[Dict[str, object]]:
+        """
+        统计每个快照中“恶意节点”的偏离程度，相对于该快照的中心向量。
+
+        定义：
+        - 中心向量 center
+          - center_weighting='auto': 有频率用频率加权，否则用度数加权；若权重全为0则退化为均值。
+          - center_weighting='degree': 仅用度数加权；
+          - center_weighting='none': 简单平均。
+        - 偏离 metric
+          - 'cosine': 1 - cos(node, center)；
+          - 'l2': ||node - center||_2。
+
+        返回 per-snapshot 统计列表，每项包含：
+        {
+          'snapshot': i,
+          'num_nodes': int,
+          'num_mal': int,
+          'mean_dev_mal': float | None,
+          'max_dev_mal': float | None,
+          'topk_mal': Optional[List[Tuple[str,float]]],  # [(node_name, deviation), ...]
+          'mean_dev_all': float | None,  # 全体节点的平均偏离（用于参照）
+    }
+        """
+
+        if not self.snapshot_node_embeddings:
+            raise RuntimeError("还没有节点嵌入，请先调用 train()")
+
+        if snapshot_sequence is None:
+            snapshot_sequence = list(range(len(self.snapshots)))
+
+        def _dev(vec: np.ndarray, ctr: np.ndarray, how: str) -> float:
+            if how == 'l2':
+                return float(np.linalg.norm(vec - ctr))
+            # cosine
+            vn = vec / (np.linalg.norm(vec) + 1e-12)
+            cn = ctr / (np.linalg.norm(ctr) + 1e-12)
+            return float(1.0 - np.dot(vn, cn))
+
+        def _weights_for(g) -> Optional[np.ndarray]:
+            if center_weighting == 'none':
+                return None
+            if center_weighting == 'degree':
+                deg = np.asarray(g.degree(), dtype=np.float32)
+                return np.maximum(deg, 0.0)
+            # auto: freq -> degree
+            try:
+                freqs = g.vs['frequency'] if 'frequency' in g.vs.attributes() else None
+            except Exception:
+                freqs = None
+            if freqs is not None:
+                w = np.zeros(g.vcount(), dtype=np.float32)
+                for idx in range(g.vcount()):
+                    try:
+                        v = float(freqs[idx])
+                    except Exception:
+                        v = 0.0
+                    if np.isfinite(v) and v > 0:
+                        w[idx] = v
+                if w.sum() > 0:
+                    return w
+            # fallback degree
+            deg = np.asarray(g.degree(), dtype=np.float32)
+            return np.maximum(deg, 0.0)
+
+        rows: List[Dict[str, object]] = []
+
+        for i in snapshot_sequence:
+            g = self.snapshots[i]
+            if g is None or g.vcount() == 0:
+                rows.append({
+                    'snapshot': i, 'num_nodes': 0, 'num_mal': 0,
+                    'mean_dev_mal': None, 'max_dev_mal': None,
+                    'topk_mal': [] if topk else None,
+                    'mean_dev_all': None,
+                })
+                continue
+
+            emb_dict = self.snapshot_node_embeddings[i] if i < len(self.snapshot_node_embeddings) else {}
+            if not emb_dict:
+                rows.append({
+                    'snapshot': i, 'num_nodes': int(g.vcount()), 'num_mal': 0,
+                    'mean_dev_mal': None, 'max_dev_mal': None,
+                    'topk_mal': [] if topk else None,
+                    'mean_dev_all': None,
+                })
+                continue
+
+            # 收集节点 embedding、名称、标签
+            names: List[str] = []
+            vecs: List[np.ndarray] = []
+            labels: List[int] = []
+            for local_idx in range(g.vcount()):
+                nid = g.vs[local_idx]['name']
+                vec = emb_dict.get(nid)
+                if vec is None:
+                    continue
+                names.append(nid)
+                vecs.append(np.asarray(vec, dtype=np.float32))
+                try:
+                    lab = int(g.vs[local_idx].attributes().get('label', 0))
+                except Exception:
+                    lab = 0
+                labels.append(lab)
+
+            if not vecs:
+                rows.append({
+                    'snapshot': i, 'num_nodes': int(g.vcount()), 'num_mal': 0,
+                    'mean_dev_mal': None, 'max_dev_mal': None,
+                    'topk_mal': [] if topk else None,
+                    'mean_dev_all': None,
+                })
+                continue
+
+            V = np.vstack(vecs).astype(np.float32)
+            W = _weights_for(g)
+            if W is not None:
+                # 对齐已收集的 nodes（names/vecs 是按 local_idx 且可能跳过未嵌入）
+                # 这里简单地重建一个 mask: 哪些 local_idx 进入了 vecs
+                # 为保持一致，上面未跳过的均添加，因此与 g.vcount() 顺序一致
+                # 若存在跳过（嵌入缺失），退化为均值
+                if len(names) == g.vcount():
+                    w_used = W
+                    w_sum = float(w_used.sum())
+                    if w_sum > 0:
+                        center = (V * w_used[:, None]).sum(axis=0) / (w_sum + 1e-12)
+                    else:
+                        center = V.mean(axis=0)
+                else:
+                    center = V.mean(axis=0)
+            else:
+                center = V.mean(axis=0)
+
+            # 计算全体节点的偏离以及均值（参考）
+            if metric == 'l2':
+                all_devs = np.linalg.norm(V - center, axis=1)
+                mean_dev_all = float(np.mean(all_devs))
+            else:
+                Vn = V / (np.linalg.norm(V, axis=1, keepdims=True) + 1e-12)
+                cn = center / (np.linalg.norm(center) + 1e-12)
+                all_devs = 1.0 - np.matmul(Vn, cn)
+                mean_dev_all = float(np.mean(all_devs))
+
+            # 仅恶意节点的偏离
+            mal_indices: List[int] = [idx for idx, lab in enumerate(labels) if lab == 1]
+            mal_devs: List[Tuple[str, float]] = []
+            for idx in mal_indices:
+                d = float(all_devs[idx])
+                mal_devs.append((names[idx], d))
+
+            if not mal_devs:
+                rows.append({
+                    'snapshot': i,
+                    'num_nodes': len(names),
+                    'num_mal': 0,
+                    'mean_dev_mal': None,
+                    'max_dev_mal': None,
+                    'topk_mal': [] if topk else None,
+                    'mean_dev_all': mean_dev_all,
+                })
+                continue
+
+            deviations = [d for _, d in mal_devs]
+            mean_dev_mal = float(np.mean(deviations))
+            max_dev_mal = float(np.max(deviations))
+            topk_list = None
+            if topk is not None and topk > 0:
+                # 从大到小
+                topk_list = sorted(mal_devs, key=lambda x: x[1], reverse=True)[:topk]
+
+            # 计算恶意节点在全体中的排名（偏离从大到小，1 为最大偏离）
+            # 构造 idx->rank 的映射
+            order = np.argsort(-all_devs)  # 降序
+            rank_map = {int(idx): int(r + 1) for r, idx in enumerate(order)}
+            mal_ranks: List[Tuple[str, int, float]] = [(names[idx], rank_map[idx], float(all_devs[idx])) for idx in mal_indices]
+
+            rows.append({
+                'snapshot': i,
+                'num_nodes': len(names),
+                'num_mal': int(sum(1 for lab in labels if lab == 1)),
+                'mean_dev_mal': mean_dev_mal,
+                'max_dev_mal': max_dev_mal,
+                'topk_mal': topk_list,
+                'mal_ranks': mal_ranks,  # [(node_name, rank, deviation)]
+                'mean_dev_all': mean_dev_all,
+            })
+
+        # 持久化仅写入 TXT（malicious_tokens_log.txt）
+
+        # 追加写入到 malicious_tokens_log.txt
+        try:
+            log_path = "malicious_tokens_log.txt"
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write("\n[恶意节点偏离统计]\n")
+                f.write("=" * 60 + "\n")
+                wrote_any = False
+                for r in rows:
+                    if int(r.get('num_mal', 0)) <= 0:
+                        continue
+                    wrote_any = True
+                    f.write(
+                        f"Snapshot {r['snapshot']:02d}: mal={r['num_mal']}, "
+                        f"mean_dev_mal={r['mean_dev_mal']}, max_dev_mal={r['max_dev_mal']}, "
+                        f"mean_dev_all={r['mean_dev_all']}\n"
+                    )
+                    if r.get('topk_mal'):
+                        f.write("  Top-K 恶意节点偏离: \n")
+                        for name, dev in r['topk_mal']:
+                            f.write(f"    - {name}: {dev:.6f}\n")
+                    if r.get('mal_ranks'):
+                        f.write("  恶意节点偏离排名(1=最大偏离):\n")
+                        for name, rk, dev in r['mal_ranks']:
+                            f.write(f"    - {name}: rank={rk}, dev={dev:.6f}\n")
+                if not wrote_any:
+                    f.write("(本次统计中没有包含恶意节点的快照)\n")
+                f.write("=" * 60 + "\n")
+            print(f"[GCC-Dev] 恶意节点偏离统计已追加保存到: {log_path}")
+        except Exception as e:
+            print(f"[GCC-Dev] 警告：写入 malicious_tokens_log.txt 失败: {e}")
+
+        # 控制台简要打印
+        for r in rows:
+            if int(r.get('num_mal', 0)) <= 0:
+                continue
+            print(
+                f"[Snapshot {r['snapshot']:02d}] mal={r['num_mal']}, "
+                f"mean_dev_mal={r['mean_dev_mal']}, max_dev_mal={r['max_dev_mal']}, "
+                f"mean_dev_all={r['mean_dev_all']}"
+            )
+
+        return rows
+
     # 测试版 只聚合
     # def get_snapshot_embeddings(self, snapshot_sequence=None):
     #     """
