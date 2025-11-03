@@ -670,43 +670,84 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
         return out_tokens
 
-    # ---------- 简化版：恶意快照池与负样本块 ----------
+    # ---------- 恶意快照池与负样本块 ----------
     def _precollect_malicious_snapshots(self):
-        """收集恶意节点的 ego 图采样池：以 (snapshot_idx, local_node_idx) 形式保存。
+    """
+    收集恶意节点的 ego 图采样池：
+    - 以 (snapshot_idx, local_node_idx) 保存；
+    - 如实记录节点属性，不再截断；
+    - 仅写日志到 malicious_tokens_log.txt。
+    """
+    self._mal_ego_pool: List[Tuple[int, int]] = []
+    train_ids = list(range(len(self.snapshots)))
+    per_snapshot_mal: Dict[int, int] = {}
+    log_path = "malicious_tokens_log.txt"
 
-        说明：不再把整个快照作为负样本，而是以“恶意节点为中心”的 r-hop ego 子图作为负样本单元。
-        后续 _build_neg_block_from_snapshots 将基于该池构建负样本块。
-        """
-        self._mal_ego_pool: List[Tuple[int, int]] = []  # (sidx, local_node_idx)
-        train_ids = list(range(len(self.snapshots)))
-        for sidx in train_ids:
-            g = self.snapshots[sidx]
-            if g is None or g.vcount() == 0:
-                continue
-            # 读取标签
+    try:
+        f_log = open(log_path, "a", encoding="utf-8")
+        f_log.write("\n[恶意EGO子图收集 - 完整记录模式]\n" + "=" * 80 + "\n")
+    except Exception:
+        f_log = None
+
+    for sidx in train_ids:
+        g = self.snapshots[sidx]
+        if g is None or g.vcount() == 0:
+            continue
+
+        try:
+            labels = g.vs['label'] if 'label' in g.vs.attributes() else None
+        except Exception:
+            labels = None
+
+        if labels is not None:
+            iterator = enumerate(labels)
+        else:
+            iterator = ((i, g.vs[i].attributes().get('label', 0)) for i in range(g.vcount()))
+
+        for i, lab in iterator:
             try:
-                labels = g.vs['label'] if 'label' in g.vs.attributes() else None
-            except Exception:
-                labels = None
+                if int(lab) == 1:
+                    self._mal_ego_pool.append((sidx, i))
+                    per_snapshot_mal[sidx] = per_snapshot_mal.get(sidx, 0) + 1
 
-            if labels is not None:
-                for i in range(g.vcount()):
-                    try:
-                        if int(labels[i]) == 1:
-                            self._mal_ego_pool.append((sidx, i))
-                    except Exception:
-                        continue
-            else:
-                # 逐节点兜底
-                for i in range(g.vcount()):
-                    try:
-                        if int(g.vs[i].attributes().get('label', 0)) == 1:
-                            self._mal_ego_pool.append((sidx, i))
-                    except Exception:
-                        continue
+                    sub = self._ego_subgraph(g, center=i, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                    nv, ne = sub.vcount(), sub.ecount()
+                    line = f"[Snapshot {sidx:02d}] center={i} -> ego(nodes={nv}, edges={ne})"
+                    print(line)
+                    if f_log:
+                        f_log.write(line + "\n")
 
-        if getattr(self, 'mal_print_tokens', False):
-            print(f"[恶意EGO] 已收集: {len(self._mal_ego_pool)} 个恶意节点 ego 候选")
+                    # ---- 完整记录节点属性（不截断）----
+                    for vi in range(sub.vcount()):
+                        v = sub.vs[vi]
+                        attrs = v.attributes()
+                        name = str(attrs.get('name', ''))
+                        lab = str(attrs.get('label', ''))
+                        freq = str(attrs.get('frequency', ''))
+                        prop = str(attrs.get('properties', ''))
+
+                        node_line = f"    node[{vi}]: name={name} label={lab} freq={freq} props={prop}"
+                        print(node_line)
+                        if f_log:
+                            f_log.write(node_line + "\n")
+
+            except Exception as ex:
+                warn = f"[EGO保存失败] Snapshot {sidx:02d}, center={i}: {ex}"
+                print(warn)
+                if f_log:
+                    f_log.write(warn + "\n")
+
+    total_mal = sum(per_snapshot_mal.values())
+    print(f"[恶意EGO] 已收集: {len(self._mal_ego_pool)} 个恶意中心，记录到 {log_path}")
+    if f_log:
+        try:
+            f_log.write(f"\n汇总: 恶意中心总数={total_mal}\n")
+            for sid in sorted(per_snapshot_mal.keys()):
+                m = per_snapshot_mal.get(sid, 0)
+                f_log.write(f"  Snapshot {sid:02d}: 恶意中心={m}\n")
+            f_log.write("=" * 80 + "\n")
+        finally:
+            f_log.close()
 
     def _build_neg_block_from_snapshots(self, Bc: int, device: torch.device):
         """从恶意节点 ego 池中采样 Bc 个中心节点，构造其 r-hop ego 子图并编码成两个视角的负样本块（每块 Bc×D）。
