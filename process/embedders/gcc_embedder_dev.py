@@ -434,9 +434,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
             Z_neg_blocks = []
             freq_weights_neg = torch.zeros(Bc, device=device)
 
-            # 首选：使用“恶意快照”整体作为负样本（简单稳定，返回两视角）
+            # 首选：使用“恶意节点的 ego 子图”作为负样本（返回两视角）
             if getattr(self, 'use_malicious_snapshots', False) \
-                and hasattr(self, '_mal_snapshot_pool') and len(self._mal_snapshot_pool) > 0:
+                and hasattr(self, '_mal_ego_pool') and len(self._mal_ego_pool) > 0:
                 blocks, w_neg = self._build_neg_block_from_snapshots(Bc, device=device)
                 if blocks:
                     Z_neg_blocks.extend(blocks)
@@ -672,42 +672,47 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
     # ---------- 简化版：恶意快照池与负样本块 ----------
     def _precollect_malicious_snapshots(self):
-        """收集包含恶意节点的快照索引，形成恶意快照池。"""
-        self._mal_snapshot_pool = []
-        for sidx in (self.train_snapshot_indices or list(range(len(self.snapshots)))):
+        """收集恶意节点的 ego 图采样池：以 (snapshot_idx, local_node_idx) 形式保存。
+
+        说明：不再把整个快照作为负样本，而是以“恶意节点为中心”的 r-hop ego 子图作为负样本单元。
+        后续 _build_neg_block_from_snapshots 将基于该池构建负样本块。
+        """
+        self._mal_ego_pool: List[Tuple[int, int]] = []  # (sidx, local_node_idx)
+        train_ids = list(range(len(self.snapshots)))
+        for sidx in train_ids:
             g = self.snapshots[sidx]
             if g is None or g.vcount() == 0:
                 continue
+            # 读取标签
             try:
                 labels = g.vs['label'] if 'label' in g.vs.attributes() else None
             except Exception:
                 labels = None
-            has_mal = False
+
             if labels is not None:
-                try:
-                    has_mal = any(int(v) == 1 for v in labels)
-                except Exception:
-                    has_mal = False
+                for i in range(g.vcount()):
+                    try:
+                        if int(labels[i]) == 1:
+                            self._mal_ego_pool.append((sidx, i))
+                    except Exception:
+                        continue
             else:
                 # 逐节点兜底
                 for i in range(g.vcount()):
                     try:
                         if int(g.vs[i].attributes().get('label', 0)) == 1:
-                            has_mal = True
-                            break
+                            self._mal_ego_pool.append((sidx, i))
                     except Exception:
-                        pass
-            if has_mal:
-                self._mal_snapshot_pool.append(sidx)
+                        continue
+
         if getattr(self, 'mal_print_tokens', False):
-            print(f"[恶意快照] 已收集: {len(self._mal_snapshot_pool)} 个包含恶意节点的快照")
+            print(f"[恶意EGO] 已收集: {len(self._mal_ego_pool)} 个恶意节点 ego 候选")
 
     def _build_neg_block_from_snapshots(self, Bc: int, device: torch.device):
-        """从恶意快照池中采样 Bc 个快照，编码为两个视角的负样本块（每块大小 Bc×D）。
-        返回: ([Z_neg_block_view1[Bc,D], Z_neg_block_view2[Bc,D]], freq_weights_neg[Bc])
-        若池为空，返回 ([], zeros)
+        """从恶意节点 ego 池中采样 Bc 个中心节点，构造其 r-hop ego 子图并编码成两个视角的负样本块（每块 Bc×D）。
+        返回: ([Z_neg_block_view1[Bc,D], Z_neg_block_view2[Bc,D]], freq_weights_neg[Bc])；若池为空返回 ([], zeros)。
         """
-        pool = getattr(self, '_mal_snapshot_pool', None)
+        pool = getattr(self, '_mal_ego_pool', None)
         if not pool:
             return [], torch.zeros(Bc, device=device)
 
@@ -718,19 +723,29 @@ class GCCEmbedderDev(GraphEmbedderBase):
             chosen = [random.choice(pool) for _ in range(Bc)]
 
         x_list, e_list, node_counts = [], [], []
-        for sidx in chosen:
+        for (sidx, center) in chosen:
             g = self.snapshots[sidx]
             if g is None or g.vcount() == 0:
-                # 占位一个空图（跳过）
+                # 占位空图
                 x_list.append(torch.zeros((0, self.prop_feat_dim), dtype=torch.float32, device=device))
                 e_list.append(torch.zeros((2, 0), dtype=torch.long, device=device))
                 node_counts.append(0)
                 continue
-            x_np = self._build_node_features(g)
-            eidx = self._igraph_edges_to_edge_index(g)
+            # 取中心节点的 ego 子图
+            try:
+                sub = self._ego_subgraph(g, center=center, r=self.r_hop, max_nodes=self.ego_max_nodes)
+            except Exception:
+                sub = None
+            if sub is None or sub.vcount() == 0:
+                x_list.append(torch.zeros((0, self.prop_feat_dim), dtype=torch.float32, device=device))
+                e_list.append(torch.zeros((2, 0), dtype=torch.long, device=device))
+                node_counts.append(0)
+                continue
+            x_np = self._build_node_features(sub)
+            eidx = self._igraph_edges_to_edge_index(sub)
             x_list.append(torch.from_numpy(x_np).to(device))
             e_list.append(eidx)
-            node_counts.append(g.vcount())
+            node_counts.append(sub.vcount())
 
         # 若全为空，返回空
         if sum(node_counts) == 0:
