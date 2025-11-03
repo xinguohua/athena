@@ -169,8 +169,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         sim_measure: str = 'wl',            # 'tanimoto' | 'cosine' | 'wl'
         wl_height: int = 2,
         sem_fp_bits: int = 1024,
-        use_malicious_snapshots: bool = False,
-        use_malicious_negatives: bool = True,
+        use_malicious_snapshots: bool = True,
+        use_malicious_negatives: bool = False,
         mal_neg_ratio: float = 0.3,
     mal_neg_node_token_len: int = 1,
         mal_stopwords=None,
@@ -899,15 +899,15 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
     def get_snapshot_embeddings(self, snapshot_sequence=None):
         """
-        基于偏离注意力 (Soft Deviation Attention) 的快照嵌入：
-        - 所有节点参与聚合，不再 hard filter；
-        - 偏离越大，注意力权重越高；
-        - 偏离通过 softmax 归一化 (温度参数 tau 控制平滑程度)；
-        - 度/频率作为二级权重参与；
-        - 计算中心时不使用权重；
-        - 打印恶意节点的偏离权重分布信息。
+        基于偏离-频率联合乘法放大 (Multiplicative Deviation-Frequency Attention) 的快照嵌入：
+        - 所有节点参与聚合；
+        - 分别计算频率比例与偏离比例；
+        - 两者相乘放大，反映二者共同影响；
+        - 无 softmax、无指数，线性可解释；
+        - 不做 L2 归一化，保留模长以反映异常强度。
         """
-        tau = 0.1  # 温度参数：越小越强调高偏离节点
+        freq_power = 1  # 控制频率放大强度
+        dev_power = 2  # 控制偏离放大强度
 
         if not self.snapshot_node_embeddings:
             raise RuntimeError("还没有节点嵌入，请先调用 train()")
@@ -927,88 +927,77 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
                 continue
 
-            # 获取频率或度数（用于聚合，但不用于中心）
+            # ---- frequency ----
             try:
-                freqs = g.vs['frequency'] if 'frequency' in g.vs.attributes() else None
+                freqs = np.array(g.vs['frequency'], dtype=np.float32) if 'frequency' in g.vs.attributes() else None
             except Exception:
                 freqs = None
-            degrees = g.degree()
 
-            names, vecs, weights, labels = [], [], [], []
+            names, vecs, freqs_used, labels = [], [], [], []
             for local_idx in range(g.vcount()):
                 nid = g.vs[local_idx]['name']
                 vec = emb_dict.get(nid)
                 if vec is None:
                     continue
 
-                # 聚合权重：度或频率
-                if freqs is not None:
-                    try:
-                        w = float(freqs[local_idx])
-                    except Exception:
-                        w = 0.0
+                # frequency
+                if freqs is not None and local_idx < len(freqs):
+                    w = float(freqs[local_idx])
                     if not np.isfinite(w) or w < 0:
                         w = 0.0
                 else:
-                    w = float(degrees[local_idx])
-                if w < 0:
-                    w = 0.0
+                    w = 1.0
+                freqs_used.append(w)
 
-                # 标签
                 try:
                     lab = int(g.vs[local_idx]['label'])
                 except Exception:
                     lab = 0
-
-                names.append(nid)
-                vecs.append(np.asarray(vec, dtype=np.float32))
-                weights.append(w)
                 labels.append(lab)
+                vecs.append(np.asarray(vec, dtype=np.float32))
+                names.append(nid)
 
             if not vecs:
                 result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
                 continue
 
             V = np.vstack(vecs).astype(np.float32)
-            W = np.asarray(weights, dtype=np.float32)
+            F = np.asarray(freqs_used, dtype=np.float32)
             labels = np.asarray(labels, dtype=np.int32)
 
-            # ---- 1、无权中心 ----
-            center = V.mean(axis=0)
+            # ---- 归一化频率（线性比例） ----
+            if np.max(F) > 0:
+                F = F / (np.max(F) + 1e-12)
+            F = np.power(F, freq_power)
 
-            # ---- 2、偏离（cosine） ----
+            # ---- 偏离 ----
+            center = V.mean(axis=0)
             Vn = V / (np.linalg.norm(V, axis=1, keepdims=True) + 1e-12)
             cn = center / (np.linalg.norm(center) + 1e-12)
             deviations = 1.0 - np.matmul(Vn, cn)
             deviations = np.clip(deviations, 0, None)
 
-            # ---- 3、偏离注意力 softmax ----
-            alpha = np.exp(deviations / tau)
-            alpha = alpha / (np.sum(alpha) + 1e-12)
+            # ---- 偏离归一化（线性比例） ----
+            if np.max(deviations) > 0:
+                deviations = deviations / (np.max(deviations) + 1e-12)
+            deviations = np.power(deviations, dev_power)
 
-            # ---- 4、结合聚合权重 ----
-            if np.sum(W) > 0:
-                final_w = alpha * (W / (np.sum(W) + 1e-12))
-            else:
-                final_w = alpha
-            final_w = final_w / (np.sum(final_w) + 1e-12)
+            # ---- 乘法放大融合 ----
+            att_raw = F * deviations
+            att = att_raw / (np.sum(att_raw) + 1e-12)
 
-            # ---- 5、加权聚合 ----
-            gvec = np.sum(final_w[:, None] * V, axis=0)
-
-            # ---- 6、保留模长（可选归一化）
-            gvec = gvec / (np.linalg.norm(gvec) + 1e-12)
-
-            # ---- 打印分析 ----
-            mal_indices = np.where(labels == 1)[0]
-            mal_w = final_w[mal_indices] if len(mal_indices) > 0 else []
-            mean_mal_w = np.mean(mal_w) if len(mal_w) > 0 else 0.0
-            print(f"[Snapshot {i:02d}] 偏离注意力聚合: {len(V)} 节点, 平均恶意节点权重={mean_mal_w:.4f}")
-
+            # ---- 聚合 ----
+            gvec = np.sum(att[:, None] * V, axis=0)
             result.append(gvec.astype(np.float32))
 
+            # ---- 打印 ----
+            mal_indices = np.where(labels == 1)[0]
+            mal_w = att[mal_indices] if len(mal_indices) > 0 else []
+            mean_mal_w = np.mean(mal_w) if len(mal_w) > 0 else 0.0
+            print(f"[Snapshot {i:02d}] 乘法联合权重聚合: {len(V)} 节点, 平均恶意节点权重={mean_mal_w:.4f}")
+
         arr = np.vstack(result).astype(np.float32) if result else np.zeros((0, self.enc_out_dim), dtype=np.float32)
-        print(f"[GCC-Dev] Snapshot embeddings (Soft Deviation Attention): {arr.shape}")
+        print(f"[GCC-Dev] Snapshot embeddings (Multiplicative Freq+Deviation Attention): {arr.shape}")
         return arr
 
 
@@ -1021,7 +1010,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
     #     - 聚合权重仍使用原来的度或频率
     #     - 打印恶意节点筛选命中情况
     #     """
-    #     top_ratio = 0.6  # 固定比例：选取偏离最高的前 15%
+    #     top_ratio = 0.1  # 固定比例：选取偏离最高的前 15%
     #
     #     if not self.snapshot_node_embeddings:
     #         raise RuntimeError("还没有节点嵌入，请先调用 train()")
