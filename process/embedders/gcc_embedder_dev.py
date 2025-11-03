@@ -940,108 +940,156 @@ class GCCEmbedderDev(GraphEmbedderBase):
         """
         self._ensure_w2v_model()
 
-    def get_snapshot_embeddings(self, snapshot_sequence=None):
-        """
-        基于偏离-频率联合乘法放大 (Multiplicative Deviation-Frequency Attention) 的快照嵌入：
-        - 所有节点参与聚合；
-        - 分别计算频率比例与偏离比例；
-        - 两者相乘放大，反映二者共同影响；
-        - 无 softmax、无指数，线性可解释；
-        - 不做 L2 归一化，保留模长以反映异常强度。
-        """
-        freq_power = 1  # 控制频率放大强度
-        dev_power = 2  # 控制偏离放大强度
+    # 平均
+    # def get_snapshot_embeddings(self, snapshot_sequence=None):
+    #     """
+    #     不加权版本的快照嵌入：
+    #     - 所有节点平等；
+    #     - 直接求节点嵌入的平均；
+    #     - 无频率、无偏离放大；
+    #     - 模长代表总体活跃程度。
+    #     """
+    #     if not self.snapshot_node_embeddings:
+    #         raise RuntimeError("还没有节点嵌入，请先调用 train()")
+    #     if snapshot_sequence is None:
+    #         snapshot_sequence = list(range(len(self.snapshots)))
+    #
+    #     result = []
+    #     for i in snapshot_sequence:
+    #         g = self.snapshots[i]
+    #         if g is None:
+    #             result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
+    #             continue
+    #
+    #         emb_dict = self.snapshot_node_embeddings[i] if i < len(self.snapshot_node_embeddings) else {}
+    #         if not emb_dict:
+    #             result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
+    #             continue
+    #
+    #         vecs = []
+    #         for v in g.vs:
+    #             nid = v["name"]
+    #             vec = emb_dict.get(nid)
+    #             if vec is not None:
+    #                 vecs.append(np.asarray(vec, dtype=np.float32))
+    #
+    #         if not vecs:
+    #             result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
+    #             continue
+    #
+    #         V = np.vstack(vecs).astype(np.float32)
+    #         gvec = V.mean(axis=0)  # ⬅️ 直接平均，不加任何权重
+    #         result.append(gvec.astype(np.float32))
+    #
+    #         print(f"[Snapshot {i:02d}] 平均聚合: {len(V)} 节点")
+    #
+    #     arr = np.vstack(result).astype(np.float32) if result else np.zeros((0, self.enc_out_dim), dtype=np.float32)
+    #     print(f"[GCC-Dev] Snapshot embeddings (mean pooling): {arr.shape}")
+    #     return arr
 
-        if not self.snapshot_node_embeddings:
-            raise RuntimeError("还没有节点嵌入，请先调用 train()")
-        if snapshot_sequence is None:
-            snapshot_sequence = list(range(len(self.snapshots)))
-
-        result: List[np.ndarray] = []
-
-        for i in snapshot_sequence:
-            g = self.snapshots[i]
-            if g is None:
-                result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
-                continue
-
-            emb_dict = self.snapshot_node_embeddings[i] if i < len(self.snapshot_node_embeddings) else {}
-            if not emb_dict:
-                result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
-                continue
-
-            # ---- frequency ----
-            try:
-                freqs = np.array(g.vs['frequency'], dtype=np.float32) if 'frequency' in g.vs.attributes() else None
-            except Exception:
-                freqs = None
-
-            names, vecs, freqs_used, labels = [], [], [], []
-            for local_idx in range(g.vcount()):
-                nid = g.vs[local_idx]['name']
-                vec = emb_dict.get(nid)
-                if vec is None:
-                    continue
-
-                # frequency
-                if freqs is not None and local_idx < len(freqs):
-                    w = float(freqs[local_idx])
-                    if not np.isfinite(w) or w < 0:
-                        w = 0.0
-                else:
-                    w = 1.0
-                freqs_used.append(w)
-
-                try:
-                    lab = int(g.vs[local_idx]['label'])
-                except Exception:
-                    lab = 0
-                labels.append(lab)
-                vecs.append(np.asarray(vec, dtype=np.float32))
-                names.append(nid)
-
-            if not vecs:
-                result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
-                continue
-
-            V = np.vstack(vecs).astype(np.float32)
-            F = np.asarray(freqs_used, dtype=np.float32)
-            labels = np.asarray(labels, dtype=np.int32)
-
-            # ---- 归一化频率（线性比例） ----
-            if np.max(F) > 0:
-                F = F / (np.max(F) + 1e-12)
-            F = np.power(F, freq_power)
-
-            # ---- 偏离 ----
-            center = V.mean(axis=0)
-            Vn = V / (np.linalg.norm(V, axis=1, keepdims=True) + 1e-12)
-            cn = center / (np.linalg.norm(center) + 1e-12)
-            deviations = 1.0 - np.matmul(Vn, cn)
-            deviations = np.clip(deviations, 0, None)
-
-            # ---- 偏离归一化（线性比例） ----
-            if np.max(deviations) > 0:
-                deviations = deviations / (np.max(deviations) + 1e-12)
-            deviations = np.power(deviations, dev_power)
-
-            # ---- 乘法放大融合 ----
-            att_raw = F * deviations
-            att = att_raw / (np.sum(att_raw) + 1e-12)
-
-            # ---- 聚合 ----
-            gvec = np.sum(att[:, None] * V, axis=0)
-            result.append(gvec.astype(np.float32))
-
-            # ---- 打印 ----
-            mal_indices = np.where(labels == 1)[0]
-            mal_w = att[mal_indices] if len(mal_indices) > 0 else []
-            mean_mal_w = np.mean(mal_w) if len(mal_w) > 0 else 0.0
-            print(f"[Snapshot {i:02d}] 乘法联合权重聚合: {len(V)} 节点, 平均恶意节点权重={mean_mal_w:.4f}")
-
-        arr = np.vstack(result).astype(np.float32) if result else np.zeros((0, self.enc_out_dim), dtype=np.float32)
-        print(f"[GCC-Dev] Snapshot embeddings (Multiplicative Freq+Deviation Attention): {arr.shape}")
-        return arr
+    # 加权
+    # def get_snapshot_embeddings(self, snapshot_sequence=None):
+    #     """
+    #     基于偏离-频率联合乘法放大 (Multiplicative Deviation-Frequency Attention) 的快照嵌入：
+    #     - 所有节点参与聚合；
+    #     - 分别计算频率比例与偏离比例；
+    #     - 两者相乘放大，反映二者共同影响；
+    #     - 无 softmax、无指数，线性可解释；
+    #     - 不做 L2 归一化，保留模长以反映异常强度。
+    #     """
+    #     freq_power = 1  # 控制频率放大强度
+    #     dev_power = 2  # 控制偏离放大强度
+    #
+    #     if not self.snapshot_node_embeddings:
+    #         raise RuntimeError("还没有节点嵌入，请先调用 train()")
+    #     if snapshot_sequence is None:
+    #         snapshot_sequence = list(range(len(self.snapshots)))
+    #
+    #     result: List[np.ndarray] = []
+    #
+    #     for i in snapshot_sequence:
+    #         g = self.snapshots[i]
+    #         if g is None:
+    #             result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
+    #             continue
+    #
+    #         emb_dict = self.snapshot_node_embeddings[i] if i < len(self.snapshot_node_embeddings) else {}
+    #         if not emb_dict:
+    #             result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
+    #             continue
+    #
+    #         # ---- frequency ----
+    #         try:
+    #             freqs = np.array(g.vs['frequency'], dtype=np.float32) if 'frequency' in g.vs.attributes() else None
+    #         except Exception:
+    #             freqs = None
+    #
+    #         names, vecs, freqs_used, labels = [], [], [], []
+    #         for local_idx in range(g.vcount()):
+    #             nid = g.vs[local_idx]['name']
+    #             vec = emb_dict.get(nid)
+    #             if vec is None:
+    #                 continue
+    #
+    #             # frequency
+    #             if freqs is not None and local_idx < len(freqs):
+    #                 w = float(freqs[local_idx])
+    #                 if not np.isfinite(w) or w < 0:
+    #                     w = 0.0
+    #             else:
+    #                 w = 1.0
+    #             freqs_used.append(w)
+    #
+    #             try:
+    #                 lab = int(g.vs[local_idx]['label'])
+    #             except Exception:
+    #                 lab = 0
+    #             labels.append(lab)
+    #             vecs.append(np.asarray(vec, dtype=np.float32))
+    #             names.append(nid)
+    #
+    #         if not vecs:
+    #             result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
+    #             continue
+    #
+    #         V = np.vstack(vecs).astype(np.float32)
+    #         F = np.asarray(freqs_used, dtype=np.float32)
+    #         labels = np.asarray(labels, dtype=np.int32)
+    #
+    #         # ---- 归一化频率（线性比例） ----
+    #         if np.max(F) > 0:
+    #             F = F / (np.max(F) + 1e-12)
+    #         F = np.power(F, freq_power)
+    #
+    #         # ---- 偏离 ----
+    #         center = V.mean(axis=0)
+    #         Vn = V / (np.linalg.norm(V, axis=1, keepdims=True) + 1e-12)
+    #         cn = center / (np.linalg.norm(center) + 1e-12)
+    #         deviations = 1.0 - np.matmul(Vn, cn)
+    #         deviations = np.clip(deviations, 0, None)
+    #
+    #         # ---- 偏离归一化（线性比例） ----
+    #         if np.max(deviations) > 0:
+    #             deviations = deviations / (np.max(deviations) + 1e-12)
+    #         deviations = np.power(deviations, dev_power)
+    #
+    #         # ---- 乘法放大融合 ----
+    #         att_raw = F * deviations
+    #         att = att_raw / (np.sum(att_raw) + 1e-12)
+    #
+    #         # ---- 聚合 ----
+    #         gvec = np.sum(att[:, None] * V, axis=0)
+    #         result.append(gvec.astype(np.float32))
+    #
+    #         # ---- 打印 ----
+    #         mal_indices = np.where(labels == 1)[0]
+    #         mal_w = att[mal_indices] if len(mal_indices) > 0 else []
+    #         mean_mal_w = np.mean(mal_w) if len(mal_w) > 0 else 0.0
+    #         print(f"[Snapshot {i:02d}] 乘法联合权重聚合: {len(V)} 节点, 平均恶意节点权重={mean_mal_w:.4f}")
+    #
+    #     arr = np.vstack(result).astype(np.float32) if result else np.zeros((0, self.enc_out_dim), dtype=np.float32)
+    #     print(f"[GCC-Dev] Snapshot embeddings (Multiplicative Freq+Deviation Attention): {arr.shape}")
+    #     return arr
 
 
     # 硬过滤/不归一化
@@ -1162,56 +1210,56 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
 
     # 最正宗的
-    # def get_snapshot_embeddings(self, snapshot_sequence=None):
-    #     if not self.snapshot_node_embeddings:
-    #         raise RuntimeError("还没有节点嵌入，请先调用 train()")
-    #     if snapshot_sequence is None:
-    #         snapshot_sequence = list(range(len(self.snapshots)))
-    #     result: List[np.ndarray] = []
-    #     for i in snapshot_sequence:
-    #         g = self.snapshots[i]
-    #         if g is None:
-    #             result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
-    #             continue
-    #         emb_dict = self.snapshot_node_embeddings[i] if i < len(self.snapshot_node_embeddings) else {}
-    #         if not emb_dict:
-    #             result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
-    #             continue
-    #         try:
-    #             freqs = g.vs['frequency'] if 'frequency' in g.vs.attributes() else None
-    #         except Exception:
-    #             freqs = None
-    #         degrees = g.degree()
-    #         weighted = np.zeros(self.enc_out_dim, dtype=np.float32)
-    #         total_w = 0.0
-    #         for local_idx in range(g.vcount()):
-    #             nid = g.vs[local_idx]['name']
-    #             vec = emb_dict.get(nid)
-    #             if vec is None:
-    #                 continue
-    #             if freqs is not None:
-    #                 try:
-    #                     w = float(freqs[local_idx])
-    #                 except Exception:
-    #                     w = 0.0
-    #                 if not np.isfinite(w) or w < 0:
-    #                     w = 0.0
-    #             else:
-    #                 w = float(degrees[local_idx])
-    #             if w <= 0:
-    #                 continue
-    #             weighted += (w * vec)
-    #             total_w += w
-    #         if total_w <= 0:
-    #             allv = np.array(list(emb_dict.values()), dtype=np.float32)
-    #             gvec = allv.mean(axis=0) if allv.size > 0 else np.zeros(self.enc_out_dim, dtype=np.float32)
-    #         else:
-    #             gvec = weighted / (total_w + 1e-12)
-    #         # gvec = gvec / (np.linalg.norm(gvec) + 1e-12)
-    #         result.append(gvec.astype(np.float32))
-    #     arr = np.vstack(result).astype(np.float32) if result else np.zeros((0, self.enc_out_dim), dtype=np.float32)
-    #     print(f"[GCC-Dev] Snapshot embeddings: {arr.shape}")
-    #     return arr
+    def get_snapshot_embeddings(self, snapshot_sequence=None):
+        if not self.snapshot_node_embeddings:
+            raise RuntimeError("还没有节点嵌入，请先调用 train()")
+        if snapshot_sequence is None:
+            snapshot_sequence = list(range(len(self.snapshots)))
+        result: List[np.ndarray] = []
+        for i in snapshot_sequence:
+            g = self.snapshots[i]
+            if g is None:
+                result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
+                continue
+            emb_dict = self.snapshot_node_embeddings[i] if i < len(self.snapshot_node_embeddings) else {}
+            if not emb_dict:
+                result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
+                continue
+            try:
+                freqs = g.vs['frequency'] if 'frequency' in g.vs.attributes() else None
+            except Exception:
+                freqs = None
+            degrees = g.degree()
+            weighted = np.zeros(self.enc_out_dim, dtype=np.float32)
+            total_w = 0.0
+            for local_idx in range(g.vcount()):
+                nid = g.vs[local_idx]['name']
+                vec = emb_dict.get(nid)
+                if vec is None:
+                    continue
+                if freqs is not None:
+                    try:
+                        w = float(freqs[local_idx])
+                    except Exception:
+                        w = 0.0
+                    if not np.isfinite(w) or w < 0:
+                        w = 0.0
+                else:
+                    w = float(degrees[local_idx])
+                if w <= 0:
+                    continue
+                weighted += (w * vec)
+                total_w += w
+            if total_w <= 0:
+                allv = np.array(list(emb_dict.values()), dtype=np.float32)
+                gvec = allv.mean(axis=0) if allv.size > 0 else np.zeros(self.enc_out_dim, dtype=np.float32)
+            else:
+                gvec = weighted / (total_w + 1e-12)
+            # gvec = gvec / (np.linalg.norm(gvec) + 1e-12)
+            result.append(gvec.astype(np.float32))
+        arr = np.vstack(result).astype(np.float32) if result else np.zeros((0, self.enc_out_dim), dtype=np.float32)
+        print(f"[GCC-Dev] Snapshot embeddings: {arr.shape}")
+        return arr
 
     def compute_malicious_deviation_per_snapshot(
             self,
