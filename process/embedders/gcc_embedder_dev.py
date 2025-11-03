@@ -173,7 +173,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         use_malicious_negatives: bool = False,
     # 第三个开关：两种策略按比例混合
     combine: bool = False,
-    combine_ratio: float = 0.5,
+    combine_ratio: float = 0.8,
         mal_neg_ratio: float = 0.3,
     mal_neg_node_token_len: int = 1,
         mal_stopwords=None,
@@ -182,7 +182,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             # , 'execute'
             # ],
             # 恶意token停用词列表，传入[]表示不过滤
-        mal_print_tokens: bool = True,  # 是否打印恶意token统计信息
+    mal_print_tokens: bool = True,  # 是否打印恶意token统计信息
     # Top-K 相似（可选，先关闭）
     topk_pos: Optional[int] = 0,   # 先关闭 Top-K 扩增，回到经典 NT-Xent
         topk_pos_min_sim: float = 0.5, # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
@@ -451,20 +451,27 @@ class GCCEmbedderDev(GraphEmbedderBase):
             if self.combine and has_ego and has_tok:
                 blocks_ego, w_ego = self._build_neg_block_from_snapshots(Bc, device=device)
                 blocks_tok, w_tok = self._build_neg_block_from_tokens(Bc, device=device)
-                if blocks_ego and blocks_tok:
+
+                # 两边都存在：做“配比抽样”（例如 ratio=0.3 => 30% 用 ego，其余用 tok）
+                if (isinstance(blocks_ego, list) and len(blocks_ego) == 2 and
+                        isinstance(blocks_tok, list) and len(blocks_tok) == 2):
+
                     ratio = max(0.0, min(1.0, float(self.combine_ratio)))
-                    n_ego = int(round(ratio * Bc))
+                    n_ego = int(round(ratio * Bc))  # 需要从 ego 取的子图个数
+                    # 随机挑 n_ego 个索引作为 ego，其余默认 tok
                     perm = torch.randperm(Bc, device=device)
                     mask = torch.zeros(Bc, dtype=torch.bool, device=device)
-                    mask[perm[:n_ego]] = True
+                    if n_ego > 0:
+                        mask[perm[:n_ego]] = True  # True => 用 ego，False => 用 tok
 
-                    mixed_blocks = []
-                    for vi in range(2):
-                        be, bt = blocks_ego[vi], blocks_tok[vi]
-                        mixed = torch.where(mask.unsqueeze(1), be, bt)
-                        mixed_blocks.append(mixed)
-                    Z_neg_blocks.extend(mixed_blocks)
-                    freq_weights_neg = torch.where(mask, w_ego, w_tok)
+                    Z_neg_blocks = []
+                    for vi in range(2):  # 两个视角分别挑
+                        be, bt = blocks_ego[vi], blocks_tok[vi]  # [Bc, D] & [Bc, D]
+                        # 逐行选择：mask 为 True 的行取 be，否则取 bt
+                        mixed = torch.where(mask.unsqueeze(1), be, bt)  # [Bc, D]
+                        Z_neg_blocks.append(mixed)
+
+                    freq_weights_neg = torch.where(mask, w_ego, w_tok)  # [Bc]
                 elif blocks_ego:
                     Z_neg_blocks.extend(blocks_ego)
                     freq_weights_neg = w_ego
