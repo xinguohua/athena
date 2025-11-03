@@ -166,11 +166,14 @@ class GCCEmbedderDev(GraphEmbedderBase):
         w2v_epochs: int = 20,
         w2v_pretrained_path: Optional[str] = None,
         # 相似度/权重相关可选参数
-        sim_measure: str = 'wl',            # 'tanimoto' | 'cosine' | 'wl'
+    sim_measure: str = 'wl',            # 'tanimoto' | 'cosine' | 'wl'
         wl_height: int = 2,
         sem_fp_bits: int = 1024,
         use_malicious_snapshots: bool = True,
         use_malicious_negatives: bool = False,
+    # 第三个开关：两种策略按比例混合
+    combine: bool = False,
+    combine_ratio: float = 0.5,
         mal_neg_ratio: float = 0.3,
     mal_neg_node_token_len: int = 1,
         mal_stopwords=None,
@@ -231,6 +234,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.use_malicious_snapshots = bool(use_malicious_snapshots)
         # 是否使用“恶意语料”来生成额外负样本；以及腐化强度与每个节点替换的 token 数
         self.use_malicious_negatives = bool(use_malicious_negatives)
+        # 组合策略（第三开关 + 比例）
+        self.combine = bool(combine)
+        self.combine_ratio = float(combine_ratio)
         self.mal_neg_ratio = float(mal_neg_ratio)  # 每个子图中替换为恶意向量的节点比例
         self.mal_neg_node_token_len = int(mal_neg_node_token_len)  # 生成恶意向量时采样的恶意节点数
         self.mal_use_type_group = False
@@ -304,10 +310,15 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
         # 初始化词向量和负样本池
         self._ensure_w2v_model()
-        if self.use_malicious_negatives:
+        if self.combine:
+            # 组合策略：两类都准备
             self._precollect_malicious_tokens()
-        if self.use_malicious_snapshots:
             self._precollect_malicious_snapshots()
+        else:
+            if self.use_malicious_negatives:
+                self._precollect_malicious_tokens()
+            if self.use_malicious_snapshots:
+                self._precollect_malicious_snapshots()
 
         print(
             f"[GCC-Dev] Pretrain on {len(self.train_snapshot_indices)} snapshots | batch={self.batch_size} | tau={self.temperature}")
@@ -434,65 +445,44 @@ class GCCEmbedderDev(GraphEmbedderBase):
             Z_neg_blocks = []
             freq_weights_neg = torch.zeros(Bc, device=device)
 
-            # 首选：使用“恶意节点的 ego 子图”作为负样本（返回两视角）
-            if getattr(self, 'use_malicious_snapshots', False) \
-                and hasattr(self, '_mal_ego_pool') and len(self._mal_ego_pool) > 0:
-                blocks, w_neg = self._build_neg_block_from_snapshots(Bc, device=device)
-                if blocks:
-                    Z_neg_blocks.extend(blocks)
-                    freq_weights_neg = w_neg
+            has_ego = bool(getattr(self, 'use_malicious_snapshots', False) and hasattr(self, '_mal_ego_pool') and len(self._mal_ego_pool) > 0)
+            has_tok = bool(getattr(self, 'use_malicious_negatives', False) and hasattr(self, 'malicious_node_tokens') and len(self.malicious_node_tokens) > 0 and hasattr(self, '_ego_cache') and len(self._ego_cache) > 0)
 
-            # 否则：回退语料特征增强
-            elif getattr(self, 'use_malicious_negatives', False) \
-                        and len(self.malicious_node_tokens) > 0 \
-                        and len(self._ego_cache) > 0:
+            if self.combine and has_ego and has_tok:
+                blocks_ego, w_ego = self._build_neg_block_from_snapshots(Bc, device=device)
+                blocks_tok, w_tok = self._build_neg_block_from_tokens(Bc, device=device)
+                if blocks_ego and blocks_tok:
+                    ratio = max(0.0, min(1.0, float(self.combine_ratio)))
+                    n_ego = int(round(ratio * Bc))
+                    perm = torch.randperm(Bc, device=device)
+                    mask = torch.zeros(Bc, dtype=torch.bool, device=device)
+                    mask[perm[:n_ego]] = True
 
-                all_subs, all_x, all_e, all_w = [], [], [], []
-                for subs_prev, x_prev, e_prev, w_prev in self._ego_cache:
-                    all_subs.extend(subs_prev)
-                    all_x.extend(x_prev)
-                    all_e.extend(e_prev)
-                    all_w.extend(w_prev)
-
-                total_prev = len(all_subs)
-                if total_prev >= Bc:
-                    idxs = np.random.choice(total_prev, size=Bc, replace=False)
-
-                    X_neg_list, E_neg_list, node_counts_neg, freq_neg = [], [], [], []
-                    for i in idxs:
-                        sub, xi, ei, w = all_subs[i], all_x[i], all_e[i], all_w[i]
-                        xneg_np = self._corrupt_features_with_malicious(
-                            sub, xi.cpu().numpy(),
-                            ratio=float(getattr(self, 'mal_neg_ratio', 0.3)),
-                            node_token_len=int(getattr(self, 'mal_neg_node_token_len', 1))
-                        )
-                        X_neg_list.append(torch.from_numpy(xneg_np).to(device))
-                        E_neg_list.append(ei)
-                        node_counts_neg.append(sub.vcount())
-                        freq_neg.append(w)
-
-                    offsets_neg = np.cumsum([0] + node_counts_neg[:-1]).tolist()
-                    graph_ids_neg = torch.tensor(
-                        [gi for gi, n in enumerate(node_counts_neg) for _ in range(n)],
-                        device=device
-                    )
-                    X_neg = torch.cat(X_neg_list, dim=0)
-
-                    for _ in range(2):
-                        e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in
-                                  zip(E_neg_list, offsets_neg)]
-                        EN = torch.cat(e_cols, dim=1)
-                        XN = self._augment_features(X_neg, self.feat_mask_p)
-                        ZN_layers = self.encoder(XN, EN, return_all=True)
-                        NL = ZN_layers[-1]
-                        sums = torch.zeros((Bc, NL.size(1)), device=device)
-                        cnts = torch.zeros(Bc, device=device)
-                        sums.index_add_(0, graph_ids_neg, NL)
-                        cnts.index_add_(0, graph_ids_neg, torch.ones_like(graph_ids_neg, dtype=torch.float32))
-                        means = sums / (cnts.clamp_min(1e-6).unsqueeze(1))
-                        Z_neg_blocks.append(F.normalize(self.proj_head(means), dim=-1))
-
-                    freq_weights_neg = torch.tensor(freq_neg, dtype=torch.float32, device=device)
+                    mixed_blocks = []
+                    for vi in range(2):
+                        be, bt = blocks_ego[vi], blocks_tok[vi]
+                        mixed = torch.where(mask.unsqueeze(1), be, bt)
+                        mixed_blocks.append(mixed)
+                    Z_neg_blocks.extend(mixed_blocks)
+                    freq_weights_neg = torch.where(mask, w_ego, w_tok)
+                elif blocks_ego:
+                    Z_neg_blocks.extend(blocks_ego)
+                    freq_weights_neg = w_ego
+                elif blocks_tok:
+                    Z_neg_blocks.extend(blocks_tok)
+                    freq_weights_neg = w_tok
+            else:
+                # 单一路径：优先 ego 其次 token
+                if has_ego:
+                    blocks, w_neg = self._build_neg_block_from_snapshots(Bc, device=device)
+                    if blocks:
+                        Z_neg_blocks.extend(blocks)
+                        freq_weights_neg = w_neg
+                elif has_tok:
+                    blocks, w_neg = self._build_neg_block_from_tokens(Bc, device=device)
+                    if blocks:
+                        Z_neg_blocks.extend(blocks)
+                        freq_weights_neg = w_neg
 
             # 拼接视角
             Z_batch = torch.cat(
@@ -820,6 +810,68 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 简单起见，负样本权重统一为 1
         w_neg = torch.ones(Bc, dtype=torch.float32, device=device)
         return Z_blocks, w_neg
+
+    def _build_neg_block_from_tokens(self, Bc: int, device: torch.device):
+        """基于语料腐化的负样本块构建，返回两个视角的 Bc×D block 与权重。
+        依赖 self._ego_cache（历史子图）与 self.malicious_node_tokens。
+        若条件不足则返回空块与零权重。
+        """
+        if not (getattr(self, 'use_malicious_negatives', False)
+                and hasattr(self, 'malicious_node_tokens') and len(self.malicious_node_tokens) > 0
+                and hasattr(self, '_ego_cache') and len(self._ego_cache) > 0):
+            return [], torch.zeros(Bc, device=device)
+
+        all_subs, all_x, all_e, all_w = [], [], [], []
+        for subs_prev, x_prev, e_prev, w_prev in self._ego_cache:
+            all_subs.extend(subs_prev)
+            all_x.extend(x_prev)
+            all_e.extend(e_prev)
+            all_w.extend(w_prev)
+
+        total_prev = len(all_subs)
+        if total_prev == 0:
+            return [], torch.zeros(Bc, device=device)
+
+        # 若不足 Bc，允许有放回采样
+        replace = total_prev < Bc
+        idxs = np.random.choice(total_prev, size=Bc, replace=replace)
+
+        X_neg_list, E_neg_list, node_counts_neg, freq_neg = [], [], [], []
+        for i in idxs:
+            sub, xi, ei, w = all_subs[i], all_x[i], all_e[i], all_w[i]
+            xneg_np = self._corrupt_features_with_malicious(
+                sub, xi.cpu().numpy(),
+                ratio=float(getattr(self, 'mal_neg_ratio', 0.3)),
+                node_token_len=int(getattr(self, 'mal_neg_node_token_len', 1))
+            )
+            X_neg_list.append(torch.from_numpy(xneg_np).to(device))
+            E_neg_list.append(ei)
+            node_counts_neg.append(sub.vcount())
+            freq_neg.append(w)
+
+        offsets_neg = np.cumsum([0] + node_counts_neg[:-1]).tolist()
+        graph_ids_neg = torch.tensor(
+            [gi for gi, n in enumerate(node_counts_neg) for _ in range(n)],
+            device=device
+        )
+        X_neg = torch.cat(X_neg_list, dim=0)
+
+        Z_neg_blocks: List[torch.Tensor] = []
+        for _ in range(2):
+            e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in zip(E_neg_list, offsets_neg)]
+            EN = torch.cat(e_cols, dim=1)
+            XN = self._augment_features(X_neg, self.feat_mask_p)
+            ZN_layers = self.encoder(XN, EN, return_all=True)
+            NL = ZN_layers[-1]
+            sums = torch.zeros((Bc, NL.size(1)), device=device)
+            cnts = torch.zeros(Bc, device=device)
+            sums.index_add_(0, graph_ids_neg, NL)
+            cnts.index_add_(0, graph_ids_neg, torch.ones_like(graph_ids_neg, dtype=torch.float32))
+            means = sums / (cnts.clamp_min(1e-6).unsqueeze(1))
+            Z_neg_blocks.append(F.normalize(self.proj_head(means), dim=-1))
+
+        w_neg = torch.tensor(freq_neg, dtype=torch.float32, device=device)
+        return Z_neg_blocks, w_neg
 
     def _corrupt_features_with_malicious(self, g, X_base: np.ndarray, ratio: float, node_token_len: int) -> np.ndarray:
         n = g.vcount()
