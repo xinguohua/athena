@@ -171,6 +171,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
         sem_fp_bits: int = 1024,
         use_malicious_snapshots: bool = True,
         use_malicious_negatives: bool = False,
+        # WL 引导损失（全局 batch 级别）
+        use_wl_guided: bool = False,
+        wl_guided_weight: float = 0.0,
     # 第三个开关：两种策略按比例混合
     combine: bool = False,
     combine_ratio: float = 0.8,
@@ -230,6 +233,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.sim_measure = str(sim_measure)
         # WL 子树核参数（用于 sim_measure='wl'）
         self.wl_height = int(wl_height)
+        # WL 引导损失开关与权重
+        self.use_wl_guided = bool(use_wl_guided)
+        self.wl_guided_weight = float(wl_guided_weight)
 
         self.use_malicious_snapshots = bool(use_malicious_snapshots)
         # 是否使用“恶意语料”来生成额外负样本；以及腐化强度与每个节点替换的 token 数
@@ -523,6 +529,15 @@ class GCCEmbedderDev(GraphEmbedderBase):
             # 损失计算
             self.optimizer.zero_grad(set_to_none=True)
             loss = self._nt_xent_loss(Z_batch, temperature=self.temperature, sample_weights=w_tensor)
+
+            # WL 引导的全局相似度一致性损失（以 batch 的 ego 子图作为一组）
+            if getattr(self, 'use_wl_guided', False) and float(getattr(self, 'wl_guided_weight', 0.0)) > 0.0:
+                try:
+                    Z_mean = (Z_view1 + Z_view2) * 0.5  # [Bc, D]
+                    wl_loss = self._wl_guided_similarity_loss(subs, Z_mean)
+                    loss = loss + float(self.wl_guided_weight) * wl_loss
+                except Exception as _e:
+                    print(f"[WL-Guided] 计算失败，已跳过: {_e}")
             loss.backward()
             torch.nn.utils.clip_grad_norm_(
                 list(self.encoder.parameters()) + list(self.proj_head.parameters()), max_norm=5.0
@@ -986,6 +1001,38 @@ class GCCEmbedderDev(GraphEmbedderBase):
             labels = new_labels
             ctr.update(f"{k}:{lab}" for lab in labels)
         return ctr
+
+    def _wl_guided_similarity_loss(self, subs: List, Z_mean: torch.Tensor) -> torch.Tensor:
+        """让嵌入相似度接近 WL 子树指纹相似度（batch 全局级）。
+        - subs: 子图列表（长度 N）
+        - Z_mean: [N, D]，每个子图的嵌入（两视角平均后）
+        """
+        Bc = len(subs)
+        if Bc <= 1:
+            return torch.zeros((), device=Z_mean.device, dtype=Z_mean.dtype)
+
+        m_bits = int(getattr(self, 'sem_fp_bits', 1024))
+        wl_vecs = []
+        for sub in subs:
+            ctr = self._wl_subtree_counter(sub, h=int(getattr(self, 'wl_height', 2)))
+            vec = np.zeros(m_bits, dtype=np.float32)
+            for k, c in ctr.items():
+                h = hashlib.md5(str(k).encode('utf-8')).hexdigest()
+                idx = int(h, 16) % m_bits
+                vec[idx] += float(c)
+            nrm = np.linalg.norm(vec) + 1e-12
+            wl_vecs.append(vec / nrm)
+        W = torch.from_numpy(np.stack(wl_vecs, axis=0)).to(Z_mean.device)
+
+        Z = F.normalize(Z_mean, dim=-1)
+        S_z = torch.mm(Z, Z.t())  # [N,N]
+        Wn = F.normalize(W, dim=-1)
+        S_w = torch.mm(Wn, Wn.t())  # [N,N]
+
+        eye = torch.eye(Bc, device=Z_mean.device, dtype=torch.bool)
+        diff = (S_z - S_w)
+        loss = (diff.masked_fill(eye, 0.0) ** 2).sum() / (Bc * (Bc - 1) + 1e-6)
+        return loss
 
     def embed_nodes(self):
         return self.snapshot_node_embeddings[-1] if self.snapshot_node_embeddings else {}
