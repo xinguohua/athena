@@ -1274,16 +1274,31 @@ def run_evaluation(path_map: dict) -> None:
     print(f" F1分数: {f1:.4f}")
     print("=" * 50)
 
-    sem_for_log = locals().get("sem_mapper", None)
-    idx_pos_log, tech_seq_log = map_pred_positive_to_techniques(
-        pred_labels_refined,
-        mal_snapshots,
-        semantic_mapper=sem_for_log,
-    )
-    print("\n=== TP 技术列表（片段内索引从 1 开始）===")
-    for i, code in zip(idx_pos_log, tech_seq_log):
-        # i 为片段内 0-based 索引，这里展示 1-based
-        print(f"  快照{i + 1}: {code}")
+    # 单独新增：打印 TP（真阳性）对应的攻击技术列表（片段内索引从 0 开始）
+    tp_idx = np.where(true_labels == 1)[0]
+    print("\n=== TP 技术列表（片段内索引从 0 开始）===")
+    if tp_idx.size == 0:
+        print("  （无 TP）")
+    else:
+        sem_for_log = locals().get("sem_mapper", None)
+        try:
+            if sem_for_log is not None:
+                tp_mask = np.zeros_like(pred_labels_refined, dtype=int)
+                tp_mask[tp_idx] = 1
+                idx_pos_tp, tech_seq_tp = map_pred_positive_to_techniques(
+                    tp_mask,
+                    mal_snapshots,
+                    semantic_mapper=sem_for_log,
+                )
+                for i, code in zip(idx_pos_tp, tech_seq_tp):
+                    print(f"  快照{int(i)}: {code}")
+            else:
+                for i in tp_idx:
+                    print(f"  快照{int(i)}: UNKNOWN")
+        except Exception as _ex:
+            print(f"  [Map] TP 技术映射失败，使用 UNKNOWN：{_ex}")
+            for i in tp_idx:
+                print(f"  快照{int(i)}: UNKNOWN")
 
     # 继续输出原有详细调试信息（TP/FP/FN/TN）
     print_debug_info(mal_snapshots, true_labels, pred_labels_refined, 0)
