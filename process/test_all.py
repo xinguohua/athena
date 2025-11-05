@@ -32,9 +32,7 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # 二次筛选配置（仅基于“攻击技术序列库”）
 SEQ_FILTER = {
     "enable": True,           # 开关：是否启用二次筛选
-    "use_technique": True,    # 使用“快照→技术”映射 + 库匹配做二次筛选
     "library_path": "technique_sequences.txt",  # 技术序列库文件（每行一条序列，逗号/空白分隔）
-    "allow_subseq": True,     # （备用开关）允许“连续子序列”匹配；若采用 LCS，这个可以忽略
     "lcs_min_ratio": 0.6,     # LCS 匹配阈值：LCS_len / len(库内序列) >= 该比例才视为命中
 }
 
@@ -1082,64 +1080,65 @@ def _lcs_indices_keep_mask(a: List[str], b: List[str]) -> Tuple[List[bool], int]
 # =========================
 # 解耦：映射 / 运行段提取 / LCS过滤
 # =========================
-def map_snapshots_to_techniques(snapshots: List) -> List[str]:
-    """批量将快照映射为技术码（与传入列表等长）。"""
-    return [_map_snapshot_to_technique(s) for s in snapshots]
 
-
-def _iter_positive_runs(y: np.ndarray):
-    """生成器：遍历 0/1 序列中的连续 1 段，返回 (i, j) 半开区间。"""
-    n = len(y)
-    i = 0
-    while i < n:
-        if y[i] == 1:
-            j = i
-            while j < n and y[j] == 1:
-                j += 1
-            yield i, j
-            i = j
-        else:
-            i += 1
-
-
-def filter_labels_by_tech_lcs(
+def map_pred_positive_to_techniques(
     pred_labels: np.ndarray,
-    tech_codes: List[str],
+    snapshots: List,
+):
+    """仅将“预测为恶意(=1)”的快照映射为技术码。
+
+    返回：
+    - idx_pos: np.ndarray[int]，预测为 1 的全局索引（相对于传入 snapshots 的起点）
+    - tech_seq: List[str]，与 idx_pos 等长的技术码序列
+    """
+    y = np.asarray(pred_labels, dtype=int)
+    idx_pos = np.where(y == 1)[0]
+    tech_seq: List[str] = []
+    for k in idx_pos:
+        try:
+            tech_seq.append(_map_snapshot_to_technique(snapshots[int(k)]))
+        except Exception:
+            tech_seq.append("UNKNOWN")
+    return idx_pos, tech_seq
+
+
+
+
+
+def filter_positive_by_tech_lcs(
+    pred_labels: np.ndarray,
+    idx_pos: np.ndarray,
+    tech_seq: List[str],
     lib: List[List[str]],
     *,
     lcs_min_ratio: float = 0.6,
 ) -> np.ndarray:
-    """仅基于 LCS 的技术序列匹配来过滤报警。
-
-    - 仅对预测阳性段做处理；
-    - 每个段从 tech_codes 中切片得到段内技术序列；
-    - 与库逐条做 LCS，若 best_len/len(lib_seq) >= 阈值，保留 LCS 主干帧，其余置 0；
-      若所有库序列不达标，整段清零。
-    """
+    """对“已映射出的预测阳性技术序列”执行一次性 LCS 过滤，并返回新的标签数组。"""
     if pred_labels is None or len(pred_labels) == 0:
         return pred_labels
     y = np.asarray(pred_labels, dtype=int).copy()
-    n = len(y)
-    if not lib or len(tech_codes) != n:
+    if not lib or len(tech_seq) == 0 or getattr(idx_pos, "size", 0) == 0:
         return y
 
-    removed_total = 0
-    for i, j in _iter_positive_runs(y):
-        seg_codes = tech_codes[i:j]
-        local_keep_mask, best_lcs_len, best_lib_len = _best_lcs_keep_mask(seg_codes, lib)
-        ratio = (best_lcs_len / best_lib_len) if best_lib_len > 0 else 0.0
-        if best_lcs_len > 0 and ratio >= float(lcs_min_ratio):
-            dropped = 0
-            for off, keep_flag in enumerate(local_keep_mask):
-                if not keep_flag and y[i + off] == 1:
-                    y[i + off] = 0
-                    dropped += 1
-            removed_total += dropped
-        else:
-            removed_total += int(np.sum(y[i:j]))
-            y[i:j] = 0
+    keep_mask, best_lcs_len, best_lib_len = _best_lcs_keep_mask(tech_seq, lib)
+    ratio = (best_lcs_len / best_lib_len) if best_lib_len > 0 else 0.0
 
-    print(f"[SeqFilter-Tech] LCS 匹配完成：移除 {removed_total} 个阳性（未通过库匹配或不在 LCS 主干内）。")
+    if best_lcs_len > 0 and ratio >= float(lcs_min_ratio):
+        dropped = 0
+        for t, keep in enumerate(keep_mask):
+            if not keep:
+                y[int(idx_pos[t])] = 0
+                dropped += 1
+        print(
+            f"[SeqFilter-Tech] 全局 LCS 命中：库长={best_lib_len}, LCS={best_lcs_len}, 比例={ratio:.3f}；移除非主干 {dropped} 个阳性。"
+        )
+    else:
+        removed = int(getattr(idx_pos, "size", 0))
+        y[idx_pos] = 0
+        print(
+            f"[SeqFilter-Tech] 全局 LCS 未达阈值（库长={best_lib_len}, LCS={best_lcs_len}, 比例={ratio:.3f}），清零 {removed} 个阳性。"
+        )
+
     return y
 
 
@@ -1238,15 +1237,14 @@ def run_evaluation(path_map: dict) -> None:
 
     # 二次筛选：仅基于“攻击技术序列库”
     if SEQ_FILTER.get("enable", False):
-        lib: List[List[str]] = []
-        if SEQ_FILTER.get("use_technique", True):
-            lib = _load_technique_sequence_library(SEQ_FILTER.get("library_path"))
+        lib: List[List[str]] = _load_technique_sequence_library(SEQ_FILTER.get("library_path"))
         if len(lib) > 0:
-            # 解耦：先映射，再匹配
-            tech_codes = map_snapshots_to_techniques(mal_snapshots)
-            y_ref = filter_labels_by_tech_lcs(
+            # 解耦：先映射预测阳性 -> 技术序列；再做一次性 LCS 过滤
+            idx_pos, tech_seq = map_pred_positive_to_techniques(pred_labels, mal_snapshots)
+            y_ref = filter_positive_by_tech_lcs(
                 pred_labels,
-                tech_codes,
+                idx_pos,
+                tech_seq,
                 lib,
                 lcs_min_ratio=float(SEQ_FILTER.get("lcs_min_ratio", 0.6)),
             )
