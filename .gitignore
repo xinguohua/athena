@@ -1,8 +1,11 @@
 # Local secrets (do not commit)
 process/local_settings.py
-# 忽略所有 txt 文件
+
+# 忽略所有 txt，但保留技术序列库
 *.txt
-# 忽略所有 pkl 文件
+!technique_sequences.txt
+
+# 忽略所有 pkl / pth 文件
 *.pkl
 *.pth
 
