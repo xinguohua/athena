@@ -2,7 +2,7 @@ import sys
 import textwrap
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Tuple, Optional, List
+from typing import Dict, Tuple, Optional, List, TYPE_CHECKING
 import pickle
 import os
 import numpy as np
@@ -15,6 +15,10 @@ from process.classfy import get_classfy
 # --- 项目模块 ---
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from process.embedders import get_embedder_by_name
+
+# 仅用于类型提示，避免在运行时引入重型依赖
+if TYPE_CHECKING:  # pragma: no cover
+    from process.technique_semantic_mapper import TechniqueSemanticMapper
 
 
 # ========================================================================
@@ -1085,7 +1089,7 @@ def map_pred_positive_to_techniques(
     pred_labels: np.ndarray,
     snapshots: List,
     *,
-    semantic_mapper=None,
+    semantic_mapper: Optional['TechniqueSemanticMapper'] = None,
 ):
     """仅将“预测为恶意(=1)”的快照映射为技术码。
 
@@ -1258,14 +1262,36 @@ def run_evaluation(path_map: dict) -> None:
         sem_mapper = None
         try:
             from process.technique_semantic_mapper import TechniqueSemanticMapper  # type: ignore
-            sem_mapper = TechniqueSemanticMapper(
-                csv_path="data/mitreembed_master_Chroma.csv",
-                persist_dir="./chroma_db",
-                model_name="sentence-transformers/all-MiniLM-L12-v2",
-                page_content_column="Body",
-                code_column="Subject",
-                top_k=5,
-            )
+            import os as _os
+            api_key = _os.environ.get("CHATANYWHERE_API_KEY", "").strip()
+            endpoint = _os.environ.get("CHATANYWHERE_ENDPOINT", "https://api.openai.com/v1/chat/completions").strip()
+
+            if api_key:
+                from process.llm_clients.chatanywhere_client import make_chatanywhere_summarizer  # type: ignore
+                llm_sum = make_chatanywhere_summarizer(api_key=api_key, endpoint=endpoint)
+                sem_mapper = TechniqueSemanticMapper(
+                    csv_path="data/mitreembed_master_Chroma.csv",
+                    persist_dir="./chroma_db",
+                    model_name="sentence-transformers/all-MiniLM-L12-v2",
+                    page_content_column="Body",
+                    code_column="Subject",
+                    top_k=5,
+                    query_mode="summary_text",
+                    summarize="llm",
+                    llm_summarizer=llm_sum,
+                )
+                print("[Map] 已启用 LLM 摘要 (ChatAnywhere)。")
+            else:
+                sem_mapper = TechniqueSemanticMapper(
+                    csv_path="data/mitreembed_master_Chroma.csv",
+                    persist_dir="./chroma_db",
+                    model_name="sentence-transformers/all-MiniLM-L12-v2",
+                    page_content_column="Body",
+                    code_column="Subject",
+                    top_k=5,
+                    query_mode="nodes_json",
+                    summarize=None,
+                )
             print("[Map] TechniqueSemanticMapper 已初始化，将用于预测阳性的语义映射。")
         except Exception as ex:
             print(f"[Map] 语义映射器初始化失败，回退到属性规则映射：{ex}")

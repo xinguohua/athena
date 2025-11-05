@@ -1,3 +1,5 @@
+# Local secrets (do not commit)
+process/local_settings.py
 # 忽略所有 txt 文件
 *.txt
 # 忽略所有 pkl 文件

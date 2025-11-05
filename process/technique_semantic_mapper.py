@@ -10,7 +10,8 @@
 注意：内部使用延迟导入，若依赖缺失，会抛出异常，调用方可捕获并降级。
 """
 from __future__ import annotations
-from typing import List, Tuple, Optional, Any
+from typing import List, Tuple, Optional, Any, Callable
+import json
 
 
 class TechniqueSemanticMapper:
@@ -23,6 +24,11 @@ class TechniqueSemanticMapper:
         page_content_column: str = "Body",
         code_column: str = "Subject",
         top_k: int = 5,
+        # 查询构造/摘要相关
+        query_mode: str = "nodes_json",  # 可选: "nodes_json" | "summary_text"
+        summarize: Optional[str] = None,  # 可选: None | "simple" | "llm"
+        summary_max_nodes: int = 200,
+        llm_summarizer: Optional[Callable[[str], str]] = None,
     ) -> None:
         self.csv_path = csv_path
         self.persist_dir = persist_dir
@@ -30,6 +36,12 @@ class TechniqueSemanticMapper:
         self.page_content_column = page_content_column
         self.code_column = code_column
         self.top_k = int(max(1, top_k))
+
+        # 摘要配置
+        self.query_mode = query_mode
+        self.summarize = summarize  # None/simple/llm
+        self.summary_max_nodes = max(1, int(summary_max_nodes))
+        self.llm_summarizer = llm_summarizer
 
         # 延迟导入与构建
         self._vectordb, self._emb = self._open_or_build()
@@ -73,43 +85,72 @@ class TechniqueSemanticMapper:
     # ------------------------------
     # 快照 -> 查询 文本的简单规则
     # ------------------------------
-    @staticmethod
-    def snapshot_to_query(snapshot) -> str:
-        """从快照构造一个简短的行为描述。尽量通用，避免依赖特定字段。
-
-        策略：
-        - 汇总节点 type_name 计数；
-        - 收集部分节点 name（去重、限制数量）；
-        - 简短模板化输出。
+    def snapshot_to_query(self, snapshot) -> str:
+        """构造查询串：
+        - query_mode = "nodes_json": 返回 {"nodes":[{"type","properties","frequency"}, ...]}
+        - query_mode = "summary_text": 返回聚合文本；可选 simple/llm 摘要
         """
         try:
-            type_count = {}
-            names = []
+            nodes: List[dict] = []
             for v in snapshot.vs:
                 attrs = v.attributes()
-                t = str(attrs.get("type_name", attrs.get("type", "UNKNOWN")))
-                type_count[t] = type_count.get(t, 0) + 1
-                nm = str(attrs.get("name", ""))
-                if nm:
-                    names.append(nm)
-            # 去重并截断
-            uniq_names = []
-            seen = set()
-            for nm in names:
-                if nm not in seen:
-                    uniq_names.append(nm)
-                    seen.add(nm)
-                if len(uniq_names) >= 10:
-                    break
-            parts = [
-                "Snapshot behavior summary:",
-                "Types: " + ", ".join(f"{k}:{v}" for k, v in sorted(type_count.items(), key=lambda x: (-x[1], x[0]))),
-            ]
-            if uniq_names:
-                parts.append("Nodes: " + ", ".join(uniq_names))
-            return "; ".join(parts)
+                t = attrs.get("type") or attrs.get("type_name") or ""
+                props = attrs.get("properties") or ""
+                freq = attrs.get("frequency", "")
+                nodes.append({"type": str(t), "properties": str(props), "frequency": freq})
+
+            if self.query_mode == "summary_text":
+                text = self._nodes_to_text(nodes)
+                if self.summarize == "llm" and self.llm_summarizer:
+                    try:
+                        return str(self.llm_summarizer(text))
+                    except Exception:
+                        # 回退到 simple 文本
+                        return text
+                elif self.summarize == "simple":
+                    return text
+                else:
+                    return text
+
+            # 默认 JSON
+            return json.dumps({"nodes": nodes}, ensure_ascii=False)
         except Exception:
-            return "Snapshot behavior summary: (unavailable)"
+            if self.query_mode == "summary_text":
+                return ""
+            return json.dumps({"nodes": []}, ensure_ascii=False)
+
+    # ------------------------------
+    # 内部：将节点聚合为文本
+    # ------------------------------
+    def _nodes_to_text(self, nodes: List[dict]) -> str:
+        # 限制节点数量，优先频率高者
+        try:
+            def _freq(x: Any) -> int:
+                try:
+                    return int(x)
+                except Exception:
+                    return 0
+
+            nodes_sorted = sorted(nodes, key=lambda d: _freq(d.get("frequency")), reverse=True)
+            nodes_cut = nodes_sorted[: self.summary_max_nodes]
+
+            # 类型计数
+            type_counts = {}
+            for n in nodes_cut:
+                t = n.get("type", "").strip()
+                type_counts[t] = type_counts.get(t, 0) + 1
+
+            header = "Types:" + ", ".join(f"{k}={v}" for k, v in type_counts.items() if k)
+            lines = [header]
+            for n in nodes_cut:
+                t = n.get("type", "")
+                f = n.get("frequency", "")
+                p = n.get("properties", "")
+                lines.append(f"[{t}|freq={f}] {p}")
+            return "\n".join(lines)
+        except Exception:
+            # 最小回退：拼接 properties
+            return "\n".join(str(n.get("properties", "")) for n in nodes[: self.summary_max_nodes])
 
     # ------------------------------
     # 内部：打开或构建 Chroma 向量库
