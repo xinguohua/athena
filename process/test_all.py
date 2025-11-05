@@ -1084,6 +1084,8 @@ def _lcs_indices_keep_mask(a: List[str], b: List[str]) -> Tuple[List[bool], int]
 def map_pred_positive_to_techniques(
     pred_labels: np.ndarray,
     snapshots: List,
+    *,
+    semantic_mapper=None,
 ):
     """仅将“预测为恶意(=1)”的快照映射为技术码。
 
@@ -1094,11 +1096,26 @@ def map_pred_positive_to_techniques(
     y = np.asarray(pred_labels, dtype=int)
     idx_pos = np.where(y == 1)[0]
     tech_seq: List[str] = []
-    for k in idx_pos:
+    if semantic_mapper is not None:
+        # 使用外部注入的语义映射器（独立类）
         try:
-            tech_seq.append(_map_snapshot_to_technique(snapshots[int(k)]))
-        except Exception:
-            tech_seq.append("UNKNOWN")
+            queries = []
+            for k in idx_pos:
+                try:
+                    queries.append(semantic_mapper.snapshot_to_query(snapshots[int(k)]))
+                except Exception:
+                    queries.append("")
+            tech_seq = semantic_mapper.predict_codes(queries)
+        except Exception as ex:
+            print(f"[Map] 语义映射器失败，回退到属性规则：{ex}")
+            tech_seq = []
+
+    if not tech_seq:
+        for k in idx_pos:
+            try:
+                tech_seq.append(_map_snapshot_to_technique(snapshots[int(k)]))
+            except Exception:
+                tech_seq.append("UNKNOWN")
     return idx_pos, tech_seq
 
 
@@ -1237,10 +1254,30 @@ def run_evaluation(path_map: dict) -> None:
 
     # 二次筛选：仅基于“攻击技术序列库”
     if SEQ_FILTER.get("enable", False):
+        # 尝试注入语义映射器（若可用则用于 map 阶段）
+        sem_mapper = None
+        try:
+            from process.technique_semantic_mapper import TechniqueSemanticMapper  # type: ignore
+            sem_mapper = TechniqueSemanticMapper(
+                csv_path="data/mitreembed_master_Chroma.csv",
+                persist_dir="./chroma_db",
+                model_name="sentence-transformers/all-MiniLM-L12-v2",
+                page_content_column="Body",
+                code_column="Subject",
+                top_k=5,
+            )
+            print("[Map] TechniqueSemanticMapper 已初始化，将用于预测阳性的语义映射。")
+        except Exception as ex:
+            print(f"[Map] 语义映射器初始化失败，回退到属性规则映射：{ex}")
+
         lib: List[List[str]] = _load_technique_sequence_library(SEQ_FILTER.get("library_path"))
         if len(lib) > 0:
             # 解耦：先映射预测阳性 -> 技术序列；再做一次性 LCS 过滤
-            idx_pos, tech_seq = map_pred_positive_to_techniques(pred_labels, mal_snapshots)
+            idx_pos, tech_seq = map_pred_positive_to_techniques(
+                pred_labels,
+                mal_snapshots,
+                semantic_mapper=sem_mapper,
+            )
             y_ref = filter_positive_by_tech_lcs(
                 pred_labels,
                 idx_pos,
