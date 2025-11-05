@@ -1274,17 +1274,6 @@ def run_evaluation(path_map: dict) -> None:
     print(f" F1分数: {f1:.4f}")
     print("=" * 50)
 
-    sem_for_log = locals().get("sem_mapper", None)
-    idx_pos_log, tech_seq_log = map_pred_positive_to_techniques(
-        pred_labels_refined,
-        mal_snapshots,
-        semantic_mapper=sem_for_log,
-    )
-    print("\n=== TP 技术列表（片段内索引从 1 开始）===")
-    for i, code in zip(idx_pos_log, tech_seq_log):
-        # i 为片段内 0-based 索引，这里展示 1-based
-        print(f"  快照{i + 1}: {code}")
-
     # 继续输出原有详细调试信息（TP/FP/FN/TN）
     print_debug_info(mal_snapshots, true_labels, pred_labels_refined, 0)
 
