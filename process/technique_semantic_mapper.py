@@ -12,7 +12,17 @@
 from __future__ import annotations
 from typing import List, Tuple, Optional, Any, Callable
 import json
-
+import os
+import pandas as pd
+from langchain_community.vectorstores import Chroma
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.document_loaders import DataFrameLoader
+from langchain_community.chat_models import ChatOpenAI
+from langchain.prompts import PromptTemplate
+from langchain.chains import RetrievalQA
+import chromadb
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 class TechniqueSemanticMapper:
     def __init__(
@@ -24,12 +34,13 @@ class TechniqueSemanticMapper:
         page_content_column: str = "Body",
         code_column: str = "Subject",
         top_k: int = 5,
-        # 查询构造/摘要相关
-        query_mode: str = "nodes_json",  # 可选: "nodes_json" | "summary_text"
-        summarize: Optional[str] = None,  # 可选: None | "simple" | "llm"
+        # 外部不再关心这两个参数
+        query_mode: str = "nodes_json",
+        summarize: Optional[str] = None,
         summary_max_nodes: int = 200,
         llm_summarizer: Optional[Callable[[str], str]] = None,
     ) -> None:
+
         self.csv_path = csv_path
         self.persist_dir = persist_dir
         self.model_name = model_name
@@ -37,13 +48,23 @@ class TechniqueSemanticMapper:
         self.code_column = code_column
         self.top_k = int(max(1, top_k))
 
-        # 摘要配置
-        self.query_mode = query_mode
-        self.summarize = summarize  # None/simple/llm
-        self.summary_max_nodes = max(1, int(summary_max_nodes))
-        self.llm_summarizer = llm_summarizer
+        #  内部自动判断 LLM 是否可用
+        api_key = os.environ.get("CHATANYWHERE_API_KEY", "").strip()
+        if api_key:
+            from process.llm_clients.chatanywhere_client import make_chatanywhere_summarizer
+            endpoint = os.environ.get("CHATANYWHERE_ENDPOINT", "https://api.openai.com/v1/chat/completions").strip()
+            self.llm_summarizer = make_chatanywhere_summarizer(api_key=api_key, endpoint=endpoint)
+            self.summarize = "llm"
+            print("[Map] 自动启用 LLM 摘要（已检测到 API Key）")
+        else:
+            self.llm_summarizer = None
+            self.summarize = None
+            print("[Map] 未检测到 API Key，使用纯本地语义检索模式。")
 
-        # 延迟导入与构建
+        self.summary_max_nodes = max(1, int(summary_max_nodes))
+        self.query_mode = query_mode
+
+        #  构建向量库
         self._vectordb, self._emb = self._open_or_build()
 
     # ------------------------------
@@ -156,11 +177,6 @@ class TechniqueSemanticMapper:
     # 内部：打开或构建 Chroma 向量库
     # ------------------------------
     def _open_or_build(self):
-        import os
-        import pandas as pd  # type: ignore
-        from langchain_community.embeddings import HuggingFaceEmbeddings  # type: ignore
-        from langchain_community.document_loaders import DataFrameLoader  # type: ignore
-        from langchain_community.vectorstores import Chroma  # type: ignore
 
         emb = HuggingFaceEmbeddings(model_name=self.model_name)
 

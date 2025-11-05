@@ -3,7 +3,7 @@ process/local_settings.py
 
 # 忽略所有 txt，但保留技术序列库
 *.txt
-!technique_sequences.txt
+!process/technique_sequences.txt
 
 # 忽略所有 pkl / pth 文件
 *.pkl

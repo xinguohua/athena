@@ -166,14 +166,14 @@ class GCCEmbedderDev(GraphEmbedderBase):
         w2v_epochs: int = 20,
         w2v_pretrained_path: Optional[str] = None,
         # 相似度/权重相关可选参数
-    sim_measure: str = 'wl',            # 'tanimoto' | 'cosine' | 'wl'
+        sim_measure: str = 'wl',            # 'tanimoto' | 'cosine' | 'wl'
         wl_height: int = 2,
         sem_fp_bits: int = 1024,
         use_malicious_snapshots: bool = True,
         use_malicious_negatives: bool = False,
         # WL 引导损失（全局 batch 级别）
-        use_wl_guided: bool = False,
-        wl_guided_weight: float = 0.0,
+        use_wl_guided: bool = True,
+        wl_guided_weight: float = 0.4,
     # 第三个开关：两种策略按比例混合
     combine: bool = False,
     combine_ratio: float = 0.8,

@@ -1256,49 +1256,22 @@ def run_evaluation(path_map: dict) -> None:
     print(f"检测到 {len(diff_vectors)} 个异常快照")
     print(f"预测标签长度: {len(pred_labels)}")
 
-    # 二次筛选：仅基于“攻击技术序列库”
     if SEQ_FILTER.get("enable", False):
-        # 尝试注入语义映射器（若可用则用于 map 阶段）
-        sem_mapper = None
         try:
             from process.technique_semantic_mapper import TechniqueSemanticMapper  # type: ignore
-            import os as _os
-            api_key = _os.environ.get("CHATANYWHERE_API_KEY", "").strip()
-            endpoint = _os.environ.get("CHATANYWHERE_ENDPOINT", "https://api.openai.com/v1/chat/completions").strip()
-
-            if api_key:
-                from process.llm_clients.chatanywhere_client import make_chatanywhere_summarizer  # type: ignore
-                llm_sum = make_chatanywhere_summarizer(api_key=api_key, endpoint=endpoint)
-                sem_mapper = TechniqueSemanticMapper(
-                    csv_path="data/mitreembed_master_Chroma.csv",
-                    persist_dir="./chroma_db",
-                    model_name="sentence-transformers/all-MiniLM-L12-v2",
-                    page_content_column="Body",
-                    code_column="Subject",
-                    top_k=5,
-                    query_mode="summary_text",
-                    summarize="llm",
-                    llm_summarizer=llm_sum,
-                )
-                print("[Map] 已启用 LLM 摘要 (ChatAnywhere)。")
-            else:
-                sem_mapper = TechniqueSemanticMapper(
-                    csv_path="data/mitreembed_master_Chroma.csv",
-                    persist_dir="./chroma_db",
-                    model_name="sentence-transformers/all-MiniLM-L12-v2",
-                    page_content_column="Body",
-                    code_column="Subject",
-                    top_k=5,
-                    query_mode="nodes_json",
-                    summarize=None,
-                )
-            print("[Map] TechniqueSemanticMapper 已初始化，将用于预测阳性的语义映射。")
+            sem_mapper = TechniqueSemanticMapper(
+                csv_path="data/mitreembed_master_Chroma.csv",
+                persist_dir="./chroma_db",
+                model_name="sentence-transformers/all-MiniLM-L12-v2",
+                page_content_column="Body",
+                code_column="Subject",
+                top_k=5,
+            )
         except Exception as ex:
-            print(f"[Map] 语义映射器初始化失败，回退到属性规则映射：{ex}")
-
+            sem_mapper = None
+            print(f"[Map] 语义映射器初始化失败：{ex}")
         lib: List[List[str]] = _load_technique_sequence_library(SEQ_FILTER.get("library_path"))
         if len(lib) > 0:
-            # 解耦：先映射预测阳性 -> 技术序列；再做一次性 LCS 过滤
             idx_pos, tech_seq = map_pred_positive_to_techniques(
                 pred_labels,
                 mal_snapshots,
@@ -1312,10 +1285,10 @@ def run_evaluation(path_map: dict) -> None:
                 lcs_min_ratio=float(SEQ_FILTER.get("lcs_min_ratio", 0.6)),
             )
             removed = int(np.sum(pred_labels) - np.sum(y_ref))
-            print(f"[SeqFilter] 技术序列库筛选：移除 {removed} 个不匹配库的阳性。")
+            print(f"[SeqFilter] 技术序列库筛选：移除 {removed} 个不匹配告警。")
             pred_labels_refined = y_ref.astype(int)
         else:
-            print("[SeqFilter] 未找到技术序列库，已跳过二次筛选。")
+            print("[SeqFilter] 未找到技术序列库，跳过二次筛选。")
             pred_labels_refined = pred_labels
     else:
         pred_labels_refined = pred_labels
