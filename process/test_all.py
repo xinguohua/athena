@@ -1060,9 +1060,6 @@ def map_pred_positive_to_techniques(
     return idx_pos, tech_seq
 
 
-
-
-
 def filter_positive_by_tech_lcs(
     pred_labels: np.ndarray,
     idx_pos: np.ndarray,
@@ -1276,7 +1273,21 @@ def run_evaluation(path_map: dict) -> None:
     print(f" 召回率: {rec:.4f}")
     print(f" F1分数: {f1:.4f}")
     print("=" * 50)
-    print_debug_info(mal_snapshots, true_labels, pred_labels_refined, 0)  # 从索引0开始
+
+    sem_for_log = locals().get("sem_mapper", None)
+    idx_pos_log, tech_seq_log = map_pred_positive_to_techniques(
+        pred_labels_refined,
+        mal_snapshots,
+        semantic_mapper=sem_for_log,
+    )
+    print("\n=== TP 技术列表（片段内索引从 1 开始）===")
+    for i, code in zip(idx_pos_log, tech_seq_log):
+        # i 为片段内 0-based 索引，这里展示 1-based
+        print(f"  快照{i + 1}: {code}")
+
+    # 继续输出原有详细调试信息（TP/FP/FN/TN）
+    print_debug_info(mal_snapshots, true_labels, pred_labels_refined, 0)
+
 
 
 
