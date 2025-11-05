@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import List, Tuple, Optional, Any, Callable
 import json
 import os
+import re
 import pandas as pd
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -34,61 +35,74 @@ class TechniqueSemanticMapper:
         page_content_column: str = "Body",
         code_column: str = "Subject",
         top_k: int = 5,
-        # 外部不再关心这两个参数
         query_mode: str = "nodes_json",
-        summarize: Optional[str] = None,
         summary_max_nodes: int = 200,
-        llm_summarizer: Optional[Callable[[str], str]] = None,
     ) -> None:
 
+        # ======== 最常用配置 ========
         self.csv_path = csv_path
         self.persist_dir = persist_dir
         self.model_name = model_name
         self.page_content_column = page_content_column
         self.code_column = code_column
         self.top_k = int(max(1, top_k))
-
-        #  内部自动判断 LLM 是否可用
-        api_key = os.environ.get("CHATANYWHERE_API_KEY", "").strip()
-        if api_key:
-            from process.llm_clients.chatanywhere_client import make_chatanywhere_summarizer
-            endpoint = os.environ.get("CHATANYWHERE_ENDPOINT", "https://api.openai.com/v1/chat/completions").strip()
-            self.llm_summarizer = make_chatanywhere_summarizer(api_key=api_key, endpoint=endpoint)
-            self.summarize = "llm"
-            print("[Map] 自动启用 LLM 摘要（已检测到 API Key）")
-        else:
-            self.llm_summarizer = None
-            self.summarize = None
-            print("[Map] 未检测到 API Key，使用纯本地语义检索模式。")
-
         self.summary_max_nodes = max(1, int(summary_max_nodes))
-        self.query_mode = query_mode
 
-        #  构建向量库
+        from process.llm_clients.chatanywhere_client import make_chatanywhere_summarizer
+        self.llm_summarizer = make_chatanywhere_summarizer(
+            api_key="sk-doxpoyNwE1kfZtZeYZEwqwd0MyHxYsr5pP8OG3NYcepsbQdM",
+            endpoint="https://api.chatanywhere.org/v1"
+        )
+        self.summarize = "simple"
+
+        # ======== 构建或打开向量库 ========
         self._vectordb, self._emb = self._open_or_build()
 
-    # ------------------------------
-    # 对外 API
-    # ------------------------------
+
     def predict_top(self, query: str) -> Optional[Tuple[str, float, Any]]:
-        """返回 (code, score, document)；score 越小越相似；若失败或无结果返回 None。"""
+        """
+        返回 (mitre_id, score, best_doc)
+        - mitre_id 自动从 metadata['filepath'] 中解析，例如:
+            https://attack.mitre.org/techniques/T1090/001/ → T1090/001
+        - score 越小越相似
+        - best_doc 为向量库文档对象
+        """
         if not query or not query.strip():
             return None
+
+        # 调用 Chroma 检索
         try:
             results = self._vectordb.similarity_search_with_score(query, k=self.top_k)
-        except Exception:
+        except Exception as ex:
+            print(f"[predict_top] similarity_search_with_score failed: {ex}")
             return None
+
         if not results:
             return None
-        # 取最小得分者
+
+        # 找出分值最小(最相似)的文档
         best_doc, best_score = None, None
         for doc, score in results:
-            if best_score is None or float(score) < float(best_score):
-                best_doc, best_score = doc, float(score)
+            try:
+                score = float(score)
+            except Exception:
+                continue
+            if best_score is None or score < best_score:
+                best_doc, best_score = doc, score
+
         if best_doc is None:
             return None
-        code = str(best_doc.metadata.get(self.code_column, "")).strip() or "UNKNOWN"
-        return code, float(best_score), best_doc
+
+        # 从 metadata 中取 filepath
+        filepath = str(best_doc.metadata.get("filepath", "")).strip()
+
+        # 提取 MITRE ID: 允许 T#### / T####/### / T####.###
+        # 例如: T1090/001, T1055, T1547.001
+        import re
+        m = re.search(r"\bT\d{4}(?:[/.]\d{3})?\b", filepath, flags=re.IGNORECASE)
+        mitre_id = m.group(0).replace(".", "/") if m else "UNKNOWN"
+
+        return mitre_id, float(best_score), best_doc
 
     def predict_codes(self, queries: List[str]) -> List[str]:
         """批量查询，返回 code 列（没有则为 UNKNOWN）。"""
@@ -98,11 +112,6 @@ class TechniqueSemanticMapper:
             outs.append(item[0] if item else "UNKNOWN")
         return outs
 
-    def map_snapshots(self, snapshots: List) -> List[str]:
-        """将快照批量映射为 code（默认使用 Subject 列）。"""
-        queries = [self.snapshot_to_query(s) for s in snapshots]
-        return self.predict_codes(queries)
-
     # ------------------------------
     # 快照 -> 查询 文本的简单规则
     # ------------------------------
@@ -111,34 +120,25 @@ class TechniqueSemanticMapper:
         - query_mode = "nodes_json": 返回 {"nodes":[{"type","properties","frequency"}, ...]}
         - query_mode = "summary_text": 返回聚合文本；可选 simple/llm 摘要
         """
-        try:
-            nodes: List[dict] = []
-            for v in snapshot.vs:
-                attrs = v.attributes()
-                t = attrs.get("type") or attrs.get("type_name") or ""
-                props = attrs.get("properties") or ""
-                freq = attrs.get("frequency", "")
-                nodes.append({"type": str(t), "properties": str(props), "frequency": freq})
+        nodes: List[dict] = []
+        for v in snapshot.vs:
+            attrs = v.attributes()
+            t = attrs.get("type") or attrs.get("type_name") or ""
+            props = attrs.get("properties") or ""
+            freq = attrs.get("frequency", "")
+            nodes.append({"type": str(t), "properties": str(props), "frequency": freq})
 
-            if self.query_mode == "summary_text":
-                text = self._nodes_to_text(nodes)
-                if self.summarize == "llm" and self.llm_summarizer:
-                    try:
-                        return str(self.llm_summarizer(text))
-                    except Exception:
-                        # 回退到 simple 文本
-                        return text
-                elif self.summarize == "simple":
-                    return text
-                else:
-                    return text
+        text = self._nodes_to_text(nodes)
+        if self.summarize == "llm" and self.llm_summarizer:
+            try:
+                return str(self.llm_summarizer(text))
+            except Exception:
+                return text
+        elif self.summarize == "simple":
+            return text
+        else:
+            return text
 
-            # 默认 JSON
-            return json.dumps({"nodes": nodes}, ensure_ascii=False)
-        except Exception:
-            if self.query_mode == "summary_text":
-                return ""
-            return json.dumps({"nodes": []}, ensure_ascii=False)
 
     # ------------------------------
     # 内部：将节点聚合为文本

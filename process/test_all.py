@@ -937,62 +937,6 @@ def predict_snapshots(
     return pred_labels, diff_vectors
 
 
-def _map_snapshot_to_technique(snapshot) -> str:
-    """将一个快照映射为“攻击技术码”。
-
-    优先级：
-    1) 图/节点已有显式字段（attack_technique/technique/mitre_technique 等）则直接使用（多数值取众数）。
-    2) 否则根据节点类型粗粒度合成签名码，如 "PROC+FILE+NET"（按字母序拼接去重）。
-    """
-    # 1) 图级属性（若 igraph.Graph 支持）
-    try:
-        for key in ("attack_technique", "technique", "mitre_technique"):
-            if key in snapshot.attributes():  # type: ignore[attr-defined]
-                val = snapshot[key]
-                if isinstance(val, str) and val.strip():
-                    return val.strip().upper()
-    except Exception:
-        pass
-
-    # 2) 节点级显式技术字段（取众数）
-    cand = []
-    try:
-        for v in snapshot.vs:
-            attrs = v.attributes()
-            for key in ("attack_technique", "technique", "mitre_technique"):
-                t = attrs.get(key)
-                if isinstance(t, str) and t.strip():
-                    cand.append(t.strip().upper())
-        if cand:
-            # 众数 / 最多出现者
-            vals, cnts = np.unique(np.array(cand, dtype=object), return_counts=True)
-            return str(vals[int(np.argmax(cnts))])
-    except Exception:
-        pass
-
-    # 3) 粗粒度基于 type_name 的签名
-    coarse = set()
-    try:
-        for v in snapshot.vs:
-            t = str(v.attributes().get("type_name", "UNKNOWN")).upper()
-            if "NET" in t:
-                coarse.add("NET")
-            elif "PROCESS" in t or "PROC" in t or "SUBJECT" in t:
-                coarse.add("PROC")
-            elif "FILE" in t:
-                coarse.add("FILE")
-            elif "REG" in t or "REGISTRY" in t:
-                coarse.add("REG")
-            else:
-                # 保留一个 OTHER 以避免过度细分
-                coarse.add("OTHER")
-        if coarse:
-            return "+".join(sorted(coarse))
-    except Exception:
-        pass
-
-    return "UNKNOWN"
-
 
 def _load_technique_sequence_library(path: Optional[str]) -> List[List[str]]:
     """加载技术序列库。每行一条序列，逗号/空白分隔，支持 # 注释。"""
@@ -1113,13 +1057,6 @@ def map_pred_positive_to_techniques(
         except Exception as ex:
             print(f"[Map] 语义映射器失败，回退到属性规则：{ex}")
             tech_seq = []
-
-    if not tech_seq:
-        for k in idx_pos:
-            try:
-                tech_seq.append(_map_snapshot_to_technique(snapshots[int(k)]))
-            except Exception:
-                tech_seq.append("UNKNOWN")
     return idx_pos, tech_seq
 
 
