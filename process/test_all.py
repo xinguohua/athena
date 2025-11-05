@@ -29,12 +29,19 @@ CLASSIFY_NAME = "topk"
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+# 二次筛选配置（仅基于“攻击技术序列库”）
+SEQ_FILTER = {
+    "enable": True,           # 开关：是否启用二次筛选
+    "use_technique": True,    # 使用“快照→技术”映射 + 库匹配做二次筛选
+    "library_path": "technique_sequences.txt",  # 技术序列库文件（每行一条序列，逗号/空白分隔）
+    "allow_subseq": True,     # （备用开关）允许“连续子序列”匹配；若采用 LCS，这个可以忽略
+    "lcs_min_ratio": 0.6,     # LCS 匹配阈值：LCS_len / len(库内序列) >= 该比例才视为命中
+}
+
 
 # ========================================================================
 # 工具函数
 # ========================================================================
-import numpy as np
-import matplotlib.pyplot as plt
 
 def cosine(a, b, eps=1e-12):
     na = np.linalg.norm(a) + eps
@@ -928,6 +935,214 @@ def predict_snapshots(
     return pred_labels, diff_vectors
 
 
+def _map_snapshot_to_technique(snapshot) -> str:
+    """将一个快照映射为“攻击技术码”。
+
+    优先级：
+    1) 图/节点已有显式字段（attack_technique/technique/mitre_technique 等）则直接使用（多数值取众数）。
+    2) 否则根据节点类型粗粒度合成签名码，如 "PROC+FILE+NET"（按字母序拼接去重）。
+    """
+    # 1) 图级属性（若 igraph.Graph 支持）
+    try:
+        for key in ("attack_technique", "technique", "mitre_technique"):
+            if key in snapshot.attributes():  # type: ignore[attr-defined]
+                val = snapshot[key]
+                if isinstance(val, str) and val.strip():
+                    return val.strip().upper()
+    except Exception:
+        pass
+
+    # 2) 节点级显式技术字段（取众数）
+    cand = []
+    try:
+        for v in snapshot.vs:
+            attrs = v.attributes()
+            for key in ("attack_technique", "technique", "mitre_technique"):
+                t = attrs.get(key)
+                if isinstance(t, str) and t.strip():
+                    cand.append(t.strip().upper())
+        if cand:
+            # 众数 / 最多出现者
+            vals, cnts = np.unique(np.array(cand, dtype=object), return_counts=True)
+            return str(vals[int(np.argmax(cnts))])
+    except Exception:
+        pass
+
+    # 3) 粗粒度基于 type_name 的签名
+    coarse = set()
+    try:
+        for v in snapshot.vs:
+            t = str(v.attributes().get("type_name", "UNKNOWN")).upper()
+            if "NET" in t:
+                coarse.add("NET")
+            elif "PROCESS" in t or "PROC" in t or "SUBJECT" in t:
+                coarse.add("PROC")
+            elif "FILE" in t:
+                coarse.add("FILE")
+            elif "REG" in t or "REGISTRY" in t:
+                coarse.add("REG")
+            else:
+                # 保留一个 OTHER 以避免过度细分
+                coarse.add("OTHER")
+        if coarse:
+            return "+".join(sorted(coarse))
+    except Exception:
+        pass
+
+    return "UNKNOWN"
+
+
+def _load_technique_sequence_library(path: Optional[str]) -> List[List[str]]:
+    """加载技术序列库。每行一条序列，逗号/空白分隔，支持 # 注释。"""
+    if not path:
+        return []
+    p = Path(path)
+    if not p.exists():
+        print(f"[SeqFilter-Tech] 未找到技术序列库文件：{p}，将回退到旧规则。")
+        return []
+    lib: List[List[str]] = []
+    try:
+        with p.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                # 兼容逗号或空白分隔
+                parts = [x for x in line.replace("\t", " ").replace(",", " ").split(" ") if x]
+                if parts:
+                    lib.append(parts)
+    except Exception as ex:
+        print(f"[SeqFilter-Tech] 读取技术序列库失败：{ex}")
+        return []
+    print(f"[SeqFilter-Tech] 已加载技术序列库 {p}：{len(lib)} 条。")
+    return lib
+
+
+def _best_lcs_keep_mask(seq: List[str], lib: List[List[str]]) -> Tuple[List[bool], int, int]:
+    """在库中为 seq 寻找最佳 LCS 匹配。
+
+    返回：
+    - keep_mask: 与 seq 等长的布尔列表，仅 LCS 中的元素为 True（用于保留对应报警快照）
+    - best_lcs_len: 最优 LCS 长度
+    - best_lib_len: 该最优匹配对应的库序列长度（用于计算比例）
+    """
+    best_keep: List[bool] = [False] * len(seq)
+    best_len = 0
+    best_lib_len = 0
+    seq_u = [s.strip().upper() for s in seq]
+
+    for L in lib:
+        L_u = [t.strip().upper() for t in L if t.strip()]
+        if not L_u:
+            continue
+        keep_mask, lcs_len = _lcs_indices_keep_mask(seq_u, L_u)
+        if lcs_len > best_len:
+            best_len = lcs_len
+            best_keep = keep_mask
+            best_lib_len = len(L_u)
+
+    return best_keep, best_len, best_lib_len
+
+
+def _lcs_indices_keep_mask(a: List[str], b: List[str]) -> Tuple[List[bool], int]:
+    """计算 a 与 b 的 LCS，并返回：
+    - keep_mask: 与 a 等长的布尔列表，表示 a 中哪些位置参与了 LCS 匹配
+    - lcs_len: LCS 的长度
+
+    复杂度 O(len(a) * len(b))。
+    """
+    n, m = len(a), len(b)
+    if n == 0 or m == 0:
+        return [False] * n, 0
+    # DP 表与回溯
+    dp = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(1, n + 1):
+        ai = a[i - 1]
+        for j in range(1, m + 1):
+            if ai == b[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + 1
+            else:
+                dp[i][j] = dp[i - 1][j] if dp[i - 1][j] >= dp[i][j - 1] else dp[i][j - 1]
+
+    # 回溯找出 a 中被选中的索引
+    keep = [False] * n
+    i, j = n, m
+    while i > 0 and j > 0:
+        if a[i - 1] == b[j - 1]:
+            keep[i - 1] = True
+            i -= 1
+            j -= 1
+        elif dp[i - 1][j] >= dp[i][j - 1]:
+            i -= 1
+        else:
+            j -= 1
+    return keep, dp[n][m]
+
+
+# =========================
+# 解耦：映射 / 运行段提取 / LCS过滤
+# =========================
+def map_snapshots_to_techniques(snapshots: List) -> List[str]:
+    """批量将快照映射为技术码（与传入列表等长）。"""
+    return [_map_snapshot_to_technique(s) for s in snapshots]
+
+
+def _iter_positive_runs(y: np.ndarray):
+    """生成器：遍历 0/1 序列中的连续 1 段，返回 (i, j) 半开区间。"""
+    n = len(y)
+    i = 0
+    while i < n:
+        if y[i] == 1:
+            j = i
+            while j < n and y[j] == 1:
+                j += 1
+            yield i, j
+            i = j
+        else:
+            i += 1
+
+
+def filter_labels_by_tech_lcs(
+    pred_labels: np.ndarray,
+    tech_codes: List[str],
+    lib: List[List[str]],
+    *,
+    lcs_min_ratio: float = 0.6,
+) -> np.ndarray:
+    """仅基于 LCS 的技术序列匹配来过滤报警。
+
+    - 仅对预测阳性段做处理；
+    - 每个段从 tech_codes 中切片得到段内技术序列；
+    - 与库逐条做 LCS，若 best_len/len(lib_seq) >= 阈值，保留 LCS 主干帧，其余置 0；
+      若所有库序列不达标，整段清零。
+    """
+    if pred_labels is None or len(pred_labels) == 0:
+        return pred_labels
+    y = np.asarray(pred_labels, dtype=int).copy()
+    n = len(y)
+    if not lib or len(tech_codes) != n:
+        return y
+
+    removed_total = 0
+    for i, j in _iter_positive_runs(y):
+        seg_codes = tech_codes[i:j]
+        local_keep_mask, best_lcs_len, best_lib_len = _best_lcs_keep_mask(seg_codes, lib)
+        ratio = (best_lcs_len / best_lib_len) if best_lib_len > 0 else 0.0
+        if best_lcs_len > 0 and ratio >= float(lcs_min_ratio):
+            dropped = 0
+            for off, keep_flag in enumerate(local_keep_mask):
+                if not keep_flag and y[i + off] == 1:
+                    y[i + off] = 0
+                    dropped += 1
+            removed_total += dropped
+        else:
+            removed_total += int(np.sum(y[i:j]))
+            y[i:j] = 0
+
+    print(f"[SeqFilter-Tech] LCS 匹配完成：移除 {removed_total} 个阳性（未通过库匹配或不在 LCS 主干内）。")
+    return y
+
+
 def run_evaluation(path_map: dict) -> None:
     snapshot_file = "snapshot_data.pkl"
     if not os.path.exists(snapshot_file):
@@ -1021,16 +1236,62 @@ def run_evaluation(path_map: dict) -> None:
     print(f"检测到 {len(diff_vectors)} 个异常快照")
     print(f"预测标签长度: {len(pred_labels)}")
 
-    acc = accuracy_score(true_labels, pred_labels)
-    prec = precision_score(true_labels, pred_labels, zero_division=0)
-    rec = recall_score(true_labels, pred_labels, zero_division=0)
-    f1 = f1_score(true_labels, pred_labels, zero_division=0)
-    tp = np.sum((true_labels == 1) & (pred_labels == 1))
-    fp = np.sum((true_labels == 0) & (pred_labels == 1))
-    tn = np.sum((true_labels == 0) & (pred_labels == 0))
-    fn = np.sum((true_labels == 1) & (pred_labels == 0))
+    # 二次筛选：仅基于“攻击技术序列库”
+    if SEQ_FILTER.get("enable", False):
+        lib: List[List[str]] = []
+        if SEQ_FILTER.get("use_technique", True):
+            lib = _load_technique_sequence_library(SEQ_FILTER.get("library_path"))
+        if len(lib) > 0:
+            # 解耦：先映射，再匹配
+            tech_codes = map_snapshots_to_techniques(mal_snapshots)
+            y_ref = filter_labels_by_tech_lcs(
+                pred_labels,
+                tech_codes,
+                lib,
+                lcs_min_ratio=float(SEQ_FILTER.get("lcs_min_ratio", 0.6)),
+            )
+            removed = int(np.sum(pred_labels) - np.sum(y_ref))
+            print(f"[SeqFilter] 技术序列库筛选：移除 {removed} 个不匹配库的阳性。")
+            pred_labels_refined = y_ref.astype(int)
+        else:
+            print("[SeqFilter] 未找到技术序列库，已跳过二次筛选。")
+            pred_labels_refined = pred_labels
+    else:
+        pred_labels_refined = pred_labels
 
-    print("\n=== 评估结果 ===")
+    # 原始与二次筛选后的指标
+    def _metrics(y_true, y_pred):
+        acc = accuracy_score(y_true, y_pred)
+        prec = precision_score(y_true, y_pred, zero_division=0)
+        rec = recall_score(y_true, y_pred, zero_division=0)
+        f1 = f1_score(y_true, y_pred, zero_division=0)
+        tp = int(np.sum((y_true == 1) & (y_pred == 1)))
+        fp = int(np.sum((y_true == 0) & (y_pred == 1)))
+        tn = int(np.sum((y_true == 0) & (y_pred == 0)))
+        fn = int(np.sum((y_true == 1) & (y_pred == 0)))
+        return acc, prec, rec, f1, tp, fp, tn, fn
+
+    acc0, prec0, rec0, f10, tp0, fp0, tn0, fn0 = _metrics(true_labels, pred_labels)
+    acc, prec, rec, f1, tp, fp, tn, fn = _metrics(true_labels, pred_labels_refined)
+
+    # 未筛选的指标
+    print("\n=== 评估结果（未筛选）===")
+    print("\n" + "=" * 50)
+    print(" 快照级别评估结果 (所有快照)")
+    print("=" * 50)
+    print(f" 真阳性 (TP): {tp0}")
+    print(f" 假阳性 (FP): {fp0}")
+    print(f" 真阴性 (TN): {tn0}")
+    print(f" 假阴性 (FN): {fn0}")
+    print("\n 性能评分:")
+    print(f" 准确率: {acc0:.4f}")
+    print(f" 精确率: {prec0:.4f}")
+    print(f" 召回率: {rec0:.4f}")
+    print(f" F1分数: {f10:.4f}")
+    print("=" * 50)
+
+    # 二次筛选后的指标
+    print("\n=== 评估结果（序列二次筛选后）===")
     print("\n" + "=" * 50)
     print(" 快照级别评估结果 (所有快照)")
     print("=" * 50)
@@ -1044,7 +1305,7 @@ def run_evaluation(path_map: dict) -> None:
     print(f" 召回率: {rec:.4f}")
     print(f" F1分数: {f1:.4f}")
     print("=" * 50)
-    print_debug_info(mal_snapshots, true_labels, pred_labels, 0)  # 从索引0开始
+    print_debug_info(mal_snapshots, true_labels, pred_labels_refined, 0)  # 从索引0开始
 
 
 
