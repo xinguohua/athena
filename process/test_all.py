@@ -1035,30 +1035,44 @@ def map_pred_positive_to_techniques(
     *,
     semantic_mapper: Optional['TechniqueSemanticMapper'] = None,
 ):
-    """仅将“预测为恶意(=1)”的快照映射为技术码。
-
+    """
+    将预测为恶意(=1)的快照映射为技术码。
     返回：
-    - idx_pos: np.ndarray[int]，预测为 1 的全局索引（相对于传入 snapshots 的起点）
-    - tech_seq: List[str]，与 idx_pos 等长的技术码序列
+      - idx_pos: np.ndarray[int]
+      - tech_seq: List[str]
     """
     y = np.asarray(pred_labels, dtype=int)
     idx_pos = np.where(y == 1)[0]
+
+    print(f"[Map] 共检测到 {len(idx_pos)} 个阳性快照: {idx_pos.tolist()}")
+
     tech_seq: List[str] = []
+
     if semantic_mapper is not None:
-        # 使用外部注入的语义映射器（独立类）
         try:
             queries = []
             for k in idx_pos:
+                snap = snapshots[int(k)]
                 try:
-                    queries.append(semantic_mapper.snapshot_to_query(snapshots[int(k)]))
+                    q = semantic_mapper.snapshot_to_query(snap)
                 except Exception:
-                    queries.append("")
+                    q = ""
+                queries.append(q)
+
             tech_seq = semantic_mapper.predict_codes(queries)
+
+            # --- 新增日志：映射结果一一打印 ---
+            print("[Map] 预测阳性快照 -> 技术码映射结果：")
+            for index, code in zip(idx_pos.tolist(), tech_seq):
+                print(f"    - snapshot[{index}] → {code}")
+
         except Exception as ex:
             print(f"[Map] 语义映射器失败，回退到属性规则：{ex}")
             tech_seq = []
-    return idx_pos, tech_seq
+    else:
+        print("[Map] 未提供语义映射器，跳过技术码映射。")
 
+    return idx_pos, tech_seq
 
 def filter_positive_by_tech_lcs(
     pred_labels: np.ndarray,
