@@ -33,7 +33,7 @@ CLASSIFY_NAME = "topk"
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # 全局身份（用于选择带身份后缀的快照文件），按需修改
-GLOBAL_ID = "A"
+GLOBAL_ID = "xgh"
 
 # 二次筛选配置（仅基于“攻击技术序列库”）
 SEQ_FILTER = {
