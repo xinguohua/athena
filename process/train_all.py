@@ -73,8 +73,6 @@ def main():
     # 嵌入训练
     snapshot_embeddings = build_embeddings(handler)
 
-    # 训练阶段不再进行 t-SNE 可视化，移动到测试阶段。
-
     # 模型训练
     benign_embeddings = snapshot_embeddings[handler.benign_idx_start:handler.benign_idx_end + 1]
     classify = get_classfy(CLASSIFY_NAME)
