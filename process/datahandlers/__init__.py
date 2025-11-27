@@ -1,3 +1,4 @@
+from typing import Optional
 from .darpa_handler import DARPAHandler
 from .atlas_handler import ATLASHandler
 
@@ -12,7 +13,7 @@ handler_map = {
 }
 
 
-def get_handler(name, train, PATH_MAP, scene_name: str | None = None):
+def get_handler(name, train, PATH_MAP, scene_name: Optional[str] = None):
     """获取指定数据集处理器。
 
     参数:

@@ -12,8 +12,10 @@ from .common import merge_properties, add_node_properties
 from process.partition import detect_communities_with_max
 
 
+from typing import Optional
+
 class DARPAHandler(BaseProcessor):
-    def __init__(self, base_path, train, *, scene_name: str | None = None):
+    def __init__(self, base_path, train, *, scene_name: Optional[str] = None):
         """DARPA 处理器。
 
         参数:
