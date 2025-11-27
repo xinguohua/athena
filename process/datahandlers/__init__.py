@@ -8,16 +8,22 @@ handler_map = {
     "cadets": DARPAHandler,
     "clearscope": DARPAHandler,
     "trace": DARPAHandler,
-    "atlas": ATLASHandler}
+    "atlas": ATLASHandler,
+}
 
 
+def get_handler(name, train, PATH_MAP, scene_name: str | None = None):
+    """获取指定数据集处理器。
 
-def get_handler(name, train, PATH_MAP):
-    cls = handler_map.get(name.lower())
-    base_path = PATH_MAP.get(name)
-    if base_path is None:
-        raise ValueError(f"未配置数据路径: {name}")
-    if cls is None:
-        raise ValueError(f"未知数据集: {name}")
+    参数:
+    - name: 数据集名称 (如 cadets / atlas)
+    - scene_name: 场景过滤 (如 cadets314)。为 None 时加载该数据集下全部场景。
+    """
+    lower_name = name.lower()
+    cls = handler_map.get(lower_name)
+    base_path = PATH_MAP.get(lower_name)
 
-    return cls(base_path, train)
+    if cls is None or base_path is None:
+        raise ValueError(f"未配置数据路径或未知数据集: {name}")
+
+    return cls(base_path, train, scene_name=scene_name)

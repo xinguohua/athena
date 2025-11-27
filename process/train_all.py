@@ -9,7 +9,9 @@ from process.classfy import get_classfy
 # ---------------- 配置参数 ----------------
 CONFIG_PATH = "config.yaml"
 # DATASET_NAME = "atlas"          # 可切换数据集
-DATASET_NAME = "cadets"          # 可切换数据集
+DATASET_NAME = "cadets"          # 可切换数据集 (基础数据集名)
+# 若仅训练/加载特定场景，请在此设置，例如: SCENE_NAME = "cadets314"；为 None 则加载全部
+SCENE_NAME = "cadets314"
 EMBEDDER_NAME = "gcc_dev"    # 嵌入器
 # EMBEDDER_NAME = "gcc"    # 嵌入器
 # EMBEDDER_NAME = "prographer"
@@ -33,8 +35,8 @@ def load_config(path: str) -> dict:
 
 
 def prepare_data(path_map: dict):
-    """加载数据并生成快照"""
-    handler = get_handler(DATASET_NAME, True, path_map)
+    """加载数据并生成快照。内部使用全局 SCENE_NAME 控制场景过滤。"""
+    handler = get_handler(DATASET_NAME, True, path_map, scene_name=SCENE_NAME)
     handler.load()
     handler.build_graph()
     return handler

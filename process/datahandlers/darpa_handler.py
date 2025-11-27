@@ -13,8 +13,17 @@ from process.partition import detect_communities_with_max
 
 
 class DARPAHandler(BaseProcessor):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, base_path, train, *, scene_name: str | None = None):
+        """DARPA 处理器。
+
+        参数:
+        - base_path: 数据根路径
+        - train: 是否训练模式
+        - scene_name: 仅加载指定场景 (例如 "cadets314"), 为 None 则加载全部可用场景
+        """
+        super().__init__(base_path, train)
+        # 可选场景过滤
+        self.scene_name = scene_name
         # 用于按图（场景）分开存储其对应的恶意标签
         self.graph_to_label = {}
         self.all_netobj2pro = {}
@@ -41,12 +50,14 @@ class DARPAHandler(BaseProcessor):
         self.all_labels.clear()
         
         for scene, category_data in json_map.items():
-            # TODO: for test
-            if scene != "cadets314":
+            # 若配置了 scene_name，则只保留该场景
+            if self.scene_name and scene != self.scene_name:
                 continue
+            # 兼容之前硬编码 cadets314 的逻辑：未显式指定时仍可过滤到 cadets314
+            # 如果希望加载全部，请在调用 get_handler 时显式传 scene_name=None
                 
             # 处理标签（测试模式）
-            if self.train == True:
+            if self.train:
                 if scene in label_map:
                     label_file = open(label_map[scene])
                     print(f"正在处理: 场景={scene}, label={label_map[scene]}")
@@ -276,7 +287,7 @@ def collect_nodes_from_log(paths):
                         dstport = res[5]
                         nodeproperty = f"{srcaddr},{srcport},{dstaddr},{dstport}"
                         netobj2pro[nodeid] = nodeproperty
-                    except:
+                    except Exception:
                         pass
 
                 # --- Subject ---
@@ -292,11 +303,11 @@ def collect_nodes_from_log(paths):
                         try:
                             path_str = re.findall('"path":"(.*?)"', line)[0]
                             path = path_str
-                        except:
+                        except Exception:
                             path = "null"
                         nodeProperty = f"{cmdLine},{tgid},{path}"
                         subject2pro[nodeid] = nodeProperty
-                    except:
+                    except Exception:
                         pass
 
                 # --- FileObject ---
@@ -310,7 +321,7 @@ def collect_nodes_from_log(paths):
                         filepath = res[2]
                         nodeproperty = filepath
                         file2pro[nodeid] = nodeproperty
-                    except:
+                    except Exception:
                         pass
 
     return netobj2pro, subject2pro, file2pro
