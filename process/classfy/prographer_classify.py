@@ -188,16 +188,15 @@ class PrographerClassify(BaseClassify):
         print(f"[Save] model -> {cfg.model_save_path}")
         return history
 
-    def predict(self, embeddings: np.ndarray, threshold: float = 0.016) -> Tuple[np.ndarray, Dict]:
+    def predict(self, embeddings: np.ndarray, threshold: float = 0.0048) -> Tuple[np.ndarray, Dict]:
         """
         用训练好的模型预测快照是否异常
         """
         assert self.model is not None, "model 未训练或未加载"
         self.model.eval()
 
-        x    # float = 0.016/0.0022/0.004
-    def predict(self, embeddings: np.ndarray, threshold: float = 0.0048) -> Tuple[np.ndarray, Dict]:
-equence_length_L
+        x = torch.as_tensor(embeddings, dtype=torch.float32, device=self.device)
+        seq_len = self.cfg.sequence_length_L
         pred_labels = np.zeros(len(x), dtype=int)
         diff_vectors, scores = {}, {}
 
@@ -220,9 +219,9 @@ equence_length_L
                     diff_vectors[i] = {
                         "position": i,
                         "error": error,
-                        "diff_vector": (pred - target).cpu().numpy(),
-                        "real_embedding": target.cpu().numpy(),
-                        "pred_embedding": pred.cpu().numpy(),
+                        "diff_vector": (pred - target).detach().cpu().numpy(),
+                        "real_embedding": target.detach().cpu().numpy(),
+                        "pred_embedding": pred.detach().cpu().numpy(),
                     }
         print("\n--- 快照检测结果 ---")
         print("快照索引 | 得分(Error) | 状态")
