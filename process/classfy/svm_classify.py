@@ -52,13 +52,23 @@ class TopKDeviationClassify(BaseClassify):
     - 无阈值超参，只有 k
     """
 
-    def __init__(self, cfg: Optional[TopKDeviationConfig] = None, **kwargs):
-        super().__init__()
+    def __init__(self, cfg: Optional[TopKDeviationConfig] = None, gid: Optional[str] = None, **kwargs):
+        super().__init__(gid=gid)
         self.cfg = cfg or TopKDeviationConfig()
         # 允许动态覆盖配置
         for k, v in kwargs.items():
             if hasattr(self.cfg, k):
                 setattr(self.cfg, k, v)
+        # 若传入 gid，则为默认的 scaler/meta 路径添加身份后缀（除非用户已覆盖）
+        try:
+            if gid:
+                from pathlib import Path as _P
+                sp = _P(self.cfg.scaler_save_path)
+                mp = _P(self.cfg.meta_save_path)
+                self.cfg.scaler_save_path = f"{sp.stem}_{gid}{sp.suffix}"
+                self.cfg.meta_save_path = f"{mp.stem}_{gid}{mp.suffix}"
+        except Exception:
+            pass
 
         # 轻量标准化器（避免额外依赖）
         self.scaler = _NumpyScaler() if self.cfg.use_scaler else None

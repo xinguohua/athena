@@ -67,13 +67,21 @@ class PrographerConfig:
 
 # ========== Trainer 实现 ==========
 class PrographerClassify(BaseClassify):
-    def __init__(self, cfg: Optional[PrographerConfig] = None, **kwargs):
-        super().__init__()
+    def __init__(self, cfg: Optional[PrographerConfig] = None, gid: Optional[str] = None, **kwargs):
+        super().__init__(gid=gid)
         self.cfg = cfg or PrographerConfig()
         # 允许动态覆盖配置
         for k, v in kwargs.items():
             if hasattr(self.cfg, k):
                 setattr(self.cfg, k, v)
+        # 若传入 gid，则自动为模型保存路径添加后缀
+        try:
+            if gid and isinstance(self.cfg.model_save_path, str) and self.cfg.model_save_path:
+                from pathlib import Path as _Path
+                p = _Path(self.cfg.model_save_path)
+                self.cfg.model_save_path = f"{p.stem}_{gid}{p.suffix}"
+        except Exception:
+            pass
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def _build_model(self) -> nn.Module:
@@ -94,7 +102,7 @@ class PrographerClassify(BaseClassify):
         if T < L:
             pad_len = L - T
             padded = torch.cat([x, torch.full((pad_len, D), pad_value, device=x.device)], dim=0)
-            return padded.unsqueeze(0), x[-1].unsqueeze(0)
+            return padded.unsqueeze(0), x[-1:].unsqueeze(0)
 
         seqs, tars = [], []
         for i in range(T - L + 1):
@@ -137,8 +145,6 @@ class PrographerClassify(BaseClassify):
                 with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
                     pred = self.model(xb)
                     loss = criterion(pred, yb)
-                    # print(f"DEBUG SHAPES (train) xb={tuple(xb.shape)} pred={tuple(pred.shape)} yb={tuple(yb.shape)}")
-
                 scaler.scale(loss).backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), cfg.grad_clip_norm)
                 scaler.step(optimizer)
@@ -154,8 +160,6 @@ class PrographerClassify(BaseClassify):
                     xb, yb = xb.to(self.device), yb.to(self.device)
                     pred = self.model(xb)
                     vtotal += criterion(pred, yb).item() * xb.size(0)
-                    # print(f"DEBUG SHAPES (val) xb={tuple(xb.shape)} pred={tuple(pred.shape)} yb={tuple(yb.shape)}")
-
             val_loss = vtotal / len(val_x)
             scheduler.step(val_loss)
 
@@ -184,16 +188,16 @@ class PrographerClassify(BaseClassify):
         print(f"[Save] model -> {cfg.model_save_path}")
         return history
 
-    # float = 0.016/0.0022/0.004
-    def predict(self, embeddings: np.ndarray, threshold: float = 0.0048) -> Tuple[np.ndarray, Dict]:
+    def predict(self, embeddings: np.ndarray, threshold: float = 0.016) -> Tuple[np.ndarray, Dict]:
         """
         用训练好的模型预测快照是否异常
         """
         assert self.model is not None, "model 未训练或未加载"
         self.model.eval()
 
-        x = torch.as_tensor(embeddings, dtype=torch.float32, device=self.device)
-        seq_len = self.cfg.sequence_length_L
+        x    # float = 0.016/0.0022/0.004
+    def predict(self, embeddings: np.ndarray, threshold: float = 0.0048) -> Tuple[np.ndarray, Dict]:
+equence_length_L
         pred_labels = np.zeros(len(x), dtype=int)
         diff_vectors, scores = {}, {}
 

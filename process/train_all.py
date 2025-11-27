@@ -1,4 +1,5 @@
 import platform
+import os
 import torch
 import yaml
 
@@ -23,6 +24,9 @@ CLASSIFY_NAME = "topk"     # 训练器
 # CLASSIFY_NAME = "unicorn"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# 全局身份（用于区分不同人的训练产物），用于拼接输出文件名
+GLOBAL_ID = "xgh"  # 按需修改，例如 "B"、"alice"、"ci-001"
+
 
 
 
@@ -38,19 +42,31 @@ def prepare_data(path_map: dict):
     """加载数据并生成快照。内部使用全局 SCENE_NAME 控制场景过滤。"""
     handler = get_handler(DATASET_NAME, True, path_map, scene_name=SCENE_NAME)
     handler.load()
-    handler.build_graph()
+    handler.build_graph(GLOBAL_ID)
     return handler
 
 
 def build_embeddings(handler):
     """构建并训练嵌入器，仅使用良性快照训练"""
     embedder_cls = get_embedder_by_name(EMBEDDER_NAME)
+    # 统一：为嵌入器模型文件添加身份后缀，避免多人混用
+    # 若类提供 _default_path，则基于该默认名拼接后缀；否则使用通用名
+    from pathlib import Path
+    default_model_name = getattr(embedder_cls, "_default_path", "embedder_model.pth")
+    _p = Path(default_model_name)
+    embedder_model_path = f"{_p.stem}_{GLOBAL_ID}{_p.suffix}"
+
     if EMBEDDER_NAME.lower() == "roland":
         benign_range = range(handler.benign_idx_start, handler.benign_idx_end + 1)
         print(f"[Train] 仅使用良性快照训练编码器: {handler.benign_idx_start}~{handler.benign_idx_end}")
-        embedder = embedder_cls(handler.snapshots, train_indices=benign_range)
+        embedder = embedder_cls(handler.snapshots, train_indices=benign_range, model_path=embedder_model_path)
     else:
-        embedder = embedder_cls(handler.snapshots)
+        # 对于支持 model_path 的编码器类（如 GCC/GCC-Dev/Prographer），传入带身份后缀的保存路径
+        try:
+            embedder = embedder_cls(handler.snapshots, model_path=embedder_model_path)
+        except TypeError:
+            # 某些编码器可能不接受 model_path 参数，则退回不传该参数
+            embedder = embedder_cls(handler.snapshots)
     embedder.train()
     snapshot_embeddings = embedder.get_snapshot_embeddings()
     # 统计恶意节点偏离（仅当快照中存在恶意节点时会输出/写日志）
@@ -77,7 +93,17 @@ def main():
 
     # 模型训练
     benign_embeddings = snapshot_embeddings[handler.benign_idx_start:handler.benign_idx_end + 1]
-    classify = get_classfy(CLASSIFY_NAME)
+    # 为分类器持久化文件添加身份后缀（按类型区分）
+    cls_name = CLASSIFY_NAME.lower()
+    if cls_name in ("topk", "topk_deviation", "svm"):
+        scaler_path = f"topk_scaler_{GLOBAL_ID}.pkl"
+        meta_path = f"topk_meta_{GLOBAL_ID}.pkl"
+        classify = get_classfy(CLASSIFY_NAME, scaler_save_path=scaler_path, meta_save_path=meta_path)
+    elif cls_name == "prographer":
+        prog_model_path = f"prographer_detector_{GLOBAL_ID}.pth"
+        classify = get_classfy(CLASSIFY_NAME, model_save_path=prog_model_path)
+    else:
+        classify = get_classfy(CLASSIFY_NAME)
     classify.train(benign_embeddings)
 
 if __name__ == "__main__":

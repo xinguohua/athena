@@ -1,9 +1,12 @@
 from abc import ABC, abstractmethod
+from typing import Optional
 import torch
 
 class BaseClassify(ABC):
-    def __init__(self):
+    def __init__(self, gid: Optional[str] = None):
         self.model = None
+        # 身份后缀（用于持久化文件名区分不同用户/运行）
+        self.gid: Optional[str] = gid
 
 
     @abstractmethod
@@ -30,3 +33,15 @@ class BaseClassify(ABC):
 
     def load(self):
         pass
+
+    # 工具：为文件名添加身份后缀（"name.ext" -> "name_<gid>.ext"）。
+    # 若未提供 gid 或路径无后缀，保持原样。
+    def with_gid_suffix(self, path: str) -> str:
+        try:
+            if not path or not isinstance(path, str) or not self.gid:
+                return path
+            from pathlib import Path
+            p = Path(path)
+            return f"{p.stem}_{self.gid}{p.suffix}"
+        except Exception:
+            return path

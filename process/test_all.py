@@ -32,6 +32,8 @@ CLASSIFY_NAME = "topk"
 # CLASSIFY_NAME = "unicorn"
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# 全局身份（用于选择带身份后缀的快照文件），按需修改
+GLOBAL_ID = "A"
 
 # 二次筛选配置（仅基于“攻击技术序列库”）
 SEQ_FILTER = {
@@ -929,9 +931,20 @@ def predict_snapshots(
     snapshot_embeddings: np.ndarray,
 ) -> Tuple[np.ndarray, Dict]:
     """预测快照异常标签"""
-
-    classify = get_classfy(CLASSIFY_NAME)
-    classify.load()
+    # 使用带身份后缀的分类器持久化文件（按类型区分）
+    cls_name = CLASSIFY_NAME.lower()
+    if cls_name in ("topk", "topk_deviation", "svm"):
+        scaler_path = f"topk_scaler_{GLOBAL_ID}.pkl"
+        meta_path = f"topk_meta_{GLOBAL_ID}.pkl"
+        classify = get_classfy(CLASSIFY_NAME, scaler_save_path=scaler_path, meta_save_path=meta_path)
+        classify.load()
+    elif cls_name == "prographer":
+        prog_model_path = f"prographer_detector_{GLOBAL_ID}.pth"
+        classify = get_classfy(CLASSIFY_NAME, model_save_path=prog_model_path)
+        classify.load(path=prog_model_path)
+    else:
+        classify = get_classfy(CLASSIFY_NAME)
+        classify.load()
     pred_labels, diff_vectors  = classify.predict(snapshot_embeddings)
 
     return pred_labels, diff_vectors
@@ -1112,12 +1125,13 @@ def filter_positive_by_tech_lcs(
 
 
 def run_evaluation(path_map: dict) -> None:
-    snapshot_file = "snapshot_data.pkl"
+    # 仅使用带身份后缀的快照文件，不做回退
+    snapshot_file = f"snapshot_data_{GLOBAL_ID}.pkl"
     if not os.path.exists(snapshot_file):
-        print(f"❌ 错误：快照数据文件不存在: {snapshot_file}")
-        print("请先运行 train_darpa.py 来生成快照数据")
+        print(f"❌ 未找到: {snapshot_file}，请先运行 train_all.py 生成快照数据")
         return
 
+    print(f"[Meta] 使用快照文件: {snapshot_file}")
     with open(snapshot_file, 'rb') as f:
         snapshot_data = pickle.load(f)
 
@@ -1147,7 +1161,15 @@ def run_evaluation(path_map: dict) -> None:
     print(f"  - 真实标签: {true_labels.tolist()}")
 
     embedder_cls = get_embedder_by_name(EMBEDDER_NAME)
-    embedder = embedder_cls.load(snapshot_sequence=all_snapshots)
+    # 使用带身份后缀的编码器模型文件
+    try:
+        from pathlib import Path as _Path
+        _default_model = getattr(embedder_cls, "_default_path", "embedder_model.pth")
+        _p = _Path(_default_model)
+        embedder_model_path = f"{_p.stem}_{GLOBAL_ID}{_p.suffix}"
+        embedder = embedder_cls.load(snapshot_sequence=all_snapshots, path=embedder_model_path)
+    except Exception:
+        embedder = embedder_cls.load(snapshot_sequence=all_snapshots)
     snapshot_embeddings = embedder.get_snapshot_embeddings()
     # 统计恶意节点偏离（仅当快照中存在恶意节点时会输出/写日志）
     try:

@@ -31,7 +31,7 @@ class BaseProcessor(ABC):
         pass
 
 
-    def build_graph(self):
+    def build_graph(self, gid=None):
         self.snapshots = []
         # 良性
         print("===============构建良性图并检测社区=============")
@@ -51,7 +51,9 @@ class BaseProcessor(ABC):
         print(f"良性快照索引范围: {self.benign_idx_start} 到 {self.benign_idx_end}")
         print(f"恶意快照索引范围: {self.malicious_idx_start} 到 {self.malicious_idx_end}")
 
-        with open("all_snapshots.txt", "w", encoding="utf-8") as f:
+        # 输出报告文件名：若提供身份 gid，则拼接到文件名
+        report_file = f"all_snapshots_{gid}.txt" if gid else "all_snapshots.txt"
+        with open(report_file, "w", encoding="utf-8") as f:
             for i, g in enumerate(self.snapshots):
                 f.write(f"Community {i}:\n")
                 for v in g.vs:
@@ -59,7 +61,7 @@ class BaseProcessor(ABC):
                     attr_str = ", ".join([f"{k}={v[k]}" for k in attrs])
                     f.write(f"  Vertex {v.index}: {attr_str}\n")
                 f.write("\n")
-            print(f"all_snapshots.txt write completed ")  # 打印进度
+            print(f"{report_file} write completed ")  # 打印进度
 
         snapshot_data = {
             'all_snapshots': self.snapshots,
@@ -68,7 +70,8 @@ class BaseProcessor(ABC):
             'malicious_idx_start': self.malicious_idx_start,
             'malicious_idx_end': self.malicious_idx_end,
         }
-        snapshot_file = "snapshot_data.pkl"
+        # 快照数据文件名：追加身份后缀（若有）
+        snapshot_file = f"snapshot_data_{gid}.pkl" if gid else "snapshot_data.pkl"
         with open(snapshot_file, 'wb') as f:
             pickle.dump(snapshot_data, f)
         print(f"快照数据已保存到: {snapshot_file}")
