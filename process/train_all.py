@@ -93,17 +93,8 @@ def main():
 
     # 模型训练
     benign_embeddings = snapshot_embeddings[handler.benign_idx_start:handler.benign_idx_end + 1]
-    # 为分类器持久化文件添加身份后缀（按类型区分）
-    cls_name = CLASSIFY_NAME.lower()
-    if cls_name in ("topk", "topk_deviation", "svm"):
-        scaler_path = f"topk_scaler_{GLOBAL_ID}.pkl"
-        meta_path = f"topk_meta_{GLOBAL_ID}.pkl"
-        classify = get_classfy(CLASSIFY_NAME, scaler_save_path=scaler_path, meta_save_path=meta_path)
-    elif cls_name == "prographer":
-        prog_model_path = f"prographer_detector_{GLOBAL_ID}.pth"
-        classify = get_classfy(CLASSIFY_NAME, model_save_path=prog_model_path)
-    else:
-        classify = get_classfy(CLASSIFY_NAME)
+    # 统一：将 gid 传入分类器，内部自行拼接/处理持久化路径
+    classify = get_classfy(CLASSIFY_NAME, gid=GLOBAL_ID)
     classify.train(benign_embeddings)
 
 if __name__ == "__main__":
