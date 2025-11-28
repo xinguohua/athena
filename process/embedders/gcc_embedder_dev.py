@@ -19,7 +19,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
- 
 
 try:
     from tqdm import tqdm as _tqdm
@@ -129,66 +128,66 @@ class GCCEmbedderDev(GraphEmbedderBase):
     _default_path = 'gcc_encoder_dev.pth'
 
     def __init__(
-        self,
-        snapshots,
-        features=None,
-        mapp=None,
-        # 是否使用时序记忆（TemporalPerLayer）
-        use_temporal: bool = False,
-        # 输入/编码器尺寸
-        prop_feat_dim: int = 128,
-        enc_hidden_dim: int = 128,
-        enc_out_dim: int = 256,
-        gin_layers: int = 3,
-        dropout: float = 0.1,
-        # 训练
-        num_epochs: int = 3,
-        batch_size: int = 64,
-        lr: float = 1e-3,
-        # 对比学习
-        temperature: float = 0.07,
-        # 子图采样
-        r_hop: int = 2,
-        ego_max_nodes: int = 64,
-        # 增强
-        drop_edge_p: float = 0.2,
-        feat_mask_p: float = 0.2,
-        # 训练集选择
-        train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
-        model_path: Optional[str] = None,
-        # 异常活跃驱动损失参数（仅频率异常）
-        anomaly_alpha: float = 1,      # 加权强度，>0 表示异常越大权重越大
-        # 是否使用样本权重（基于频率/异常强度），关闭时统一使用均匀权重
-        use_sample_weights: bool = True,
-        w2v_window: int = 5,
-        w2v_min_count: int = 1,
-        w2v_sg: int = 1,
-        w2v_epochs: int = 20,
-        w2v_pretrained_path: Optional[str] = None,
-        # 相似度/权重相关可选参数
-        sim_measure: str = 'wl',            # 'tanimoto' | 'cosine' | 'wl'
-        wl_height: int = 2,
-        sem_fp_bits: int = 1024,
-        use_malicious_snapshots: bool = True,
-        use_malicious_negatives: bool = False,
-        # WL 引导损失（全局 batch 级别）
-        use_wl_guided: bool = True,
-        wl_guided_weight: float = 0.4,
-    # 第三个开关：两种策略按比例混合
-    combine: bool = False,
-    combine_ratio: float = 0.8,
-        mal_neg_ratio: float = 0.3,
-    mal_neg_node_token_len: int = 1,
-        mal_stopwords=None,
+            self,
+            snapshots,
+            features=None,
+            mapp=None,
+            # 是否使用时序记忆（TemporalPerLayer）
+            use_temporal: bool = False,
+            # 输入/编码器尺寸
+            prop_feat_dim: int = 128,
+            enc_hidden_dim: int = 128,
+            enc_out_dim: int = 256,
+            gin_layers: int = 3,
+            dropout: float = 0.1,
+            # 训练
+            num_epochs: int = 3,
+            batch_size: int = 64,
+            lr: float = 1e-3,
+            # 对比学习
+            temperature: float = 0.07,
+            # 子图采样
+            r_hop: int = 2,
+            ego_max_nodes: int = 64,
+            # 增强
+            drop_edge_p: float = 0.2,
+            feat_mask_p: float = 0.2,
+            # 训练集选择
+            train_indices: Optional[Union[Iterable[int], Tuple[int, int], int]] = None,
+            model_path: Optional[str] = None,
+            # 异常活跃驱动损失参数（仅频率异常）
+            anomaly_alpha: float = 1,  # 加权强度，>0 表示异常越大权重越大
+            # 是否使用样本权重（基于频率/异常强度），关闭时统一使用均匀权重
+            use_sample_weights: bool = True,
+            w2v_window: int = 5,
+            w2v_min_count: int = 1,
+            w2v_sg: int = 1,
+            w2v_epochs: int = 20,
+            w2v_pretrained_path: Optional[str] = None,
+            # 相似度/权重相关可选参数
+            sim_measure: str = 'wl',  # 'tanimoto' | 'cosine' | 'wl'
+            wl_height: int = 2,
+            sem_fp_bits: int = 1024,
+            use_malicious_snapshots: bool = True,
+            use_malicious_negatives: bool = False,
+            # WL 引导损失（全局 batch 级别）
+            use_wl_guided: bool = True,
+            wl_guided_weight: float = 0.4,
+            # 第三个开关：两种策略按比例混合
+            combine: bool = False,
+            combine_ratio: float = 0.8,
+            mal_neg_ratio: float = 0.3,
+            mal_neg_node_token_len: int = 1,
+            mal_stopwords=None,
             # [
             # 'event', 'read', 'write'
             # , 'execute'
             # ],
             # 恶意token停用词列表，传入[]表示不过滤
-    mal_print_tokens: bool = True,  # 是否打印恶意token统计信息
-    # Top-K 相似（可选，先关闭）
-    topk_pos: Optional[int] = 0,   # 先关闭 Top-K 扩增，回到经典 NT-Xent
-        topk_pos_min_sim: float = 0.5, # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
+            mal_print_tokens: bool = True,  # 是否打印恶意token统计信息
+            # Top-K 相似（可选，先关闭）
+            topk_pos: Optional[int] = 0,  # 先关闭 Top-K 扩增，回到经典 NT-Xent
+            topk_pos_min_sim: float = 0.5,  # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
     ):
         super().__init__(snapshots, features, mapp)
         if mal_stopwords is None:
@@ -246,7 +245,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.mal_neg_ratio = float(mal_neg_ratio)  # 每个子图中替换为恶意向量的节点比例
         self.mal_neg_node_token_len = int(mal_neg_node_token_len)  # 生成恶意向量时采样的恶意节点数
         self.mal_use_type_group = False
-        
+
         # 恶意token停用词：直接使用传入的列表转为set（[]表示不过滤）
         # 归一化停用词：容忍嵌套(list/tuple/set)并转为扁平字符串集合，避免出现 list 内嵌 list 导致 set() 报错
         def _flatten_to_str_set(obj):
@@ -289,7 +288,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
         # 编码器 + 投影头（对比用）
         in_dim = self.prop_feat_dim if self.prop_feat_dim > 0 else 1
-        self.encoder = GINEncoder(in_dim, self.enc_hidden_dim, self.enc_out_dim, num_layers=self.gin_layers, dropout=self.dropout).to(self.device)
+        self.encoder = GINEncoder(in_dim, self.enc_hidden_dim, self.enc_out_dim, num_layers=self.gin_layers,
+                                  dropout=self.dropout).to(self.device)
         self.proj_head = nn.Sequential(
             nn.Linear(self.enc_out_dim, self.enc_out_dim),
             nn.ReLU(),
@@ -451,8 +451,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
             Z_neg_blocks = []
             freq_weights_neg = torch.zeros(Bc, device=device)
 
-            has_ego = bool(getattr(self, 'use_malicious_snapshots', False) and hasattr(self, '_mal_ego_pool') and len(self._mal_ego_pool) > 0)
-            has_tok = bool(getattr(self, 'use_malicious_negatives', False) and hasattr(self, 'malicious_node_tokens') and len(self.malicious_node_tokens) > 0 and hasattr(self, '_ego_cache') and len(self._ego_cache) > 0)
+            has_ego = bool(getattr(self, 'use_malicious_snapshots', False) and hasattr(self, '_mal_ego_pool') and len(
+                self._mal_ego_pool) > 0)
+            has_tok = bool(
+                getattr(self, 'use_malicious_negatives', False) and hasattr(self, 'malicious_node_tokens') and len(
+                    self.malicious_node_tokens) > 0 and hasattr(self, '_ego_cache') and len(self._ego_cache) > 0)
 
             if self.combine and has_ego and has_tok:
                 blocks_ego, w_ego = self._build_neg_block_from_snapshots(Bc, device=device)
@@ -551,7 +554,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
             self._ego_cache.append((subs, x_list, e_list, freq_weights))
 
         return total_loss / max(1, total_steps)
-
 
     # ---------- 恶意 tokens 支持（用于负样本） ----------
     def _precollect_malicious_tokens(self, save_path: str = "malicious_tokens_log.txt"):
@@ -811,12 +813,14 @@ class GCCEmbedderDev(GraphEmbedderBase):
             [gi for gi, n in enumerate(node_counts) for _ in range(n)],
             device=device
         )
-        X_neg = torch.cat([xi for xi in x_list if xi.numel() > 0], dim=0) if any(n > 0 for n in node_counts) else torch.zeros((0, self.prop_feat_dim), device=device)
+        X_neg = torch.cat([xi for xi in x_list if xi.numel() > 0], dim=0) if any(
+            n > 0 for n in node_counts) else torch.zeros((0, self.prop_feat_dim), device=device)
 
         # 两次增强与编码，得到两视角负样本块
         Z_blocks: List[torch.Tensor] = []
         for _ in range(2):
-            e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in zip(e_list, offsets_neg)] if any(n > 0 for n in node_counts) else []
+            e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in zip(e_list, offsets_neg)] if any(
+                n > 0 for n in node_counts) else []
             EN = torch.cat(e_cols, dim=1) if e_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
             XN = self._augment_features(X_neg, self.feat_mask_p)
             ZN_layers = self.encoder(XN, EN, return_all=True)
@@ -932,7 +936,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
         print(f"[✅ 已将采样统计附加保存到]: {save_path}")
 
-
     def _collect_subgraph_tokens(self, sub, max_tokens: int = 512) -> List[str]:
         """收集子图的领域 tokens（基于节点 properties），限制总量。
         当前实现：合并所有节点的 properties 分词。
@@ -980,7 +983,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         neighbors_info: List[List[Tuple[str, str, int]]] = [[] for _ in range(n)]
         for e in sub.es:
             u = e.source  # 获取起点 ID
-            v= e.target  # 获取终点 ID
+            v = e.target  # 获取终点 ID
             etype = e['actions']
             neighbors_info[u].append(('out', etype, v))
             neighbors_info[v].append(('in', etype, u))
@@ -1197,7 +1200,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
     #     print(f"[GCC-Dev] Snapshot embeddings (Multiplicative Freq+Deviation Attention): {arr.shape}")
     #     return arr
 
-
     # 硬过滤/不归一化
     # def get_snapshot_embeddings(self, snapshot_sequence=None):
     #     """
@@ -1313,7 +1315,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
     #     arr = np.vstack(result).astype(np.float32) if result else np.zeros((0, self.enc_out_dim), dtype=np.float32)
     #     print(f"[GCC-Dev] Snapshot embeddings (偏离筛选聚合, 无权中心): {arr.shape}")
     #     return arr
-
 
     # 最正宗的
     def get_snapshot_embeddings(self, snapshot_sequence=None):
@@ -1680,14 +1681,14 @@ class GCCEmbedderDev(GraphEmbedderBase):
         raw_params = dict(state.get('params', {}))
         allowed = {
             'use_temporal',
-            'prop_feat_dim','enc_hidden_dim','enc_out_dim','gin_layers','dropout',
-            'num_epochs','batch_size','lr','temperature',
-            'r_hop','ego_max_nodes','drop_edge_p','feat_mask_p','train_indices','model_path',
-            'anomaly_alpha','use_sample_weights',
+            'prop_feat_dim', 'enc_hidden_dim', 'enc_out_dim', 'gin_layers', 'dropout',
+            'num_epochs', 'batch_size', 'lr', 'temperature',
+            'r_hop', 'ego_max_nodes', 'drop_edge_p', 'feat_mask_p', 'train_indices', 'model_path',
+            'anomaly_alpha', 'use_sample_weights',
             # W2V 配置
-            'w2v_window','w2v_min_count','w2v_sg','w2v_epochs','w2v_pretrained_path',
+            'w2v_window', 'w2v_min_count', 'w2v_sg', 'w2v_epochs', 'w2v_pretrained_path',
             # 恶意Token配置
-            'mal_stopwords','mal_print_tokens'
+            'mal_stopwords', 'mal_print_tokens'
         }
         params = {k: v for k, v in raw_params.items() if k in allowed}
         inst = cls(snapshot_sequence, **params)
@@ -1829,7 +1830,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     print("[GCC-Dev] 已加载预训练 Word2Vec 模型。")
                     return
                 else:
-                    print(f"[GCC-Dev] 预训练向量维度({vec_dim}) != prop_feat_dim({self.prop_feat_dim})，将改为自训练以匹配维度。")
+                    print(
+                        f"[GCC-Dev] 预训练向量维度({vec_dim}) != prop_feat_dim({self.prop_feat_dim})，将改为自训练以匹配维度。")
                     self._w2v_model = None
             except Exception as e:
                 print(f"[GCC-Dev] 加载预训练 Word2Vec 失败：{e}，将尝试自训练。")
@@ -1837,7 +1839,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         corpus = self._collect_w2v_corpus()
         if not corpus:
             raise RuntimeError("[GCC-Dev] W2V 语料为空，无法构建 Word2Vec 特征。")
-        print(f"[GCC-Dev] 正在训练word2vec | 语料={len(corpus)} | dim={int(self.prop_feat_dim)} | window={int(self.w2v_window)} | min_count={int(self.w2v_min_count)} | sg={int(self.w2v_sg)} | epochs={int(self.w2v_epochs)}")
+        print(
+            f"[GCC-Dev] 正在训练word2vec | 语料={len(corpus)} | dim={int(self.prop_feat_dim)} | window={int(self.w2v_window)} | min_count={int(self.w2v_min_count)} | sg={int(self.w2v_sg)} | epochs={int(self.w2v_epochs)}")
         self._w2v_model = Word2Vec(
             sentences=corpus,
             vector_size=int(self.prop_feat_dim),
@@ -1918,7 +1921,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         mask = (torch.rand_like(x) < mask_p).float()
         return x * (1.0 - mask)
 
-    def _nt_xent_loss(self, Z: torch.Tensor, temperature: float, sample_weights: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def _nt_xent_loss(self, Z: torch.Tensor, temperature: float,
+                      sample_weights: Optional[torch.Tensor] = None) -> torch.Tensor:
         # Z: [2N, D], 每相邻两行构成一对正样本 (x1, x2)
         Z = F.normalize(Z, dim=-1)
         sim = torch.mm(Z, Z.t()) / temperature  # [2N,2N]
@@ -1973,4 +1977,3 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 self.snapshot_node_embeddings.append(emb_dict)
         mode = 'temporal' if use_temporal else 'static'
         print(f"[GCC-Dev] Generated {mode} node embeddings: {len(self.snapshot_node_embeddings)} snapshots")
-
