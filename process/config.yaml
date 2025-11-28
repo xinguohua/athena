@@ -16,6 +16,6 @@ remote:
   path_map:
     theia: "/mnt/bigdata/aptdata/data_files/theia"
     cadets: "/mnt/bigdata/aptdata/data_files/cadets"
-    clearscope: "/home/nsas2020/fuzz/Flash-IDS/data_files/clearscope"
-    trace: "/home/nsas2020/fuzz/Flash-IDS/data_files/trace"
+    clearscope: "/mnt/bigdata/aptdata/data_files/clearscope"
+    trace: "/mnt/bigdata/aptdata/data_files/trace"
     atlas: "/mnt/bigdata/aptdata/atlas_data"

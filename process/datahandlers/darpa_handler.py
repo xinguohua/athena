@@ -147,7 +147,8 @@ class DARPAHandler(BaseProcessor):
                     print(f"警告：创建快照时出错: {e}")
 
         elif mode == "time":
-            window = pd.Timedelta(minutes=1)
+            window = pd.Timedelta(minutes=5)
+            # window = pd.Timedelta(minutes=1)
             df["timestamp_dt"] = pd.to_numeric(df["timestamp"], errors="coerce")  # 转为数值
             df["timestamp_dt"] = df["timestamp_dt"] // 1000  # 可能是微秒，转换为毫秒
             df["timestamp_dt"] = pd.to_datetime(df["timestamp_dt"], unit="us", errors="coerce")  # 转换为 datetime
