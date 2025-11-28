@@ -121,7 +121,7 @@ def _compute_deviation(arr: np.ndarray, benign_start: int, benign_end: int, metr
 
     注意：仅用于可视化标注 Top-K 偏离用。
     """
-    if arr is None or getattr(arr, "size", 0) == 0:
+    if arr is None or arr.size == 0:
         return np.zeros(0, dtype=np.float32)
     X = np.asarray(arr, dtype=np.float32)
     T = X.shape[0]
@@ -150,7 +150,7 @@ def _compute_step_deviation(arr: np.ndarray, metric: str = "cosine") -> np.ndarr
       - "l2": 欧氏距离 ||x_t - x_{t-1}||
       - 其他（默认 "cosine"）：1 - cos(x_t, x_{t-1})，内部做 L2 归一化
     """
-    if arr is None or getattr(arr, "size", 0) == 0:
+    if arr is None or arr.size == 0:
         return np.zeros(0, dtype=np.float32)
     X = np.asarray(arr, dtype=np.float32)
     T = X.shape[0]
@@ -187,7 +187,7 @@ def plot_tsne_embeddings(
     selected_mal_ids_in_slice: Optional[List[int]] = None,  # 仅当 which="malicious" 时生效，片段内索引（0 开始）
 ):
     """仅使用 t-SNE 可视化快照嵌入二维分布，标记良性区间。"""
-    if arr is None or getattr(arr, "size", 0) == 0:
+    if arr is None or arr.size == 0:
         print("[Viz] 空的快照嵌入，跳过 t-SNE 可视化。")
         return
     try:
@@ -445,7 +445,7 @@ def plot_deviation_changes(
             * 用均值±σ 阈值线辅助判断异常（默认基于良性段，或根据 recompute_stats 改为 focus）
             * 标注 Top-K 偏离点（或全部/不标注，受 annotate_mode 控制）
         """
-    if arr is None or getattr(arr, "size", 0) == 0:
+    if arr is None or arr.size == 0:
         print("[Viz] 空的快照嵌入，跳过偏离曲线可视化。")
         return
 
@@ -1095,7 +1095,7 @@ def filter_positive_by_tech_lcs(
     if pred_labels is None or len(pred_labels) == 0:
         return pred_labels
     y = np.asarray(pred_labels, dtype=int).copy()
-    if not lib or len(tech_seq) == 0 or getattr(idx_pos, "size", 0) == 0:
+    if not lib or len(tech_seq) == 0 or idx_pos.size == 0:
         return y
 
     keep_mask, best_lcs_len, best_lib_len = _best_lcs_keep_mask(tech_seq, lib)
@@ -1111,7 +1111,7 @@ def filter_positive_by_tech_lcs(
             f"[SeqFilter-Tech] 全局 LCS 命中：库长={best_lib_len}, LCS={best_lcs_len}, 比例={ratio:.3f}；移除非主干 {dropped} 个阳性。"
         )
     else:
-        removed = int(getattr(idx_pos, "size", 0))
+        removed = int(idx_pos.size)
         y[idx_pos] = 0
         print(
             f"[SeqFilter-Tech] 全局 LCS 未达阈值（库长={best_lib_len}, LCS={best_lcs_len}, 比例={ratio:.3f}），清零 {removed} 个阳性。"
@@ -1160,7 +1160,10 @@ def run_evaluation(path_map: dict) -> None:
     # 使用带身份后缀的编码器模型文件
     try:
         from pathlib import Path as _Path
-        _default_model = getattr(embedder_cls, "_default_path", "embedder_model.pth")
+        if hasattr(embedder_cls, "_default_path"):
+            _default_model = embedder_cls._default_path  # type: ignore[attr-defined]
+        else:
+            _default_model = "embedder_model.pth"
         _p = _Path(_default_model)
         embedder_model_path = f"{_p.stem}_{GLOBAL_ID}{_p.suffix}"
         embedder = embedder_cls.load(snapshot_sequence=all_snapshots, path=embedder_model_path)
@@ -1272,8 +1275,7 @@ def run_evaluation(path_map: dict) -> None:
         return acc, prec, rec, f1, tp, fp, tn, fn
 
     acc0, prec0, rec0, f10, tp0, fp0, tn0, fn0 = _metrics(true_labels, pred_labels)
-    acc, prec, rec, f1, tp, fp, tn, fn = _metrics(true_labels, pred_labels_refined)
-
+    
     # 未筛选的指标
     print("\n=== 评估结果（未筛选）===")
     print("\n" + "=" * 50)
@@ -1290,47 +1292,51 @@ def run_evaluation(path_map: dict) -> None:
     print(f" F1分数: {f10:.4f}")
     print("=" * 50)
 
-    # 二次筛选后的指标
-    print("\n=== 评估结果（序列二次筛选后）===")
-    print("\n" + "=" * 50)
-    print(" 快照级别评估结果 (所有快照)")
-    print("=" * 50)
-    print(f" 真阳性 (TP): {tp}")
-    print(f" 假阳性 (FP): {fp}")
-    print(f" 真阴性 (TN): {tn}")
-    print(f" 假阴性 (FN): {fn}")
-    print("\n 性能评分:")
-    print(f" 准确率: {acc:.4f}")
-    print(f" 精确率: {prec:.4f}")
-    print(f" 召回率: {rec:.4f}")
-    print(f" F1分数: {f1:.4f}")
-    print("=" * 50)
-
-    # 单独新增：打印 TP（真阳性）对应的攻击技术列表（片段内索引从 0 开始）
-    tp_idx = np.where(true_labels == 1)[0]
-    print("\n=== TP 技术列表（片段内索引从 0 开始）===")
-    if tp_idx.size == 0:
-        print("  （无 TP）")
-    else:
-        sem_for_log = locals().get("sem_mapper", None)
-        try:
-            if sem_for_log is not None:
-                tp_mask = np.zeros_like(pred_labels_refined, dtype=int)
-                tp_mask[tp_idx] = 1
-                idx_pos_tp, tech_seq_tp = map_pred_positive_to_techniques(
-                    tp_mask,
-                    mal_snapshots,
-                    semantic_mapper=sem_for_log,
-                )
-                for i, code in zip(idx_pos_tp, tech_seq_tp):
-                    print(f"  快照{int(i)}: {code}")
-            else:
+    
+    # 二次筛选后的指标（仅在启用二次筛选时打印）
+    if SEQ_FILTER.get("enable", False):
+        acc, prec, rec, f1, tp, fp, tn, fn = _metrics(true_labels, pred_labels_refined)
+        print("\n=== 评估结果（序列二次筛选后）===")
+        print("\n" + "=" * 50)
+        print(" 快照级别评估结果 (所有快照)")
+        print("=" * 50)
+        print(f" 真阳性 (TP): {tp}")
+        print(f" 假阳性 (FP): {fp}")
+        print(f" 真阴性 (TN): {tn}")
+        print(f" 假阴性 (FN): {fn}")
+        print("\n 性能评分:")
+        print(f" 准确率: {acc:.4f}")
+        print(f" 精确率: {prec:.4f}")
+        print(f" 召回率: {rec:.4f}")
+        print(f" F1分数: {f1:.4f}")
+        print("=" * 50)
+        # 单独新增：打印 TP（真阳性）对应的攻击技术列表（片段内索引从 0 开始）
+        tp_idx = np.where(true_labels == 1)[0]
+        print("\n=== TP 技术列表（片段内索引从 0 开始）===")
+        if tp_idx.size == 0:
+            print("  （无 TP）")
+        else:
+            sem_for_log = locals().get("sem_mapper", None)
+            try:
+                if sem_for_log is not None:
+                    tp_mask = np.zeros_like(pred_labels_refined, dtype=int)
+                    tp_mask[tp_idx] = 1
+                    idx_pos_tp, tech_seq_tp = map_pred_positive_to_techniques(
+                        tp_mask,
+                        mal_snapshots,
+                        semantic_mapper=sem_for_log,
+                    )
+                    for i, code in zip(idx_pos_tp, tech_seq_tp):
+                        print(f"  快照{int(i)}: {code}")
+                else:
+                    for i in tp_idx:
+                        print(f"  快照{int(i)}: UNKNOWN")
+            except Exception as _ex:
+                print(f"  [Map] TP 技术映射失败，使用 UNKNOWN：{_ex}")
                 for i in tp_idx:
                     print(f"  快照{int(i)}: UNKNOWN")
-        except Exception as _ex:
-            print(f"  [Map] TP 技术映射失败，使用 UNKNOWN：{_ex}")
-            for i in tp_idx:
-                print(f"  快照{int(i)}: UNKNOWN")
+
+        
 
     # 继续输出原有详细调试信息（TP/FP/FN/TN）
     print_debug_info(mal_snapshots, true_labels, pred_labels_refined, 0)
