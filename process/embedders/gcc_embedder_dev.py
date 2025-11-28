@@ -168,7 +168,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             sim_measure: str = 'wl',  # 'tanimoto' | 'cosine' | 'wl'
             wl_height: int = 2,
             sem_fp_bits: int = 1024,
-            use_malicious_snapshots: bool = True,
+            use_malicious_snapshots: bool = False,
             use_malicious_negatives: bool = False,
             # WL 引导损失（全局 batch 级别）
             use_wl_guided: bool = True,
