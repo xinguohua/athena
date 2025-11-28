@@ -188,6 +188,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
             # Top-K 相似（可选，先关闭）
             topk_pos: Optional[int] = 0,  # 先关闭 Top-K 扩增，回到经典 NT-Xent
             topk_pos_min_sim: float = 0.5,  # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
+                # 新增：是否使用“度感知 点-边协同增强”（默认关闭，保持原策略不变）
+                use_degree_coop_augment: bool = False,
     ):
         super().__init__(snapshots, features, mapp)
         if mal_stopwords is None:
@@ -267,6 +269,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # Top-K 采样配置
         self.topk_pos = int(topk_pos) if topk_pos is not None else None
         self.topk_pos_min_sim = float(topk_pos_min_sim)
+        # 增强策略开关
+        self.use_degree_coop_augment = bool(use_degree_coop_augment)
 
         # 调试参数（只保留一个开关，其它使用内置默认值；默认关闭，可运行时直接改属性开启）
         self.debug_sim_dump = True
@@ -422,10 +426,18 @@ class GCCEmbedderDev(GraphEmbedderBase):
             def build_aug_views(x_list, e_list, offsets):
                 e_cols1, e_cols2, x1, x2 = [], [], [], []
                 for xi, ei, off in zip(x_list, e_list, offsets):
-                    e_cols1.append(self._augment_edges(ei, self.drop_edge_p) + off)
-                    e_cols2.append(self._augment_edges(ei, self.drop_edge_p) + off)
-                    x1.append(self._augment_features(xi, self.feat_mask_p))
-                    x2.append(self._augment_features(xi, self.feat_mask_p))
+                    if self.use_degree_coop_augment:
+                        e1 = self._augment_edges_degree_aware(ei, self.drop_edge_p) + off
+                        e2 = self._augment_edges_degree_aware(ei, self.drop_edge_p) + off
+                        x1.append(self._augment_features_degree_aware(xi, self.feat_mask_p, ei))
+                        x2.append(self._augment_features_degree_aware(xi, self.feat_mask_p, ei))
+                    else:
+                        e1 = self._augment_edges(ei, self.drop_edge_p) + off
+                        e2 = self._augment_edges(ei, self.drop_edge_p) + off
+                        x1.append(self._augment_features(xi, self.feat_mask_p))
+                        x2.append(self._augment_features(xi, self.feat_mask_p))
+                    e_cols1.append(e1)
+                    e_cols2.append(e2)
                 return (
                     torch.cat(x1, dim=0), torch.cat(x2, dim=0),
                     torch.cat(e_cols1, dim=1), torch.cat(e_cols2, dim=1)
@@ -819,10 +831,18 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 两次增强与编码，得到两视角负样本块
         Z_blocks: List[torch.Tensor] = []
         for _ in range(2):
-            e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in zip(e_list, offsets_neg)] if any(
-                n > 0 for n in node_counts) else []
+            if any(n > 0 for n in node_counts):
+                if self.use_degree_coop_augment:
+                    e_cols = [self._augment_edges_degree_aware(ei, self.drop_edge_p) + off for ei, off in zip(e_list, offsets_neg)]
+                else:
+                    e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in zip(e_list, offsets_neg)]
+            else:
+                e_cols = []
             EN = torch.cat(e_cols, dim=1) if e_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
-            XN = self._augment_features(X_neg, self.feat_mask_p)
+            if self.use_degree_coop_augment:
+                XN = self._augment_features_degree_aware(X_neg, self.feat_mask_p, EN)
+            else:
+                XN = self._augment_features(X_neg, self.feat_mask_p)
             ZN_layers = self.encoder(XN, EN, return_all=True)
             NL = ZN_layers[-1]
             sums = torch.zeros((Bc, NL.size(1)), device=device)
@@ -884,9 +904,15 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
         Z_neg_blocks: List[torch.Tensor] = []
         for _ in range(2):
-            e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in zip(E_neg_list, offsets_neg)]
+            if self.use_degree_coop_augment:
+                e_cols = [self._augment_edges_degree_aware(ei, self.drop_edge_p) + off for ei, off in zip(E_neg_list, offsets_neg)]
+            else:
+                e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in zip(E_neg_list, offsets_neg)]
             EN = torch.cat(e_cols, dim=1)
-            XN = self._augment_features(X_neg, self.feat_mask_p)
+            if self.use_degree_coop_augment:
+                XN = self._augment_features_degree_aware(X_neg, self.feat_mask_p, EN)
+            else:
+                XN = self._augment_features(X_neg, self.feat_mask_p)
             ZN_layers = self.encoder(XN, EN, return_all=True)
             NL = ZN_layers[-1]
             sums = torch.zeros((Bc, NL.size(1)), device=device)
@@ -1663,6 +1689,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 # 恶意Token配置
                 'mal_stopwords': list(self.mal_stopwords) if self.mal_stopwords else [],
                 'mal_print_tokens': self.mal_print_tokens,
+                # 增强策略
+                'use_degree_coop_augment': self.use_degree_coop_augment,
             },
             'encoder': self.encoder.state_dict(),
             'proj_head': self.proj_head.state_dict(),
@@ -1688,7 +1716,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
             # W2V 配置
             'w2v_window', 'w2v_min_count', 'w2v_sg', 'w2v_epochs', 'w2v_pretrained_path',
             # 恶意Token配置
-            'mal_stopwords', 'mal_print_tokens'
+            'mal_stopwords', 'mal_print_tokens',
+            # 增强策略
+            'use_degree_coop_augment',
         }
         params = {k: v for k, v in raw_params.items() if k in allowed}
         inst = cls(snapshot_sequence, **params)
@@ -1906,19 +1936,67 @@ class GCCEmbedderDev(GraphEmbedderBase):
         return torch.tensor([src, dst], dtype=torch.long, device=self.device)
 
     def _augment_edges(self, edge_index: torch.Tensor, drop_p: float) -> torch.Tensor:
+        """原始（均匀随机）删边增强：保持不变"""
         if edge_index.numel() == 0 or drop_p <= 0:
             return edge_index
         E = edge_index.size(1)
         keep = torch.rand(E, device=edge_index.device) > drop_p
         if keep.sum() < 1:
-            # 至少保留一条边（若原本有边）
             keep[random.randrange(0, E)] = True
         return edge_index[:, keep]
 
     def _augment_features(self, x: torch.Tensor, mask_p: float) -> torch.Tensor:
+        """原始（均匀随机）特征掩盖：保持不变"""
         if x.numel() == 0 or mask_p <= 0:
             return x
         mask = (torch.rand_like(x) < mask_p).float()
+        return x * (1.0 - mask)
+
+    # ---- 新增：度感知的“点-边协同增强”实现（不影响原有策略） ----
+    def _augment_edges_degree_aware(self, edge_index: torch.Tensor, drop_p: float) -> torch.Tensor:
+        if edge_index.numel() == 0 or drop_p <= 0:
+            return edge_index
+        device = edge_index.device
+        src, dst = edge_index[0], edge_index[1]
+        if src.numel() == 0:
+            return edge_index
+        num_nodes = int(torch.max(torch.stack([src, dst])).item() + 1)
+        deg = torch.zeros(num_nodes, dtype=torch.float32, device=device)
+        deg.index_add_(0, src, torch.ones_like(src, dtype=torch.float32))
+        deg.index_add_(0, dst, torch.ones_like(dst, dtype=torch.float32))
+        dmin = torch.min(deg)
+        dmax = torch.max(deg)
+        if float(dmax.item() - dmin.item()) < 1e-12:
+            deg_norm = torch.zeros_like(deg)
+        else:
+            deg_norm = (deg - dmin) / (dmax - dmin + 1e-12)
+        s_e = 0.5 * (deg_norm[src] + deg_norm[dst])
+        p_e = torch.clamp(drop_p * s_e, 0.0, 1.0)
+        keep = (torch.rand_like(p_e) > p_e)
+        if keep.sum() < 1:
+            keep[random.randrange(0, keep.numel())] = True
+        return edge_index[:, keep]
+
+    def _augment_features_degree_aware(self, x: torch.Tensor, mask_p: float, edge_index: torch.Tensor) -> torch.Tensor:
+        if x.numel() == 0 or mask_p <= 0 or edge_index.numel() == 0:
+            return x
+        device = x.device
+        N = x.size(0)
+        src, dst = edge_index[0], edge_index[1]
+        num_nodes = max(N, int(torch.max(torch.stack([src, dst])).item() + 1))
+        deg = torch.zeros(num_nodes, dtype=torch.float32, device=device)
+        deg.index_add_(0, src, torch.ones_like(src, dtype=torch.float32))
+        deg.index_add_(0, dst, torch.ones_like(dst, dtype=torch.float32))
+        deg = deg[:N]
+        dmin = torch.min(deg)
+        dmax = torch.max(deg)
+        if float(dmax.item() - dmin.item()) < 1e-12:
+            deg_norm = torch.zeros_like(deg)
+        else:
+            deg_norm = (deg - dmin) / (dmax - dmin + 1e-12)
+        p_node = torch.clamp(mask_p * (1.0 - deg_norm), 0.0, 1.0)
+        rand = torch.rand_like(x)
+        mask = (rand < p_node.view(-1, 1)).float()
         return x * (1.0 - mask)
 
     def _nt_xent_loss(self, Z: torch.Tensor, temperature: float,
