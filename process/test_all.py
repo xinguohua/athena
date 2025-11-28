@@ -693,8 +693,15 @@ def plot_deviation(
             recompute_stats=recompute_stats,
             deviation_mode=deviation_mode,
         )
-def save_snapshot_nodes(all_snapshots, output_file: Path = Path("test_snapshot.txt")) -> Optional[Path]:
+def save_snapshot_nodes(all_snapshots, output_file: Path = None) -> Optional[Path]:
     """保存快照节点信息到文件"""
+    # 若未显式提供路径，则使用带身份后缀的默认文件名
+    if output_file is None:
+        from pathlib import Path as _P
+        try:
+            output_file = _P(f"test_snapshot_{GLOBAL_ID}.txt") if GLOBAL_ID else _P("test_snapshot.txt")
+        except Exception:
+            output_file = _P("test_snapshot.txt")
     print(f"[INFO] 保存快照节点信息到: {output_file}")
     try:
         with output_file.open("w", encoding="utf-8") as f:
