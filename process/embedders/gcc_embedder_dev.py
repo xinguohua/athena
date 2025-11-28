@@ -451,10 +451,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
             Z_neg_blocks = []
             freq_weights_neg = torch.zeros(Bc, device=device)
 
-            has_ego = bool(getattr(self, 'use_malicious_snapshots', False) and hasattr(self, '_mal_ego_pool') and len(
+            has_ego = bool(self.use_malicious_snapshots and hasattr(self, '_mal_ego_pool') and len(
                 self._mal_ego_pool) > 0)
             has_tok = bool(
-                getattr(self, 'use_malicious_negatives', False) and hasattr(self, 'malicious_node_tokens') and len(
+                self.use_malicious_negatives and hasattr(self, 'malicious_node_tokens') and len(
                     self.malicious_node_tokens) > 0 and hasattr(self, '_ego_cache') and len(self._ego_cache) > 0)
 
             if self.combine and has_ego and has_tok:
@@ -534,7 +534,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             loss = self._nt_xent_loss(Z_batch, temperature=self.temperature, sample_weights=w_tensor)
 
             # WL 引导的全局相似度一致性损失（以 batch 的 ego 子图作为一组）
-            if getattr(self, 'use_wl_guided', False) and float(getattr(self, 'wl_guided_weight', 0.0)) > 0.0:
+            if self.use_wl_guided and float(self.wl_guided_weight) > 0.0:
                 try:
                     Z_mean = (Z_view1 + Z_view2) * 0.5  # [Bc, D]
                     wl_loss = self._wl_guided_similarity_loss(subs, Z_mean)
@@ -769,7 +769,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         """从恶意节点 ego 池中采样 Bc 个中心节点，构造其 r-hop ego 子图并编码成两个视角的负样本块（每块 Bc×D）。
         返回: ([Z_neg_block_view1[Bc,D], Z_neg_block_view2[Bc,D]], freq_weights_neg[Bc])；若池为空返回 ([], zeros)。
         """
-        pool = getattr(self, '_mal_ego_pool', None)
+        pool = self._mal_ego_pool if hasattr(self, '_mal_ego_pool') else None
         if not pool:
             return [], torch.zeros(Bc, device=device)
 
@@ -842,7 +842,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         依赖 self._ego_cache（历史子图）与 self.malicious_node_tokens。
         若条件不足则返回空块与零权重。
         """
-        if not (getattr(self, 'use_malicious_negatives', False)
+        if not (self.use_malicious_negatives
                 and hasattr(self, 'malicious_node_tokens') and len(self.malicious_node_tokens) > 0
                 and hasattr(self, '_ego_cache') and len(self._ego_cache) > 0):
             return [], torch.zeros(Bc, device=device)
@@ -867,8 +867,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
             sub, xi, ei, w = all_subs[i], all_x[i], all_e[i], all_w[i]
             xneg_np = self._corrupt_features_with_malicious(
                 sub, xi.cpu().numpy(),
-                ratio=float(getattr(self, 'mal_neg_ratio', 0.3)),
-                node_token_len=int(getattr(self, 'mal_neg_node_token_len', 1))
+                ratio=float(self.mal_neg_ratio),
+                node_token_len=int(self.mal_neg_node_token_len)
             )
             X_neg_list.append(torch.from_numpy(xneg_np).to(device))
             E_neg_list.append(ei)
@@ -1014,10 +1014,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
         if Bc <= 1:
             return torch.zeros((), device=Z_mean.device, dtype=Z_mean.dtype)
 
-        m_bits = int(getattr(self, 'sem_fp_bits', 1024))
+        m_bits = int(self.sem_fp_bits)
         wl_vecs = []
         for sub in subs:
-            ctr = self._wl_subtree_counter(sub, h=int(getattr(self, 'wl_height', 2)))
+            ctr = self._wl_subtree_counter(sub, h=int(self.wl_height))
             vec = np.zeros(m_bits, dtype=np.float32)
             for k, c in ctr.items():
                 h = hashlib.md5(str(k).encode('utf-8')).hexdigest()
