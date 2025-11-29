@@ -253,6 +253,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.topk_pos_min_sim = float(topk_pos_min_sim)
         # 增强策略开关
         self.use_degree_coop_augment = bool(use_degree_coop_augment)
+        # 是否使用正子图融合恶意子图构造负样本（调用 _build_neg_block_from_snapshots_with_pos）
+        self.use_pos_fusion_neg = False  # 运行时可直接设 True 开启
+        self.pos_fusion_ratio = 0.5       # 正子图内部节点采样比例
+        self.pos_fusion_cross_ratio = 0.2 # 跨连边比例
+        self.pos_fusion_cross_max = 8     # 跨连边最大数
 
         # 调试参数（只保留一个开关，其它使用内置默认值；默认关闭，可运行时直接改属性开启）
         self.debug_sim_dump = True
