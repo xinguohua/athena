@@ -9,7 +9,6 @@ GCCEmbedderDev: 开发版 Graph Contrastive Coding-style 预训练编码器
 from __future__ import annotations
 from collections import deque
 from typing import Optional, Iterable, Tuple, List, Dict, Union
-from collections import Counter
 import os
 import re
 import hashlib
@@ -164,15 +163,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
             w2v_sg: int = 1,
             w2v_epochs: int = 20,
             w2v_pretrained_path: Optional[str] = None,
-            # 相似度/权重相关可选参数
-            sim_measure: str = 'wl',  # 'tanimoto' | 'cosine' | 'wl'
-            wl_height: int = 2,
-            sem_fp_bits: int = 1024,
             use_malicious_snapshots: bool = False,
             use_malicious_negatives: bool = False,
-            # WL 引导损失（全局 batch 级别）
-            use_wl_guided: bool = True,
-            wl_guided_weight: float = 0.4,
             # 第三个开关：两种策略按比例混合
             combine: bool = False,
             combine_ratio: float = 0.8,
@@ -227,16 +219,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.w2v_pretrained_path = w2v_pretrained_path
         self._w2v_model = None  # 延迟加载/训练
 
-        # 语义相似度参数
-        # - sem_fp_bits: 指纹长度（哈希位数），用于快速近似 Tanimoto 计算
-        self.sem_fp_bits = int(sem_fp_bits)
-        # 相似度度量方式：'tanimoto' | 'cosine' | 'wl'
-        self.sim_measure = str(sim_measure)
-        # WL 子树核参数（用于 sim_measure='wl'）
-        self.wl_height = int(wl_height)
-        # WL 引导损失开关与权重
-        self.use_wl_guided = bool(use_wl_guided)
-        self.wl_guided_weight = float(wl_guided_weight)
 
         self.use_malicious_snapshots = bool(use_malicious_snapshots)
         # 是否使用“恶意语料”来生成额外负样本；以及腐化强度与每个节点替换的 token 数
@@ -545,14 +527,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
             self.optimizer.zero_grad(set_to_none=True)
             loss = self._nt_xent_loss(Z_batch, temperature=self.temperature, sample_weights=w_tensor)
 
-            # WL 引导的全局相似度一致性损失（以 batch 的 ego 子图作为一组）
-            if self.use_wl_guided and float(self.wl_guided_weight) > 0.0:
-                try:
-                    Z_mean = (Z_view1 + Z_view2) * 0.5  # [Bc, D]
-                    wl_loss = self._wl_guided_similarity_loss(subs, Z_mean)
-                    loss = loss + float(self.wl_guided_weight) * wl_loss
-                except Exception as _e:
-                    print(f"[WL-Guided] 计算失败，已跳过: {_e}")
             loss.backward()
             torch.nn.utils.clip_grad_norm_(
                 list(self.encoder.parameters()) + list(self.proj_head.parameters()), max_norm=5.0
@@ -997,71 +971,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         toks = self._collect_subgraph_tokens(sub)
         return self._w2v_vector_from_tokens(toks)
 
-    def _wl_subtree_counter(self, sub, h: int = 2) -> Counter:
-        n = sub.vcount()
-        if n == 0:
-            return Counter()
-
-        # 初始标签：节点 properties
-        labels = [str(sub.vs[i]['properties']) for i in range(n)]
-        ctr = Counter(f"0:{lab}" for lab in labels)
-        # 构建邻接信息（默认有向 + 有 actions）
-        neighbors_info: List[List[Tuple[str, str, int]]] = [[] for _ in range(n)]
-        for e in sub.es:
-            u = e.source  # 获取起点 ID
-            v = e.target  # 获取终点 ID
-            etype = e['actions']
-            neighbors_info[u].append(('out', etype, v))
-            neighbors_info[v].append(('in', etype, u))
-        # WL 迭代
-        for k in range(1, h + 1):
-            new_labels = []
-            for i in range(n):
-                neigh = neighbors_info[i]
-                if neigh:
-                    ms = [f"{d}:{et}:{labels[j]}" for (d, et, j) in neigh]
-                    ms.sort()
-                    agg = '#'.join(ms)
-                    new_lab = labels[i] + '|' + agg
-                else:
-                    new_lab = labels[i]
-                new_labels.append(new_lab)
-
-            labels = new_labels
-            ctr.update(f"{k}:{lab}" for lab in labels)
-        return ctr
-
-    def _wl_guided_similarity_loss(self, subs: List, Z_mean: torch.Tensor) -> torch.Tensor:
-        """让嵌入相似度接近 WL 子树指纹相似度（batch 全局级）。
-        - subs: 子图列表（长度 N）
-        - Z_mean: [N, D]，每个子图的嵌入（两视角平均后）
-        """
-        Bc = len(subs)
-        if Bc <= 1:
-            return torch.zeros((), device=Z_mean.device, dtype=Z_mean.dtype)
-
-        m_bits = int(self.sem_fp_bits)
-        wl_vecs = []
-        for sub in subs:
-            ctr = self._wl_subtree_counter(sub, h=int(self.wl_height))
-            vec = np.zeros(m_bits, dtype=np.float32)
-            for k, c in ctr.items():
-                h = hashlib.md5(str(k).encode('utf-8')).hexdigest()
-                idx = int(h, 16) % m_bits
-                vec[idx] += float(c)
-            nrm = np.linalg.norm(vec) + 1e-12
-            wl_vecs.append(vec / nrm)
-        W = torch.from_numpy(np.stack(wl_vecs, axis=0)).to(Z_mean.device)
-
-        Z = F.normalize(Z_mean, dim=-1)
-        S_z = torch.mm(Z, Z.t())  # [N,N]
-        Wn = F.normalize(W, dim=-1)
-        S_w = torch.mm(Wn, Wn.t())  # [N,N]
-
-        eye = torch.eye(Bc, device=Z_mean.device, dtype=torch.bool)
-        diff = (S_z - S_w)
-        loss = (diff.masked_fill(eye, 0.0) ** 2).sum() / (Bc * (Bc - 1) + 1e-6)
-        return loss
+    # 已移除 WL 子树核与引导相似度损失相关方法
 
     def embed_nodes(self):
         return self.snapshot_node_embeddings[-1] if self.snapshot_node_embeddings else {}
@@ -1678,8 +1588,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 'model_path': self.model_path,
                 'anomaly_alpha': self.anomaly_alpha,
                 'use_sample_weights': self.use_sample_weights,
-                # Semantic settings
-                'sem_fp_bits': self.sem_fp_bits,
                 # W2V 配置
                 'w2v_window': self.w2v_window,
                 'w2v_min_count': self.w2v_min_count,
@@ -1722,11 +1630,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         }
         params = {k: v for k, v in raw_params.items() if k in allowed}
         inst = cls(snapshot_sequence, **params)
-        # 恢复语义拉近配置（不作为构造参数传入，以保持构造签名简洁）
-        try:
-            inst.sem_fp_bits = int(raw_params.get('sem_fp_bits', inst.sem_fp_bits))
-        except Exception:
-            pass
         inst.encoder.load_state_dict(state['encoder'])
         inst.proj_head.load_state_dict(state['proj_head'])
         if 'temporal' in state:
@@ -1952,7 +1855,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         mask = (torch.rand_like(x) < mask_p).float()
         return x * (1.0 - mask)
 
-    # ---- 新增：度感知的“点-边协同增强”实现（不影响原有策略） ----
+    # ---- 度感知的“点-边协同增强”实现 ----
     def _augment_edges_degree_aware(self, edge_index: torch.Tensor, drop_p: float) -> torch.Tensor:
         if edge_index.numel() == 0 or drop_p <= 0:
             return edge_index
