@@ -180,8 +180,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
             # Top-K 相似（可选，先关闭）
             topk_pos: Optional[int] = 0,  # 先关闭 Top-K 扩增，回到经典 NT-Xent
             topk_pos_min_sim: float = 0.5,  # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
-                # 新增：是否使用“度感知 点-边协同增强”（默认关闭，保持原策略不变）
-                use_degree_coop_augment: bool = False,
+            # 新增：是否使用“度感知 点-边协同增强”（默认关闭，保持原策略不变）
+            use_degree_coop_augment: bool = False,
     ):
         super().__init__(snapshots, features, mapp)
         if mal_stopwords is None:
