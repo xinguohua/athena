@@ -489,7 +489,19 @@ class GCCEmbedderDev(GraphEmbedderBase):
             else:
                 # 单一路径：优先 ego 其次 token
                 if has_ego:
-                    blocks, w_neg = self._build_neg_block_from_snapshots(Bc, device=device)
+                    if self.use_pos_fusion_neg:
+                        blocks, w_neg = self._build_neg_block_from_snapshots_with_pos(
+                            Bc,
+                            device=device,
+                            pos_x_list=x_list,
+                            pos_e_list=e_list,
+                            pos_node_counts=node_counts,
+                            pos_ratio=float(self.pos_fusion_ratio),
+                            cross_edge_ratio=float(self.pos_fusion_cross_ratio),
+                            cross_edge_max=int(self.pos_fusion_cross_max)
+                        )
+                    else:
+                        blocks, w_neg = self._build_neg_block_from_snapshots(Bc, device=device)
                     if blocks:
                         Z_neg_blocks.extend(blocks)
                         freq_weights_neg = w_neg
@@ -697,6 +709,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
             print(f"[警告] 无法创建日志文件: {e}")
             f_log = None
 
+        # 缓存恶意ego子图的特征与边，避免后续融合重复构造
+        if not hasattr(self, '_mal_ego_cache'):
+            self._mal_ego_cache: List[Tuple[torch.Tensor, torch.Tensor, int]] = []  # (X, edge_index, node_count)
+
         for sidx in train_ids:
             g = self.snapshots[sidx]
             if g is None or g.vcount() == 0:
@@ -724,6 +740,15 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         print(line)
                         if f_log:
                             f_log.write(line + "\n")
+
+                        # 预先缓存特征与边索引，供融合负样本使用，减少重复计算
+                        try:
+                            x_m_np = self._build_node_features(sub)
+                            e_m = self._igraph_edges_to_edge_index(sub)
+                            self._mal_ego_cache.append((torch.from_numpy(x_m_np), e_m, sub.vcount()))
+                        except Exception as ce:
+                            if f_log:
+                                f_log.write(f"[缓存失败] Snapshot {sidx:02d} center={i}: {ce}\n")
 
                         # ---- 完整记录节点属性 ----
                         for vi in range(sub.vcount()):
@@ -774,12 +799,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
         for (sidx, center) in chosen:
             g = self.snapshots[sidx]
             if g is None or g.vcount() == 0:
-                # 占位空图
                 x_list.append(torch.zeros((0, self.prop_feat_dim), dtype=torch.float32, device=device))
                 e_list.append(torch.zeros((2, 0), dtype=torch.long, device=device))
                 node_counts.append(0)
                 continue
-            # 取中心节点的 ego 子图
             try:
                 sub = self._ego_subgraph(g, center=center, r=self.r_hop, max_nodes=self.ego_max_nodes)
             except Exception:
@@ -792,10 +815,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
             x_np = self._build_node_features(sub)
             eidx = self._igraph_edges_to_edge_index(sub)
             x_list.append(torch.from_numpy(x_np).to(device))
-            e_list.append(eidx)
+            e_list.append(eidx.to(device))
             node_counts.append(sub.vcount())
 
-        # 若全为空，返回空
         if sum(node_counts) == 0:
             return [], torch.zeros(Bc, device=device)
 
@@ -833,6 +855,187 @@ class GCCEmbedderDev(GraphEmbedderBase):
             Z_blocks.append(Z_block)
 
         # 简单起见，负样本权重统一为 1
+        w_neg = torch.ones(Bc, dtype=torch.float32, device=device)
+        return Z_blocks, w_neg
+
+    def _build_neg_block_from_snapshots_with_pos(
+            self,
+            Bc: int,
+            device: torch.device,
+            pos_x_list: List[torch.Tensor],
+            pos_e_list: List[torch.Tensor],
+            pos_node_counts: List[int],
+            pos_ratio: float = 0.5,
+            cross_edge_ratio: float = 0.2,
+            cross_edge_max: int = 8
+    ):
+        """并列新增方法：逐个将当前 Bc 个正子图与恶意子图融合，形成 Bc 个“融合负子图”。
+        - 对每个正子图 i：从恶意池采样一个恶意 ego 子图，与正子图做节点/边级拼接融合；
+        - 保持“两视角”结构与原增强分支一致；
+        - 不影响原 `_build_neg_block_from_snapshots`。
+        返回: 同原方法 ([view1, view2], w_neg)。
+        """
+        pool = self._mal_ego_pool if hasattr(self, '_mal_ego_pool') else None
+        if not pool or len(pool) == 0:
+            return [], torch.zeros(Bc, device=device)
+
+        x_list: List[torch.Tensor] = []
+        e_list: List[torch.Tensor] = []
+        node_counts: List[int] = []
+
+        # 逐个融合：正子图 i + 恶意子图(随机取一)
+        total_pos = len(pos_x_list)
+        for i in range(min(Bc, total_pos)):
+            xi = pos_x_list[i]
+            ei = pos_e_list[i]
+            nc = int(pos_node_counts[i]) if i < len(pos_node_counts) else (int(xi.size(0)) if xi is not None else 0)
+
+            # 若正子图为空：仅使用一个恶意子图替代；恶意池为空则占位
+            if xi is None or ei is None or nc <= 0 or xi.numel() == 0:
+                if pool and len(pool) > 0:
+                    sidx, center = random.choice(pool)
+                    g = self.snapshots[sidx]
+                    if g is None or g.vcount() == 0:
+                        x_list.append(torch.zeros((0, self.prop_feat_dim), dtype=torch.float32, device=device))
+                        e_list.append(torch.zeros((2, 0), dtype=torch.long, device=device))
+                        node_counts.append(0)
+                        continue
+                    try:
+                        sub = self._ego_subgraph(g, center=center, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                    except Exception:
+                        sub = None
+                    if sub is None or sub.vcount() == 0:
+                        x_list.append(torch.zeros((0, self.prop_feat_dim), dtype=torch.float32, device=device))
+                        e_list.append(torch.zeros((2, 0), dtype=torch.long, device=device))
+                        node_counts.append(0)
+                        continue
+                    x_m_np = self._build_node_features(sub)
+                    e_m = self._igraph_edges_to_edge_index(sub)
+                    x_list.append(torch.from_numpy(x_m_np).to(device))
+                    e_list.append(e_m)
+                    node_counts.append(sub.vcount())
+                    continue
+                else:
+                    x_list.append(torch.zeros((0, self.prop_feat_dim), dtype=torch.float32, device=device))
+                    e_list.append(torch.zeros((2, 0), dtype=torch.long, device=device))
+                    node_counts.append(0)
+                    continue
+
+            # 对正子图进行节点采样（采样部分正节点参与融合）
+            k_pos = max(1, int(round(max(0.0, min(1.0, float(pos_ratio))) * nc)))
+            # 简化：选择前 k_pos 个节点；根据需要可替换为随机采样
+            keep_pos = torch.arange(k_pos, dtype=torch.long, device=device)
+            # 过滤正子图边，仅保留两端均在保留集内的边
+            src_pos, dst_pos = ei[0], ei[1]
+            mask_pos = (src_pos < k_pos) & (dst_pos < k_pos)
+            ei_pos_sub = ei[:, mask_pos]
+            xi_pos_sub = xi.to(device)[:k_pos, :]
+
+            # 采样一个恶意 ego 子图（优先使用缓存，避免重复 _ego_subgraph）
+            if len(pool) > 0:
+                midx = random.randrange(len(pool))
+                sidx, center = pool[midx]
+                cached_ok = hasattr(self, '_mal_ego_cache') and midx < len(self._mal_ego_cache)
+            else:
+                midx = -1
+                sidx, center = (None, None)
+                cached_ok = False
+
+            if sidx is None:
+                # 无恶意池兜底：仅用正子图部分
+                x_fused = xi_pos_sub
+                e_fused = ei_pos_sub
+                n_fused = k_pos
+            else:
+                if cached_ok:
+                    x_m_cached, e_m_cached, mal_cnt = self._mal_ego_cache[midx]
+                    x_m = x_m_cached.to(device)
+                    e_m = e_m_cached.to(device)
+                else:
+                    g = self.snapshots[sidx]
+                    if g is None or g.vcount() == 0:
+                        x_fused = xi_pos_sub
+                        e_fused = ei_pos_sub
+                        n_fused = k_pos
+                        x_list.append(x_fused)
+                        e_list.append(e_fused)
+                        node_counts.append(n_fused)
+                        continue
+                    try:
+                        sub = self._ego_subgraph(g, center=center, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                    except Exception:
+                        sub = None
+                    if sub is None or sub.vcount() == 0:
+                        x_fused = xi_pos_sub
+                        e_fused = ei_pos_sub
+                        n_fused = k_pos
+                        x_list.append(x_fused)
+                        e_list.append(e_fused)
+                        node_counts.append(n_fused)
+                        continue
+                    x_m_np = self._build_node_features(sub)
+                    e_m = self._igraph_edges_to_edge_index(sub)
+                    x_m = torch.from_numpy(x_m_np).to(device)
+                    mal_cnt = sub.vcount()
+
+                # 节点拼接
+                x_fused = torch.cat([xi_pos_sub, x_m], dim=0)
+                e_m_shift = e_m + k_pos
+                e_fused = torch.cat([ei_pos_sub, e_m_shift], dim=1)
+                n_fused = k_pos + mal_cnt
+                # 随机跨连边
+                if k_pos > 0 and mal_cnt > 0 and cross_edge_ratio > 0 and cross_edge_max > 0:
+                    base = min(k_pos, mal_cnt)
+                    target = int(round(cross_edge_ratio * base))
+                    num_cross = max(1, min(base, cross_edge_max, target))
+                    pos_idx = torch.randint(0, k_pos, (num_cross,), device=device)
+                    mal_idx = torch.randint(0, mal_cnt, (num_cross,), device=device) + k_pos
+                    cross_edges = torch.stack([pos_idx, mal_idx], dim=0)
+                    cross_edges_rev = torch.stack([mal_idx, pos_idx], dim=0)
+                    e_cross = torch.cat([cross_edges, cross_edges_rev], dim=1)
+                    e_fused = torch.cat([e_fused, e_cross], dim=1)
+
+            x_list.append(x_fused)
+            e_list.append(e_fused)
+            node_counts.append(n_fused)
+
+        # 若不足 Bc（pos 少于 Bc），补齐空占位
+        while len(node_counts) < Bc:
+            x_list.append(torch.zeros((0, self.prop_feat_dim), dtype=torch.float32, device=device))
+            e_list.append(torch.zeros((2, 0), dtype=torch.long, device=device))
+            node_counts.append(0)
+
+        if sum(node_counts) == 0:
+            return [], torch.zeros(Bc, device=device)
+
+        offsets_neg = np.cumsum([0] + node_counts[:-1]).tolist()
+        graph_ids_neg = torch.tensor([gi for gi, n in enumerate(node_counts) for _ in range(n)], device=device)
+        X_neg = torch.cat([xi for xi in x_list if xi.numel() > 0], dim=0) if any(n > 0 for n in node_counts) else torch.zeros((0, self.prop_feat_dim), device=device)
+
+        Z_blocks: List[torch.Tensor] = []
+        for _ in range(2):
+            if any(n > 0 for n in node_counts):
+                if self.use_degree_coop_augment:
+                    e_cols = [self._augment_edges_degree_aware(ei, self.drop_edge_p) + off for ei, off in zip(e_list, offsets_neg)]
+                else:
+                    e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in zip(e_list, offsets_neg)]
+            else:
+                e_cols = []
+            EN = torch.cat(e_cols, dim=1) if e_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
+            if self.use_degree_coop_augment:
+                XN = self._augment_features_degree_aware(X_neg, self.feat_mask_p, EN)
+            else:
+                XN = self._augment_features(X_neg, self.feat_mask_p)
+            ZN_layers = self.encoder(XN, EN, return_all=True)
+            NL = ZN_layers[-1]
+            sums = torch.zeros((Bc, NL.size(1)), device=device)
+            cnts = torch.zeros(Bc, device=device)
+            sums.index_add_(0, graph_ids_neg, NL)
+            cnts.index_add_(0, graph_ids_neg, torch.ones_like(graph_ids_neg, dtype=torch.float32))
+            means = sums / (cnts.clamp_min(1e-6).unsqueeze(1))
+            Z_block = F.normalize(self.proj_head(means), dim=-1)
+            Z_blocks.append(Z_block)
+
         w_neg = torch.ones(Bc, dtype=torch.float32, device=device)
         return Z_blocks, w_neg
 
