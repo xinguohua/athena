@@ -354,6 +354,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
         if num_nodes == 0:
             return 0.0
 
+        # 快照级属性预热：将本快照所有节点 properties 向量化并写入缓存，避免训练内首次命中开销
+        self._preheat_snapshot_properties(g)
+
         # ------- Step 1: 全局带权随机采样 (不降权) -------
         centers = list(range(num_nodes))
         if 'frequency' in g.vs.attributes():
@@ -378,6 +381,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
             self._ego_cache = deque(maxlen=50)
 
         # ------- Step 3: 按 batch 训练 -------
+        # 简单中心级缓存：同一快照内重复中心复用子图/特征/边，避免重复计算
+        center_cache: Dict[int, Tuple] = {}
+
         for start in _tqdm(range(0, num_nodes, bsz), total=total_batches, leave=False, desc=f"Snapshot {sidx} Batches"):
             end = min(num_nodes, start + bsz)
             batch_centers = centers[start:end]
@@ -389,14 +395,20 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
             # 构造 batch ego graph
             for c in batch_centers:
-                sub = self._ego_subgraph(g, c, r=self.r_hop, max_nodes=self.ego_max_nodes)
-                if sub.vcount() == 0:
-                    continue
+                if c in center_cache:
+                    sub, xi_t, ei_t = center_cache[c]
+                else:
+                    sub = self._ego_subgraph(g, c, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                    if sub.vcount() == 0:
+                        continue
+                    xi_t = torch.from_numpy(self._build_node_features(sub)).to(device)
+                    ei_t = self._igraph_edges_to_edge_index(sub)
+                    center_cache[c] = (sub, xi_t, ei_t)
                 subs.append(sub)
                 node_counts.append(sub.vcount())
                 ids_list.append([sub.vs[i]['name'] for i in range(sub.vcount())])
-                x_list.append(torch.from_numpy(self._build_node_features(sub)).to(device))
-                e_list.append(self._igraph_edges_to_edge_index(sub))
+                x_list.append(xi_t)
+                e_list.append(ei_t)
                 freq = float(g.vs[c]['frequency']) if 'frequency' in g.vs.attributes() else 1.0
                 freq_weights.append(1.0 + max(0.0, self.anomaly_alpha) * freq)
 
@@ -557,6 +569,35 @@ class GCCEmbedderDev(GraphEmbedderBase):
             self._ego_cache.append((subs, x_list, e_list, freq_weights))
 
         return total_loss / max(1, total_steps)
+
+    def _preheat_snapshot_properties(self, g) -> None:
+        """将快照中所有节点的 properties 预先向量化写入 `_prop_cache`。
+        不改变外部语义，仅减少训练期间的首次计算开销。"""
+        n = g.vcount()
+        if n == 0:
+            return
+        if self.prop_feat_dim <= 0:
+            return
+        if self._w2v_model is None:
+            self._ensure_w2v_model()
+
+        # 批量读取 properties
+        if 'properties' in g.vs.attributes():
+            try:
+                props: List[str] = [str(p) for p in g.vs['properties']]
+            except Exception:
+                props = [str(g.vs[i].attributes().get('properties', '')) for i in range(n)]
+        else:
+            props = [str(g.vs[i].attributes().get('properties', '')) for i in range(n)]
+
+        # 仅处理未缓存的唯一键
+        uncached = {k for k in props if k not in self._prop_cache}
+        if not uncached:
+            return
+        for key in uncached:
+            tokens = self._tokenize_properties(key)
+            vec = self._w2v_vector_from_tokens(tokens)
+            self._prop_cache[key] = vec
 
     # ---------- 恶意 tokens 支持（用于负样本） ----------
     def _precollect_malicious_tokens(self, save_path: str = "malicious_tokens_log.txt"):
