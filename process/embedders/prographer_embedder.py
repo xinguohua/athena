@@ -20,8 +20,8 @@ class ProGrapherEmbedder(GraphEmbedderBase):
                  neg_samples=15,
                  # --- Training Hyperparameters ---
                  learning_rate=1e-3,
-                 epochs=10,
-                 # epochs=1,
+                 #epochs=10,
+                 epochs=1,
                  weight_decay=1e-5,
                  model_path=None
                  ):
