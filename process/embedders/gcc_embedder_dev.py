@@ -182,11 +182,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
             topk_pos_min_sim: float = 0.5,  # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
             # 新增：是否使用“度感知 点-边协同增强”（默认关闭，保持原策略不变）
             use_degree_coop_augment: bool = True,
-                # 负样本权重缩放（超参数）：用于提高恶意样本在损失中的占比
-                neg_weight_scale: float = 100.0,
-                # 快照聚合“属性频率降权”系数：attr_weight_alpha ∈ [0,1]
-                # 越大→更接近原始频率/度；越小→更强调属性字符串出现频繁时的 1/(1+cnt) 降权
-                attr_weight_alpha: float = 0.5,
+            # 负样本权重缩放（超参数）：用于提高恶意样本在损失中的占比
+            neg_weight_scale: float = 100.0,
+            # 快照聚合“属性频率降权”系数：attr_weight_alpha ∈ [0,1]
+            # 越大→更接近原始频率/度；越小→更强调属性字符串出现频繁时的 1/(1+cnt) 降权
+            attr_weight_alpha: float = 0.5,
     ):
         super().__init__(snapshots, features, mapp)
         if mal_stopwords is None:
@@ -1489,7 +1489,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         print(f"[GCC-Dev] 恶意节点偏离排名统计已保存到: {save_path}")
         return rows
 
-    
     def save_model(self, path: Optional[str] = None):
         path = path or self.model_path
         state = {
