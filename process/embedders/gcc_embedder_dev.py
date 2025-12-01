@@ -181,7 +181,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
             topk_pos: Optional[int] = 0,  # 先关闭 Top-K 扩增，回到经典 NT-Xent
             topk_pos_min_sim: float = 0.5,  # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
             # 新增：是否使用“度感知 点-边协同增强”（默认关闭，保持原策略不变）
-            use_degree_coop_augment: bool = True,
+                use_degree_coop_augment: bool = True,
+                # 负样本权重缩放（超参数）：用于提高恶意样本在损失中的占比
+                neg_weight_scale: float = 1.0,
     ):
         super().__init__(snapshots, features, mapp)
         if mal_stopwords is None:
@@ -253,6 +255,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.topk_pos_min_sim = float(topk_pos_min_sim)
         # 增强策略开关
         self.use_degree_coop_augment = bool(use_degree_coop_augment)
+        # 负样本权重缩放超参数
+        self.neg_weight_scale = float(neg_weight_scale)
         # 是否使用正子图融合恶意子图构造负样本（调用 _build_neg_block_from_snapshots_with_pos）
         self.use_pos_fusion_neg = True  # 运行时可直接设 True 开启
         self.pos_fusion_ratio = 0.5       # 正子图内部节点采样比例
@@ -554,7 +558,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 # 先正常样本权重（逐 gi 交错），再恶意样本权重（逐 gi 交错）
                 weights_pos = [float(w) for w in freq_weights for _ in (0, 1)]  # 每个 gi 两视角
                 if len(Z_neg_blocks) == 2 and freq_weights_neg is not None and freq_weights_neg.numel() > 0:
-                    weights_neg = [float(w) for w in freq_weights_neg[:N_neg] for _ in (0, 1)]
+                    weights_neg = [float(w) * self.neg_weight_scale for w in freq_weights_neg[:N_neg] for _ in (0, 1)]
                     sample_weights = weights_pos + weights_neg
                 else:
                     sample_weights = weights_pos
