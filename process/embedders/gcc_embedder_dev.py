@@ -181,9 +181,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
             topk_pos: Optional[int] = 0,  # 先关闭 Top-K 扩增，回到经典 NT-Xent
             topk_pos_min_sim: float = 0.5,  # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
             # 新增：是否使用“度感知 点-边协同增强”（默认关闭，保持原策略不变）
-                use_degree_coop_augment: bool = True,
-                # 负样本权重缩放（超参数）：用于提高恶意样本在损失中的占比
-                neg_weight_scale: float = 1.0,
+            use_degree_coop_augment: bool = True,
+            # 负样本权重缩放（超参数）：用于提高恶意样本在损失中的占比
+            neg_weight_scale: float = 100.0,
     ):
         super().__init__(snapshots, features, mapp)
         if mal_stopwords is None:
@@ -220,7 +220,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.w2v_epochs = int(w2v_epochs)
         self.w2v_pretrained_path = w2v_pretrained_path
         self._w2v_model = None  # 延迟加载/训练
-
 
         self.use_malicious_snapshots = bool(use_malicious_snapshots)
         # 是否使用“恶意语料”来生成额外负样本；以及腐化强度与每个节点替换的 token 数
@@ -259,9 +258,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
         self.neg_weight_scale = float(neg_weight_scale)
         # 是否使用正子图融合恶意子图构造负样本（调用 _build_neg_block_from_snapshots_with_pos）
         self.use_pos_fusion_neg = True  # 运行时可直接设 True 开启
-        self.pos_fusion_ratio = 0.5       # 正子图内部节点采样比例
-        self.pos_fusion_cross_ratio = 0.2 # 跨连边比例
-        self.pos_fusion_cross_max = 8     # 跨连边最大数
+        self.pos_fusion_ratio = 0.5  # 正子图内部节点采样比例
+        self.pos_fusion_cross_ratio = 0.2  # 跨连边比例
+        self.pos_fusion_cross_max = 8  # 跨连边最大数
 
         # 调试参数（只保留一个开关，其它使用内置默认值；默认关闭，可运行时直接改属性开启）
         self.debug_sim_dump = True
@@ -892,7 +891,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         for _ in range(2):
             if any(n > 0 for n in node_counts):
                 if self.use_degree_coop_augment:
-                    e_cols = [self._augment_edges_degree_aware(ei, self.drop_edge_p) + off for ei, off in zip(e_list, offsets_neg)]
+                    e_cols = [self._augment_edges_degree_aware(ei, self.drop_edge_p) + off for ei, off in
+                              zip(e_list, offsets_neg)]
                 else:
                     e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in zip(e_list, offsets_neg)]
             else:
@@ -917,15 +917,15 @@ class GCCEmbedderDev(GraphEmbedderBase):
         return Z_blocks, w_neg
 
     def _build_neg_block_from_snapshots_with_pos(
-        self,
-        Bc: int,
-        device: torch.device,
-        pos_x_list: List[torch.Tensor],
-        pos_e_list: List[torch.Tensor],
-        pos_node_counts: List[int],
-        pos_ratio: float = 0.5,
-        cross_edge_ratio: float = 0.2,
-        cross_edge_max: int = 8,
+            self,
+            Bc: int,
+            device: torch.device,
+            pos_x_list: List[torch.Tensor],
+            pos_e_list: List[torch.Tensor],
+            pos_node_counts: List[int],
+            pos_ratio: float = 0.5,
+            cross_edge_ratio: float = 0.2,
+            cross_edge_max: int = 8,
     ):
         """
         基于当前 batch 的正子图 + 恶意子图缓存，构造若干“融合负子图”，再做两视角编码。
@@ -959,12 +959,13 @@ class GCCEmbedderDev(GraphEmbedderBase):
             pi = random.randrange(total_pos)
             xi = pos_x_list[pi]
             ei = pos_e_list[pi]
-            nc = int(pos_node_counts[pi]) if pi < len(pos_node_counts) else (int(xi.size(0)) if isinstance(xi, torch.Tensor) else 0)
+            nc = int(pos_node_counts[pi]) if pi < len(pos_node_counts) else (
+                int(xi.size(0)) if isinstance(xi, torch.Tensor) else 0)
 
             use_pos = (
-                xi is not None and ei is not None and
-                isinstance(xi, torch.Tensor) and isinstance(ei, torch.Tensor) and
-                nc > 0 and xi.numel() > 0 and ei.numel() > 0
+                    xi is not None and ei is not None and
+                    isinstance(xi, torch.Tensor) and isinstance(ei, torch.Tensor) and
+                    nc > 0 and xi.numel() > 0 and ei.numel() > 0
             )
 
             # ---- 1.1 正子图不可用：直接使用一个恶意子图占位 ----
@@ -997,8 +998,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
             mal_cnt = int(mal_cnt)
 
             # ③ 节点/边拼接
-            x_fused = torch.cat([xi_pos_sub, x_m], dim=0)          # [k_pos + mal_cnt, F]
-            e_m_shift = e_m + k_pos                                # 恶意子图节点索引整体平移
+            x_fused = torch.cat([xi_pos_sub, x_m], dim=0)  # [k_pos + mal_cnt, F]
+            e_m_shift = e_m + k_pos  # 恶意子图节点索引整体平移
             e_fused = torch.cat([ei_pos_sub, e_m_shift], dim=1)
             n_fused = k_pos + mal_cnt
 
@@ -1079,7 +1080,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             N_neg = len(node_counts)
             w_neg = torch.ones(N_neg, dtype=torch.float32, device=device)
         return Z_blocks, w_neg
-    
+
     def _build_neg_block_from_tokens(self, Bc: int, device: torch.device):
         """基于语料腐化的负样本块构建，返回两个视角的 Bc×D block 与权重。
         依赖 self._ego_cache（历史子图）与 self.malicious_node_tokens。
@@ -1128,7 +1129,8 @@ class GCCEmbedderDev(GraphEmbedderBase):
         Z_neg_blocks: List[torch.Tensor] = []
         for _ in range(2):
             if self.use_degree_coop_augment:
-                e_cols = [self._augment_edges_degree_aware(ei, self.drop_edge_p) + off for ei, off in zip(E_neg_list, offsets_neg)]
+                e_cols = [self._augment_edges_degree_aware(ei, self.drop_edge_p) + off for ei, off in
+                          zip(E_neg_list, offsets_neg)]
             else:
                 e_cols = [self._augment_edges(ei, self.drop_edge_p) + off for ei, off in zip(E_neg_list, offsets_neg)]
             EN = torch.cat(e_cols, dim=1)
