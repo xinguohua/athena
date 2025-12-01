@@ -1250,104 +1250,77 @@ class GCCEmbedderDev(GraphEmbedderBase):
             raise RuntimeError("还没有节点嵌入，请先调用 train()")
         if snapshot_sequence is None:
             snapshot_sequence = list(range(len(self.snapshots)))
-        result: List[np.ndarray] = []
+
+        result = []
+        α = float(np.clip(self.attr_weight_alpha, 0.0, 1.0))
+
         for i in snapshot_sequence:
             g = self.snapshots[i]
-            if g is None:
+            if g is None or g.vcount() == 0:
                 result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
                 continue
-            emb_dict = self.snapshot_node_embeddings[i] if i < len(self.snapshot_node_embeddings) else {}
-            if not emb_dict:
+
+            emb = self.snapshot_node_embeddings[i]
+            if not emb:
                 result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
                 continue
-            try:
-                freqs = g.vs['frequency'] if 'frequency' in g.vs.attributes() else None
-            except Exception:
-                freqs = None
-            degrees = g.degree()
-            # 计算本快照内各节点 properties 的“加权出现频率”（以节点基础权重加权），并在所有属性间归一到 [0,1]
-            props_list: List[str] = []
-            if 'properties' in g.vs.attributes():
-                try:
-                    props_list = [str(p) for p in g.vs['properties']]
-                except Exception:
-                    props_list = [str(g.vs[j].attributes().get('properties', '')) for j in range(g.vcount())]
+
+            N = g.vcount()
+
+            # ===== 读取 node → vector =====
+            vecs = np.zeros((N, self.enc_out_dim), dtype=np.float32)
+            valid = np.zeros(N, dtype=bool)
+            for j in range(N):
+                nid = g.vs[j]['name']
+                v = emb.get(nid)
+                if v is not None:
+                    vecs[j] = v
+                    valid[j] = True
+
+            if not valid.any():
+                result.append(np.zeros(self.enc_out_dim, dtype=np.float32))
+                continue
+
+            # ===== base 权重（频率优先，否则度）=====
+            if 'frequency' in g.vs.attributes():
+                base_w = np.array(g.vs['frequency'], dtype=np.float32)
+                base_w = np.maximum(base_w, 0)
             else:
-                props_list = [str(g.vs[j].attributes().get('properties', '')) for j in range(g.vcount())]
+                base_w = np.maximum(np.array(g.degree(), dtype=np.float32), 0)
 
-            # 节点基础权重向量（频率优先，其次度）
-            base_w: List[float] = []
-            if freqs is not None:
-                for idx in range(g.vcount()):
-                    try:
-                        wb = float(freqs[idx])
-                    except Exception:
-                        wb = 0.0
-                    if not np.isfinite(wb) or wb < 0:
-                        wb = 0.0
-                    base_w.append(wb)
+            # 避免除 0
+            b_norm = base_w / (base_w.mean() + 1e-12)
+
+            # ===== 属性罕见性权重 1 - p(attr) =====
+            props = [str(g.vs[j].get('properties', '')) for j in range(N)]
+
+            # 聚合属性词的加权频率
+            prop_w = {}
+            for p, w in zip(props, base_w):
+                if w > 0:
+                    prop_w[p] = prop_w.get(p, 0.0) + w
+
+            if prop_w:
+                maxv = max(prop_w.values())
+                prop_norm = {k: v / maxv for k, v in prop_w.items()}
             else:
-                for idx in range(g.vcount()):
-                    try:
-                        wb = float(degrees[idx])
-                    except Exception:
-                        wb = 0.0
-                    if not np.isfinite(wb) or wb < 0:
-                        wb = 0.0
-                    base_w.append(wb)
+                prop_norm = {}
 
-            # 汇总到属性：加权频率 = ∑ 节点基础权重（同属性字符串）
-            prop_weighted_freq: Dict[str, float] = {}
-            for idx, key in enumerate(props_list):
-                wv = base_w[idx] if idx < len(base_w) else 0.0
-                if wv <= 0:
-                    continue
-                prop_weighted_freq[key] = prop_weighted_freq.get(key, 0.0) + wv
+            a = np.array([1.0 - prop_norm.get(props[j], 0.0) for j in range(N)], dtype=np.float32)
+            a_norm = a / (a.mean() + 1e-12)
 
-            # 归一化到 [0,1]（按 max 归一，避免全零）
-            if prop_weighted_freq:
-                max_prop_w = max(prop_weighted_freq.values())
-                if max_prop_w > 0:
-                    prop_freq_norm = {k: float(v) / float(max_prop_w) for k, v in prop_weighted_freq.items()}
-                else:
-                    prop_freq_norm = {k: 0.0 for k in prop_weighted_freq.keys()}
+            # ===== 最终权重 w_eff =====
+            w_eff = (1 - α) * b_norm + α * a_norm
+            w_eff = np.maximum(w_eff, 0)
+
+            if w_eff.sum() == 0:
+                snapshot_vec = vecs[valid].mean(axis=0)
             else:
-                prop_freq_norm = {}
-            weighted = np.zeros(self.enc_out_dim, dtype=np.float32)
-            total_w = 0.0
-            # 预先构造两个权重向量并做归一化，然后用 alpha 做线性相加
-            alpha = float(self.attr_weight_alpha)
-            alpha = float(min(max(alpha, 0.0), 1.0))
-            n_nodes = g.vcount()
+                snapshot_vec = (vecs * w_eff[:, None]).sum(axis=0) / (w_eff.sum() + 1e-12)
 
-            b = np.asarray(base_w, dtype=np.float32)
-            mb = float(np.mean(b)) if b.size > 0 else 0.0
-            b_norm = b / mb if mb > 0 else np.zeros(n_nodes, dtype=np.float32)
+            result.append(snapshot_vec.astype(np.float32))
 
-            a_vals = [1.0 - float(prop_freq_norm.get(props_list[idx], 0.0)) for idx in range(n_nodes)]
-            a = np.asarray(a_vals, dtype=np.float32)
-            ma = float(np.mean(a)) if a.size > 0 else 0.0
-            a_norm = a / ma if ma > 0 else np.zeros(n_nodes, dtype=np.float32)
-
-            w_eff_vec = (1.0 - alpha) * b_norm + alpha * a_norm
-            for local_idx in range(g.vcount()):
-                nid = g.vs[local_idx]['name']
-                vec = emb_dict.get(nid)
-                if vec is None:
-                    continue
-                w_eff = float(w_eff_vec[local_idx])
-                if w_eff <= 0:
-                    continue
-                weighted += (w_eff * vec)
-                total_w += w_eff
-            if total_w <= 0:
-                allv = np.array(list(emb_dict.values()), dtype=np.float32)
-                gvec = allv.mean(axis=0) if allv.size > 0 else np.zeros(self.enc_out_dim, dtype=np.float32)
-            else:
-                gvec = weighted / (total_w + 1e-12)
-            # gvec = gvec / (np.linalg.norm(gvec) + 1e-12)
-            result.append(gvec.astype(np.float32))
-        arr = np.vstack(result).astype(np.float32) if result else np.zeros((0, self.enc_out_dim), dtype=np.float32)
+        arr = np.vstack(result) if result else np.zeros((0, self.enc_out_dim), dtype=np.float32)
         print(f"[GCC-Dev] Snapshot embeddings: {arr.shape}")
         return arr
 
