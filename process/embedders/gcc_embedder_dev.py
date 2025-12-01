@@ -182,11 +182,14 @@ class GCCEmbedderDev(GraphEmbedderBase):
             topk_pos_min_sim: float = 0.5,  # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
             # 新增：是否使用“度感知 点-边协同增强”（默认关闭，保持原策略不变）
             use_degree_coop_augment: bool = True,
-            # 负样本权重缩放（超参数）：用于提高恶意样本在损失中的占比
-            neg_weight_scale: float = 100.0,
-            # 快照聚合“属性频率降权”系数：attr_weight_alpha ∈ [0,1]
-            # 越大→更接近原始频率/度；越小→更强调属性字符串出现频繁时的 1/(1+cnt) 降权
-            attr_weight_alpha: float = 0.5,
+                # 负样本权重缩放（超参数）：用于提高恶意样本在损失中的占比
+                neg_weight_scale: float = 100.0,
+                # 快照聚合“权重混合”系数：attr_weight_alpha ∈ [0,1]
+                # 使用两个权重向量做加权相加：
+                #   - w_base: 节点基础权重（frequency 优先，其次 degree）
+                #   - w_attr: 属性稀少权重（来自 g 内属性相对频率的反比）
+                # 最终节点权重：w_eff = (1 - alpha) * norm(w_base) + alpha * norm(w_attr)
+                attr_weight_alpha: float = 0.3,
     ):
         super().__init__(snapshots, features, mapp)
         if mal_stopwords is None:
