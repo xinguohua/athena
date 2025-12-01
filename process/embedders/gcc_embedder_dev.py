@@ -527,23 +527,37 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         Z_neg_blocks.extend(blocks)
                         freq_weights_neg = w_neg
 
-            # 拼接视角：正样本两视角在前（2*Bc），负样本视角按实际 N_neg 直接追加
-            Z_pos = torch.cat([Z_view1, Z_view2], dim=0)  # [2*Bc, D]
+            # 拼接视角：先拼正常样本两视角（逐 gi 交错），再拼恶意样本两视角（逐 gi 交错）
+            Z_pos_batch = torch.cat(
+                [torch.cat([Z_view1[gi:gi + 1], Z_view2[gi:gi + 1]], dim=0) for gi in range(Bc)],
+                dim=0,
+            )
             if len(Z_neg_blocks) == 2:
-                Z_neg = torch.cat([Z_neg_blocks[0], Z_neg_blocks[1]], dim=0)  # [2*N_neg, D]
-                Z_batch = torch.cat([Z_pos, Z_neg], dim=0)
-                N_neg = Z_neg_blocks[0].size(0)
+                N_neg = min(Z_neg_blocks[0].size(0), Z_neg_blocks[1].size(0))
+                Z_neg_batch = torch.cat(
+                    [
+                        torch.cat([
+                            Z_neg_blocks[0][gi:gi + 1],
+                            Z_neg_blocks[1][gi:gi + 1]
+                        ], dim=0)
+                        for gi in range(N_neg)
+                    ],
+                    dim=0,
+                )
+                Z_batch = torch.cat([Z_pos_batch, Z_neg_batch], dim=0)
             else:
-                Z_batch = Z_pos
+                Z_batch = Z_pos_batch
                 N_neg = 0
 
             # 权重：受 use_sample_weights 控制
             if self.use_sample_weights:
-                # 正样本权重：每个子图两视角重复
-                sample_weights = [w for w_pos in freq_weights for w in (w_pos, w_pos)]  # 长度 2*Bc
+                # 先正常样本权重（逐 gi 交错），再恶意样本权重（逐 gi 交错）
+                weights_pos = [float(w) for w in freq_weights for _ in (0, 1)]  # 每个 gi 两视角
                 if len(Z_neg_blocks) == 2 and freq_weights_neg is not None and freq_weights_neg.numel() > 0:
-                    # 负样本权重：每个负子图两视角重复
-                    sample_weights.extend([w for w_neg in freq_weights_neg for w in (w_neg, w_neg)])  # 追加 2*N_neg
+                    weights_neg = [float(w) for w in freq_weights_neg[:N_neg] for _ in (0, 1)]
+                    sample_weights = weights_pos + weights_neg
+                else:
+                    sample_weights = weights_pos
                 w_tensor = torch.tensor(sample_weights, dtype=torch.float32, device=device)
                 assert Z_batch.shape[0] == w_tensor.shape[0], (
                     f"Weight mismatch: Z_batch={Z_batch.shape[0]}, w_tensor={w_tensor.shape[0]}"
