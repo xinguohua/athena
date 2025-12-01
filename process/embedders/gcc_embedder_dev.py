@@ -527,32 +527,27 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         Z_neg_blocks.extend(blocks)
                         freq_weights_neg = w_neg
 
-            # 拼接视角
-            Z_batch = torch.cat(
-                [
-                    torch.cat(
-                        [Z_view1[gi:gi + 1], Z_view2[gi:gi + 1],
-                         *(Z_neg_blocks[k][gi:gi + 1] for k in range(len(Z_neg_blocks)))],
-                        dim=0
-                    )
-                    for gi in range(Bc)
-                ],
-                dim=0
-            )
+            # 拼接视角：正样本两视角在前（2*Bc），负样本视角按实际 N_neg 直接追加
+            Z_pos = torch.cat([Z_view1, Z_view2], dim=0)  # [2*Bc, D]
+            if len(Z_neg_blocks) == 2:
+                Z_neg = torch.cat([Z_neg_blocks[0], Z_neg_blocks[1]], dim=0)  # [2*N_neg, D]
+                Z_batch = torch.cat([Z_pos, Z_neg], dim=0)
+                N_neg = Z_neg_blocks[0].size(0)
+            else:
+                Z_batch = Z_pos
+                N_neg = 0
 
             # 权重：受 use_sample_weights 控制
             if self.use_sample_weights:
-                sample_weights = []
-                if len(Z_neg_blocks) == 2:
-                    for w_pos, w_neg in zip(freq_weights, freq_weights_neg):
-                        sample_weights.extend([w_pos, w_pos, w_neg, w_neg])
-                else:
-                    for w_pos in freq_weights:
-                        sample_weights.extend([w_pos, w_pos])
-
+                # 正样本权重：每个子图两视角重复
+                sample_weights = [w for w_pos in freq_weights for w in (w_pos, w_pos)]  # 长度 2*Bc
+                if len(Z_neg_blocks) == 2 and freq_weights_neg is not None and freq_weights_neg.numel() > 0:
+                    # 负样本权重：每个负子图两视角重复
+                    sample_weights.extend([w for w_neg in freq_weights_neg for w in (w_neg, w_neg)])  # 追加 2*N_neg
                 w_tensor = torch.tensor(sample_weights, dtype=torch.float32, device=device)
-                assert Z_batch.shape[0] == w_tensor.shape[0], \
+                assert Z_batch.shape[0] == w_tensor.shape[0], (
                     f"Weight mismatch: Z_batch={Z_batch.shape[0]}, w_tensor={w_tensor.shape[0]}"
+                )
             else:
                 w_tensor = None
 
@@ -915,13 +910,14 @@ class GCCEmbedderDev(GraphEmbedderBase):
         cross_edge_max: int = 8,
     ):
         """
-        基于当前 batch 的正子图 + 恶意子图缓存，构造 Bc 个“融合负子图”，再做两视角编码。
-        返回: ([Z_neg_view1[Bc,D], Z_neg_view2[Bc,D]], w_neg[Bc])
+        基于当前 batch 的正子图 + 恶意子图缓存，构造若干“融合负子图”，再做两视角编码。
+        返回: ([Z_neg_view1[N_neg,D], Z_neg_view2[N_neg,D]], w_neg[N_neg])
+        注：不再强制构造 Bc 个，按可融合数量返回。
         """
         # ---- 0. 恶意缓存检查 ----
         mal_cache = getattr(self, "_mal_ego_cache", None)
         if not mal_cache:  # None 或空
-            return [], torch.zeros(Bc, device=device)
+            return [], torch.zeros(0, device=device)
 
         # 比例参数裁剪到 [0,1]
         pos_ratio = float(min(max(pos_ratio, 0.0), 1.0))
@@ -933,13 +929,17 @@ class GCCEmbedderDev(GraphEmbedderBase):
         node_counts: List[int] = []
 
         total_pos = len(pos_x_list)
-        num_build = min(Bc, total_pos)
+        # 不按 Bc 约束：融合数量等于恶意缓存数
+        num_build = len(mal_cache)
+        if total_pos == 0:
+            return [], torch.zeros(0, device=device)
 
         # ---- 1. 为每个正子图构造“融合负子图” ----
         for i in range(num_build):
-            xi = pos_x_list[i]
-            ei = pos_e_list[i]
-            nc = int(pos_node_counts[i]) if i < len(pos_node_counts) else int(xi.size(0))
+            pi = i % total_pos  # 正子图不足时循环使用
+            xi = pos_x_list[pi]
+            ei = pos_e_list[pi]
+            nc = int(pos_node_counts[pi]) if pi < len(pos_node_counts) else int(xi.size(0))
 
             use_pos = (
                 xi is not None and ei is not None and
@@ -1002,15 +1002,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
             e_list.append(e_fused)
             node_counts.append(n_fused)
 
-        # ---- 1.3 若正子图数量 < Bc，用空图补齐 ----
-        while len(node_counts) < Bc:
-            x_list.append(torch.zeros((0, self.prop_feat_dim), dtype=torch.float32, device=device))
-            e_list.append(torch.zeros((2, 0), dtype=torch.long, device=device))
-            node_counts.append(0)
-
         # 全部为空的情况
         if sum(node_counts) == 0:
-            return [], torch.zeros(Bc, device=device)
+            return [], torch.zeros(0, device=device)
 
         # ---- 2. 打平成一个大图的节点/边，准备做两视角增强 + 编码 ----
         offsets_neg = np.cumsum([0] + node_counts[:-1]).tolist()
@@ -1026,7 +1020,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
         has_nodes = X_neg.numel() > 0
 
-        # ---- 3. 做两视角增强 + 编码，得到两个 [Bc, D] 的负样本块 ----
+        # ---- 3. 做两视角增强 + 编码，得到两个 [N_neg, D] 的负样本块 ----
         Z_blocks: List[torch.Tensor] = []
         for _ in range(2):
             if has_nodes:
@@ -1050,8 +1044,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 ZN_layers = self.encoder(XN, EN, return_all=True)
                 NL = ZN_layers[-1]
 
-                sums = torch.zeros((Bc, NL.size(1)), device=device)
-                cnts = torch.zeros(Bc, device=device)
+                N_neg = len(node_counts)
+                sums = torch.zeros((N_neg, NL.size(1)), device=device)
+                cnts = torch.zeros(N_neg, device=device)
                 sums.index_add_(0, graph_ids_neg, NL)
                 cnts.index_add_(0, graph_ids_neg, torch.ones_like(graph_ids_neg, dtype=torch.float32))
                 means = sums / (cnts.clamp_min(1e-6).unsqueeze(1))
@@ -1059,10 +1054,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 Z_blocks.append(F.normalize(self.proj_head(means), dim=-1))
             else:
                 # 极端兜底：没有节点时给 0 向量
-                Z_blocks.append(torch.zeros((Bc, self.enc_out_dim), dtype=torch.float32, device=device))
+                Z_blocks.append(torch.zeros((0, self.enc_out_dim), dtype=torch.float32, device=device))
 
-        # 目前对难负样本一律给权重 1
-        w_neg = torch.ones(Bc, dtype=torch.float32, device=device)
+            # 目前对难负样本一律给权重 1（长度为 N_neg）
+            N_neg = len(node_counts)
+            w_neg = torch.ones(N_neg, dtype=torch.float32, device=device)
         return Z_blocks, w_neg
     
     def _build_neg_block_from_tokens(self, Bc: int, device: torch.device):
