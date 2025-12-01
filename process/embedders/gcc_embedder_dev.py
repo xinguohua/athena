@@ -932,14 +932,16 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 不按 Bc 约束：融合数量等于恶意缓存数
         num_build = len(mal_cache)
         if total_pos == 0:
+            # 没有正子图：直接返回空（不做单纯恶意子图列表，保持融合语义）
             return [], torch.zeros(0, device=device)
 
-        # ---- 1. 为每个正子图构造“融合负子图” ----
-        for i in range(num_build):
-            pi = i % total_pos  # 正子图不足时循环使用
+        # ---- 1. 按恶意子图遍历：每个恶意子图随机挑一个正子图融合 ----
+        for m_idx, (x_m_cached, e_m_cached, mal_cnt) in enumerate(mal_cache):
+            # 随机挑选一个正子图索引（不做循环复用顺序，增加随机性）
+            pi = random.randrange(total_pos)
             xi = pos_x_list[pi]
             ei = pos_e_list[pi]
-            nc = int(pos_node_counts[pi]) if pi < len(pos_node_counts) else int(xi.size(0))
+            nc = int(pos_node_counts[pi]) if pi < len(pos_node_counts) else (int(xi.size(0)) if isinstance(xi, torch.Tensor) else 0)
 
             use_pos = (
                 xi is not None and ei is not None and
@@ -949,11 +951,12 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
             # ---- 1.1 正子图不可用：直接使用一个恶意子图占位 ----
             if not use_pos:
-                midx = random.randrange(len(mal_cache))
-                x_m_cached, e_m_cached, mal_cnt = mal_cache[midx]
-                x_list.append(x_m_cached.to(device))
-                e_list.append(e_m_cached.to(device))
-                node_counts.append(int(mal_cnt))
+                # 正子图不可用：重新随机挑一个恶意子图填充（允许与当前不同）
+                ridx = random.randrange(len(mal_cache))
+                x_rand, e_rand, rand_cnt = mal_cache[ridx]
+                x_list.append(x_rand.to(device))
+                e_list.append(e_rand.to(device))
+                node_counts.append(int(rand_cnt))
                 continue
 
             # ---- 1.2 正子图可用：采样部分正节点 + 一个恶意子图，拼接融合 ----
@@ -970,9 +973,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             ei_pos_sub = ei[:, mask_pos]
             xi_pos_sub = xi[:k_pos, :]
 
-            # ② 随机挑一个恶意 ego 子图
-            midx = random.randrange(len(mal_cache))
-            x_m_cached, e_m_cached, mal_cnt = mal_cache[midx]
+            # ② 使用当前遍历的恶意子图（不再重新随机抽取）
             x_m = x_m_cached.to(device)
             e_m = e_m_cached.to(device)
             mal_cnt = int(mal_cnt)
