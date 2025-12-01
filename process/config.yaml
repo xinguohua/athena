@@ -19,3 +19,4 @@ remote:
     clearscope: "/mnt/bigdata/aptdata/data_files/clearscope"
     trace: "/mnt/bigdata/aptdata/data_files/trace"
     atlas: "/mnt/bigdata/aptdata/atlas_data"
+    cadets5: "/mnt/bigdata/aptdata/data_files5/cadets"
