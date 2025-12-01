@@ -1292,7 +1292,11 @@ class GCCEmbedderDev(GraphEmbedderBase):
             b_norm = base_w / (base_w.mean() + 1e-12)
 
             # ===== 属性罕见性权重 1 - p(attr) =====
-            props = [str(g.vs[j].get('properties', '')) for j in range(N)]
+            # igraph 的 Vertex 无 .get 方法，需用 attributes()/序列访问
+            if 'properties' in g.vs.attributes():
+                props = [str(p) for p in g.vs['properties']]
+            else:
+                props = [''] * N
 
             # 聚合属性词的加权频率
             prop_w = {}
