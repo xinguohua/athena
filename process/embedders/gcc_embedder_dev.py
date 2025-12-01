@@ -163,7 +163,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             w2v_sg: int = 1,
             w2v_epochs: int = 20,
             w2v_pretrained_path: Optional[str] = None,
-            use_malicious_snapshots: bool = False,
+            use_malicious_snapshots: bool = True,
             use_malicious_negatives: bool = False,
             # 第三个开关：两种策略按比例混合
             combine: bool = False,
@@ -181,7 +181,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             topk_pos: Optional[int] = 0,  # 先关闭 Top-K 扩增，回到经典 NT-Xent
             topk_pos_min_sim: float = 0.5,  # 仅当相似度 > 此阈值时才将样本纳入 Top-K 正样本
             # 新增：是否使用“度感知 点-边协同增强”（默认关闭，保持原策略不变）
-            use_degree_coop_augment: bool = False,
+            use_degree_coop_augment: bool = True,
     ):
         super().__init__(snapshots, features, mapp)
         if mal_stopwords is None:
@@ -254,7 +254,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         # 增强策略开关
         self.use_degree_coop_augment = bool(use_degree_coop_augment)
         # 是否使用正子图融合恶意子图构造负样本（调用 _build_neg_block_from_snapshots_with_pos）
-        self.use_pos_fusion_neg = False  # 运行时可直接设 True 开启
+        self.use_pos_fusion_neg = True  # 运行时可直接设 True 开启
         self.pos_fusion_ratio = 0.5       # 正子图内部节点采样比例
         self.pos_fusion_cross_ratio = 0.2 # 跨连边比例
         self.pos_fusion_cross_max = 8     # 跨连边最大数
