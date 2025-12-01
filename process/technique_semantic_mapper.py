@@ -37,6 +37,7 @@ class TechniqueSemanticMapper:
         top_k: int = 5,
         query_mode: str = "nodes_json",
         summary_max_nodes: int = 200,
+        node_scope: str = "all",  # "all" | "malicious"
     ) -> None:
 
         # ======== 最常用配置 ========
@@ -47,6 +48,7 @@ class TechniqueSemanticMapper:
         self.code_column = code_column
         self.top_k = int(max(1, top_k))
         self.summary_max_nodes = max(1, int(summary_max_nodes))
+        self.node_scope = (node_scope or "all").lower()
 
         from process.llm_clients.chatanywhere_client import make_chatanywhere_summarizer
         self.llm_summarizer = make_chatanywhere_summarizer(
@@ -123,6 +125,14 @@ class TechniqueSemanticMapper:
         nodes: List[dict] = []
         for v in snapshot.vs:
             attrs = v.attributes()
+            # 仅当 node_scope=="malicious" 时收集 label==1 的节点
+            if self.node_scope == "malicious":
+                try:
+                    lab = int(attrs.get("label", 0))
+                except Exception:
+                    lab = 0
+                if lab != 1:
+                    continue
             t = attrs.get("type") or attrs.get("type_name") or ""
             props = attrs.get("properties") or ""
             freq = attrs.get("frequency", "")
