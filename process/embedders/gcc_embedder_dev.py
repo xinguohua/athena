@@ -184,9 +184,12 @@ class GCCEmbedderDev(GraphEmbedderBase):
             use_degree_coop_augment: bool = True,
                 # 负样本权重缩放（超参数）：用于提高恶意样本在损失中的占比
                 neg_weight_scale: float = 100.0,
-                # 快照聚合“属性频率降权”系数：attr_weight_alpha ∈ [0,1]
-                # 越大→更接近原始频率/度；越小→更强调属性字符串出现频繁时的 1/(1+cnt) 降权
-                attr_weight_alpha: float = 0.5,
+                # 快照聚合“权重混合”系数：attr_weight_alpha ∈ [0,1]
+                # 使用两个权重向量做加权相加：
+                #   - w_base: 节点基础权重（frequency 优先，其次 degree）
+                #   - w_attr: 属性稀少权重（来自 g 内属性相对频率的反比）
+                # 最终节点权重：w_eff = (1 - alpha) * norm(w_base) + alpha * norm(w_attr)
+                attr_weight_alpha: float = 0.3,
     ):
         super().__init__(snapshots, features, mapp)
         if mal_stopwords is None:
@@ -1262,7 +1265,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             except Exception:
                 freqs = None
             degrees = g.degree()
-            # 计算本快照内各节点 properties 的出现频率（完全相同字符串的计数）
+            # 计算本快照内各节点 properties 的“加权出现频率”（以节点基础权重加权），并在所有属性间归一到 [0,1]
             props_list: List[str] = []
             if 'properties' in g.vs.attributes():
                 try:
@@ -1271,37 +1274,68 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     props_list = [str(g.vs[j].attributes().get('properties', '')) for j in range(g.vcount())]
             else:
                 props_list = [str(g.vs[j].attributes().get('properties', '')) for j in range(g.vcount())]
-            from collections import Counter
-            prop_counter = Counter(props_list)
+
+            # 节点基础权重向量（频率优先，其次度）
+            base_w: List[float] = []
+            if freqs is not None:
+                for idx in range(g.vcount()):
+                    try:
+                        wb = float(freqs[idx])
+                    except Exception:
+                        wb = 0.0
+                    if not np.isfinite(wb) or wb < 0:
+                        wb = 0.0
+                    base_w.append(wb)
+            else:
+                for idx in range(g.vcount()):
+                    try:
+                        wb = float(degrees[idx])
+                    except Exception:
+                        wb = 0.0
+                    if not np.isfinite(wb) or wb < 0:
+                        wb = 0.0
+                    base_w.append(wb)
+
+            # 汇总到属性：加权频率 = ∑ 节点基础权重（同属性字符串）
+            prop_weighted_freq: Dict[str, float] = {}
+            for idx, key in enumerate(props_list):
+                wv = base_w[idx] if idx < len(base_w) else 0.0
+                if wv <= 0:
+                    continue
+                prop_weighted_freq[key] = prop_weighted_freq.get(key, 0.0) + wv
+
+            # 归一化到 [0,1]（按 max 归一，避免全零）
+            if prop_weighted_freq:
+                max_prop_w = max(prop_weighted_freq.values())
+                if max_prop_w > 0:
+                    prop_freq_norm = {k: float(v) / float(max_prop_w) for k, v in prop_weighted_freq.items()}
+                else:
+                    prop_freq_norm = {k: 0.0 for k in prop_weighted_freq.keys()}
+            else:
+                prop_freq_norm = {}
             weighted = np.zeros(self.enc_out_dim, dtype=np.float32)
             total_w = 0.0
+            # 预先构造两个权重向量并做归一化，然后用 alpha 做线性相加
             alpha = float(self.attr_weight_alpha)
+            alpha = float(min(max(alpha, 0.0), 1.0))
+            n_nodes = g.vcount()
+
+            b = np.asarray(base_w, dtype=np.float32)
+            mb = float(np.mean(b)) if b.size > 0 else 0.0
+            b_norm = b / mb if mb > 0 else np.zeros(n_nodes, dtype=np.float32)
+
+            a_vals = [1.0 - float(prop_freq_norm.get(props_list[idx], 0.0)) for idx in range(n_nodes)]
+            a = np.asarray(a_vals, dtype=np.float32)
+            ma = float(np.mean(a)) if a.size > 0 else 0.0
+            a_norm = a / ma if ma > 0 else np.zeros(n_nodes, dtype=np.float32)
+
+            w_eff_vec = (1.0 - alpha) * b_norm + alpha * a_norm
             for local_idx in range(g.vcount()):
                 nid = g.vs[local_idx]['name']
                 vec = emb_dict.get(nid)
                 if vec is None:
                     continue
-                if freqs is not None:
-                    try:
-                        w = float(freqs[local_idx])
-                    except Exception:
-                        w = 0.0
-                    if not np.isfinite(w) or w < 0:
-                        w = 0.0
-                else:
-                    w = float(degrees[local_idx])
-                if w <= 0:
-                    continue
-                # 计算该节点 properties 在本快照中的出现频率（完全相同字符串）
-                try:
-                    prop_str = props_list[local_idx]
-                    cnt = int(prop_counter.get(prop_str, 0))
-                except Exception:
-                    cnt = 0
-                # 出现越频繁，权重越低：使用 1/(1+cnt) 作为稀少度因子
-                f_prop = 1.0 / (1.0 + float(cnt))
-                # 平滑融合：alpha 越大越靠近原始权重，越小越受属性频率影响（高频→更低权重）
-                w_eff = w * (alpha + (1.0 - alpha) * f_prop)
+                w_eff = float(w_eff_vec[local_idx])
                 if w_eff <= 0:
                     continue
                 weighted += (w_eff * vec)
