@@ -1,14 +1,16 @@
 from typing import Optional
 from .darpa_handler import DARPAHandler
+from .darpa_handler5 import DARPAHandler5
 from .atlas_handler import ATLASHandler
 
-__all__ = ["DARPAHandler", "ATLASHandler"]
+__all__ = ["DARPAHandler", "DARPAHandler5", "ATLASHandler"]
 
 handler_map = {
     "theia": DARPAHandler,
     "cadets": DARPAHandler,
     "clearscope": DARPAHandler,
     "trace": DARPAHandler,
+    "cadets5": DARPAHandler5,
     "atlas": ATLASHandler,
 }
 

@@ -6,9 +6,10 @@ from igraph import Graph
 from .base import BaseProcessor
 from .common import merge_properties, collect_dot_paths, collect_atlas_label_paths
 from .type_enum import ObjectType
-
+from typing import Optional
 class ATLASHandler(BaseProcessor):
-    def __init__(self, base_path=None, train=True ):
+    #def __init__(self, base_path=None, train=True):
+    def __init__(self, base_path, train, *, scene_name: Optional[str] = None):
         super().__init__(base_path, train)
 
         # 用于按图（场景）分开存储其对应的恶意标签
