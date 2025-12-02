@@ -98,44 +98,66 @@ def main():
     classify.train(benign_embeddings)
 
 if __name__ == "__main__":
-    # 统计 CPU/内存，最小侵入
-    import time
+    # 实时（周期）采样，但只在结束时打印平均值
+    import time, threading
+    samples_cpu: list[float] = []
+    samples_mem: list[float] = []
+    stop_flag = threading.Event()
+
+    def _sampler():
+        try:
+            import psutil  # type: ignore
+            proc = psutil.Process(os.getpid())
+            psutil.cpu_percent(interval=None)  # 预热
+            while not stop_flag.is_set():
+                cpu_pct = float(psutil.cpu_percent(interval=1.0))
+                rss_mb = float(proc.memory_info().rss) / (1024 * 1024)
+                samples_cpu.append(cpu_pct)
+                samples_mem.append(rss_mb)
+        except Exception:
+            # 如果没有 psutil，则不采样，保持空列表
+            stop_flag.wait(timeout=1.0)
+
+    th = threading.Thread(target=_sampler, daemon=True)
+    th.start()
+
     t0_wall = time.time()
     t0_cpu = time.process_time()
-    main()
-    wall = time.time() - t0_wall
-    cpu = time.process_time() - t0_cpu
-    # 峰值内存（MB）：macOS ru_maxrss=bytes；Linux=KB
-    peak_mb = None
     try:
-        import resource  # type: ignore
-        ru = resource.getrusage(resource.RUSAGE_SELF)
-        if os.uname().sysname.lower() == 'darwin':
-            peak_mb = float(ru.ru_maxrss) / (1024 * 1024)
-        else:
-            peak_mb = float(ru.ru_maxrss) / 1024.0
-    except Exception:
-        peak_mb = None
-    cur_mb = None
-    try:
-        import psutil  # type: ignore
-        rss = psutil.Process(os.getpid()).memory_info().rss
-        cur_mb = float(rss) / (1024 * 1024)
-    except Exception:
-        cur_mb = None
+        main()
+    finally:
+        wall = time.time() - t0_wall
+        cpu = time.process_time() - t0_cpu
+        stop_flag.set()
+        th.join(timeout=2.0)
 
-    # 仅输出 CPU 利用率与内存占用（MB）
-    cpu_pct = None
-    if wall > 0:
-        cpu_pct = min(100.0, max(0.0, cpu / wall * 100))
-    mem_mb = cur_mb if cur_mb is not None else peak_mb
-    print("\n===== Train Utilization =====")
-    if cpu_pct is not None:
-        print(f"CPU%: {cpu_pct:.1f}")
+    # 计算平均 CPU% 与平均内存（MB）；若采样为空则退回结束时估计
+    avg_cpu = None
+    avg_mem = None
+    if samples_cpu:
+        avg_cpu = sum(samples_cpu) / len(samples_cpu)
     else:
-        print("CPU%: UNKNOWN")
-    if mem_mb is not None:
-        print(f"Memory (MB): {mem_mb:.1f}")
+        if wall > 0:
+            avg_cpu = min(100.0, max(0.0, cpu / wall * 100))
+    if samples_mem:
+        avg_mem = sum(samples_mem) / len(samples_mem)
     else:
-        print("Memory (MB): UNKNOWN")
-    print("============================\n")
+        try:
+            import psutil  # type: ignore
+            rss = psutil.Process(os.getpid()).memory_info().rss
+            avg_mem = float(rss) / (1024 * 1024)
+        except Exception:
+            try:
+                import resource  # type: ignore
+                ru = resource.getrusage(resource.RUSAGE_SELF)
+                if os.uname().sysname.lower() == 'darwin':
+                    avg_mem = float(ru.ru_maxrss) / (1024 * 1024)
+                else:
+                    avg_mem = float(ru.ru_maxrss) / 1024.0
+            except Exception:
+                avg_mem = None
+
+    print("\n===== Train Utilization (Avg) =====")
+    print(f"CPU%: {avg_cpu:.1f}" if avg_cpu is not None else "CPU%: UNKNOWN")
+    print(f"Memory (MB): {avg_mem:.1f}" if avg_mem is not None else "Memory (MB): UNKNOWN")
+    print("==================================\n")
