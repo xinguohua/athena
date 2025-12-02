@@ -98,4 +98,44 @@ def main():
     classify.train(benign_embeddings)
 
 if __name__ == "__main__":
+    # 统计 CPU/内存，最小侵入
+    import time
+    t0_wall = time.time()
+    t0_cpu = time.process_time()
     main()
+    wall = time.time() - t0_wall
+    cpu = time.process_time() - t0_cpu
+    # 峰值内存（MB）：macOS ru_maxrss=bytes；Linux=KB
+    peak_mb = None
+    try:
+        import resource  # type: ignore
+        ru = resource.getrusage(resource.RUSAGE_SELF)
+        if os.uname().sysname.lower() == 'darwin':
+            peak_mb = float(ru.ru_maxrss) / (1024 * 1024)
+        else:
+            peak_mb = float(ru.ru_maxrss) / 1024.0
+    except Exception:
+        peak_mb = None
+    cur_mb = None
+    try:
+        import psutil  # type: ignore
+        rss = psutil.Process(os.getpid()).memory_info().rss
+        cur_mb = float(rss) / (1024 * 1024)
+    except Exception:
+        cur_mb = None
+
+    # 仅输出 CPU 利用率与内存占用（MB）
+    cpu_pct = None
+    if wall > 0:
+        cpu_pct = min(100.0, max(0.0, cpu / wall * 100))
+    mem_mb = cur_mb if cur_mb is not None else peak_mb
+    print("\n===== Train Utilization =====")
+    if cpu_pct is not None:
+        print(f"CPU%: {cpu_pct:.1f}")
+    else:
+        print("CPU%: UNKNOWN")
+    if mem_mb is not None:
+        print(f"Memory (MB): {mem_mb:.1f}")
+    else:
+        print("Memory (MB): UNKNOWN")
+    print("============================\n")
