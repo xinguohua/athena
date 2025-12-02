@@ -1348,6 +1348,12 @@ def run_evaluation(path_map: dict) -> None:
 # 主入口
 # ========================================================================
 if __name__ == "__main__":
+    # 最简：将所有打印重定向到文件（不再输出到终端）
+    import time
+    log_name = f"run-{time.strftime('%Y%m%d-%H%M%S')}.txt"
+    logf = open(log_name, 'a', encoding='utf-8')
+    sys.stdout = logf
+    sys.stderr = logf
     with open("config.yaml", "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
