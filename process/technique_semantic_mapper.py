@@ -37,7 +37,7 @@ class TechniqueSemanticMapper:
         top_k: int = 5,
         query_mode: str = "nodes_json",
         summary_max_nodes: int = 200,
-        node_scope: str = "all",  # "all" | "malicious"
+        node_scope: str = "malicious",  # "all" | "malicious"
     ) -> None:
 
         # ======== 最常用配置 ========
