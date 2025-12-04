@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import yaml
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+import time
 
 from process.classfy import get_classfy
 from process.utils.measure import measure_func
@@ -757,6 +758,111 @@ def get_true_labels(snapshots) -> np.ndarray:
     """提取快照真实标签"""
     return np.array([int(any(v["label"] == 1 for v in s.vs)) for s in snapshots])
 
+def print_snapshot_throughput(snapshots, proc_times: Optional[List[float]] = None):
+    """
+    对每个快照输出两行：
+    - 边/时间跨度：edge_count / time_span_seconds
+    - 边/处理时间：edge_count / processing_seconds
+    其中时间跨度从边属性 `timestamp` 的最大值减最小值计算。
+    处理时间优先使用传入的每快照处理耗时 `proc_times[i]`；
+    若未提供则用一次轻量属性访问计时近似。
+    """
+    # 若未显式提供，则在方法内部依据“序列过滤阶段”计算每快照处理时间
+    if proc_times is None:
+        try:
+            proc_times = _compute_seq_filter_proc_times(
+                snapshots,
+                mapper_config={
+                    "csv_path": "data/mitreembed_master_Chroma.csv",
+                    "persist_dir": "./chroma_db",
+                    "model_name": "sentence-transformers/all-MiniLM-L12-v2",
+                    "page_content_column": "Body",
+                    "code_column": "Subject",
+                    "top_k": 5,
+                } if SEQ_FILTER.get("enable", False) else None,
+                library_path=SEQ_FILTER.get("library_path") if SEQ_FILTER.get("enable", False) else None,
+            )
+        except Exception as e:
+            print(f"[Throughput] 内部处理时间计算失败，使用近似：{e}")
+            proc_times = None
+
+    for i, G in enumerate(snapshots):
+        try:
+            edge_count = G.ecount()
+        except Exception:
+            try:
+                edge_count = len(G.es)
+            except Exception:
+                edge_count = 0
+
+        # 时间跨度
+        time_span_secs = 0.0
+        try:
+            if hasattr(G, 'es') and ('timestamp' in G.es.attributes()):
+                ts = G.es['timestamp']
+                if ts:
+                    tmin = float(min(ts))
+                    tmax = float(max(ts))
+                    time_span_secs = max(1e-6, tmax - tmin)
+        except Exception:
+            pass
+
+        # 处理时间
+        if proc_times is not None and i < len(proc_times) and proc_times[i] is not None:
+            proc_secs = max(1e-6, float(proc_times[i]))
+        else:
+            t0 = time.time()
+            try:
+                _ = edge_count
+                if hasattr(G, 'es') and ('actions' in G.es.attributes()):
+                    _ = len(G.es['actions'])
+            except Exception:
+                pass
+            t1 = time.time()
+            proc_secs = max(1e-6, t1 - t0)
+
+        eps_span = edge_count / max(1e-6, time_span_secs)
+        eps_proc = edge_count / proc_secs
+        print(f"[Snapshot {i}] 边/时间跨度: {edge_count} / {time_span_secs:.6f}s = {eps_span:.2f} eps")
+        print(f"[Snapshot {i}] 边/处理时间: {edge_count} / {proc_secs:.6f}s = {eps_proc:.2f} eps")
+
+def _compute_seq_filter_proc_times(
+    snapshots: List,
+    mapper_config: Optional[dict],
+    library_path: Optional[str],
+) -> Optional[List[float]]:
+    """
+    依据序列过滤阶段的实际工作进行“分快照处理耗时”估算：
+    - 每个快照：测量语义映射器的 `snapshot_to_query(snap)` 时间作为主要耗时
+    - LCS 匹配为全局序列行为，按快照不细分，这里不纳入单快照耗时
+    返回与 `snapshots` 等长的耗时列表。
+    """
+    try:
+        # 初始化映射器与库
+        sem_mapper = None
+        if mapper_config:
+            from process.technique_semantic_mapper import TechniqueSemanticMapper  # type: ignore
+            sem_mapper = TechniqueSemanticMapper(**mapper_config)
+        _ = _load_technique_sequence_library(library_path)  # 触发加载以保证一致，但单快照不做 LCS
+    except Exception as ex:
+        print(f"[SeqProcTime] 初始化失败：{ex}")
+        return None
+
+    if sem_mapper is None:
+        print("[SeqProcTime] 无语义映射器，跳过分快照处理耗时测量。")
+        return None
+
+    times: List[float] = []
+    for snap in snapshots:
+        t0 = time.time()
+        try:
+            _ = sem_mapper.snapshot_to_query(snap)
+        except Exception:
+            pass
+        t1 = time.time()
+        times.append(max(1e-6, t1 - t0))
+    return times
+
 def print_debug_info(all_snapshots, eval_true, eval_pred, eval_start_idx):
     """
     详细打印TP、FP、FN、TN快照的调试信息，显示导致分类的具体节点。
@@ -1189,6 +1295,8 @@ def run_evaluation(path_map: dict) -> None:
         print("[ERROR] 未能构建快照")
         return
     save_snapshot_nodes(mal_snapshots)
+    # 输出吞吐指标（处理时间将由方法内部按序列过滤阶段计算）
+    print_snapshot_throughput(mal_snapshots)
     true_labels = get_true_labels(mal_snapshots)
     # 打印恶意快照片段内索引（从0开始）
     mal_idx_in_slice = np.where(true_labels == 1)[0]
