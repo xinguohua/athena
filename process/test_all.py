@@ -11,6 +11,7 @@ import yaml
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 from process.classfy import get_classfy
+from process.utils.measure import measure_func
 
 # --- 项目模块 ---
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -1038,6 +1039,46 @@ def _lcs_indices_keep_mask(a: List[str], b: List[str]) -> Tuple[List[bool], int]
 # 解耦：映射 / 运行段提取 / LCS过滤
 # =========================
 
+@measure_func("test.seq_filter", realtime=True, interval=1.0)
+def _seq_filter_phase(
+    pred_labels: np.ndarray,
+    mal_snapshots: List,
+    mapper_config: Optional[dict],
+    library_path: Optional[str],
+    lcs_min_ratio: float,
+):
+    # 技术序列库加载（测量范围内）
+    lib: List[List[str]] = _load_technique_sequence_library(library_path)
+    # 语义映射器初始化（测量范围内）
+    sem_mapper = None
+    if mapper_config:
+        try:
+            from process.technique_semantic_mapper import TechniqueSemanticMapper  # type: ignore
+            sem_mapper = TechniqueSemanticMapper(**mapper_config)
+        except Exception as ex:
+            sem_mapper = None
+            print(f"[Map] 语义映射器初始化失败：{ex}")
+    if len(lib) > 0:
+        idx_pos, tech_seq = map_pred_positive_to_techniques(
+            pred_labels,
+            mal_snapshots,
+            semantic_mapper=sem_mapper,
+        )
+        y_ref = filter_positive_by_tech_lcs(
+            pred_labels,
+            idx_pos,
+            tech_seq,
+            lib,
+            lcs_min_ratio=float(lcs_min_ratio),
+        )
+        removed = int(np.sum(pred_labels) - np.sum(y_ref))
+        print(f"[SeqFilter] 技术序列库筛选：移除 {removed} 个不匹配告警。")
+        pred_labels_refined = y_ref.astype(int)
+    else:
+        print("[SeqFilter] 未找到技术序列库，跳过二次筛选。")
+        pred_labels_refined = pred_labels
+    return pred_labels_refined
+
 def map_pred_positive_to_techniques(
     pred_labels: np.ndarray,
     snapshots: List,
@@ -1120,6 +1161,7 @@ def filter_positive_by_tech_lcs(
     return y
 
 
+@measure_func("test.run_evaluation", realtime=True, interval=1.0)
 def run_evaluation(path_map: dict) -> None:
     # 仅使用带身份后缀的快照文件，不做回退
     snapshot_file = f"snapshot_data_{GLOBAL_ID}.pkl"
@@ -1226,39 +1268,21 @@ def run_evaluation(path_map: dict) -> None:
     print(f"预测标签长度: {len(pred_labels)}")
 
     if SEQ_FILTER.get("enable", False):
-        try:
-            from process.technique_semantic_mapper import TechniqueSemanticMapper  # type: ignore
-            sem_mapper = TechniqueSemanticMapper(
-                csv_path="data/mitreembed_master_Chroma.csv",
-                persist_dir="./chroma_db",
-                model_name="sentence-transformers/all-MiniLM-L12-v2",
-                page_content_column="Body",
-                code_column="Subject",
-                top_k=5,
-            )
-        except Exception as ex:
-            sem_mapper = None
-            print(f"[Map] 语义映射器初始化失败：{ex}")
-        lib: List[List[str]] = _load_technique_sequence_library(SEQ_FILTER.get("library_path"))
-        if len(lib) > 0:
-            idx_pos, tech_seq = map_pred_positive_to_techniques(
-                pred_labels,
-                mal_snapshots,
-                semantic_mapper=sem_mapper,
-            )
-            y_ref = filter_positive_by_tech_lcs(
-                pred_labels,
-                idx_pos,
-                tech_seq,
-                lib,
-                lcs_min_ratio=float(SEQ_FILTER.get("lcs_min_ratio", 0.6)),
-            )
-            removed = int(np.sum(pred_labels) - np.sum(y_ref))
-            print(f"[SeqFilter] 技术序列库筛选：移除 {removed} 个不匹配告警。")
-            pred_labels_refined = y_ref.astype(int)
-        else:
-            print("[SeqFilter] 未找到技术序列库，跳过二次筛选。")
-            pred_labels_refined = pred_labels
+        mapper_cfg = {
+            "csv_path": "data/mitreembed_master_Chroma.csv",
+            "persist_dir": "./chroma_db",
+            "model_name": "sentence-transformers/all-MiniLM-L12-v2",
+            "page_content_column": "Body",
+            "code_column": "Subject",
+            "top_k": 5,
+        }
+        pred_labels_refined = _seq_filter_phase(
+            pred_labels,
+            mal_snapshots,
+            mapper_cfg,
+            SEQ_FILTER.get("library_path"),
+            float(SEQ_FILTER.get("lcs_min_ratio", 0.6)),
+        )
     else:
         pred_labels_refined = pred_labels
 
