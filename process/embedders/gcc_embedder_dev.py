@@ -135,7 +135,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             use_temporal: bool = False,
             # 输入/编码器尺寸
             prop_feat_dim: int = 128,
-            enc_hidden_dim: int = 128,
+            enc_hidden_dim: int = 64,
             enc_out_dim: int = 256,
             gin_layers: int = 3,
             dropout: float = 0.1,
@@ -146,7 +146,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             # 对比学习
             temperature: float = 0.07,
             # 子图采样
-            r_hop: int = 2,
+            r_hop: int = 4,
             ego_max_nodes: int = 64,
             # 增强
             drop_edge_p: float = 0.2,
