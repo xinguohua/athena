@@ -115,6 +115,55 @@ class DARPAHandler(BaseProcessor):
         # 训练用的数据集
         use_df = pd.concat(self.all_dfs, ignore_index=True)
         self.use_df = use_df.drop_duplicates()
+        # === 依据去重后的 use_df 估算大小，并可按需构造 mock 规模 ===
+        try:
+            base_bytes = int(self.use_df.memory_usage(deep=True).sum())
+        except Exception:
+            base_bytes = self.use_df.memory_usage().sum()
+        print(f"[Handler] use_df 去重后估算内存: {base_bytes/1024/1024:.2f} MB")
+
+        # 可选：直接指定目标规模，支持数字（字节）或字符串（如 "10GB", "20GB", "500MB"）
+        def _parse_size(val):
+            if isinstance(val, (int, float)):
+                return int(val)
+            if isinstance(val, str):
+                s = val.strip().upper()
+                if s.endswith("GB"):
+                    num = float(s[:-2].strip())
+                    return int(num * (1024 ** 3))
+                if s.endswith("MB"):
+                    num = float(s[:-2].strip())
+                    return int(num * (1024 ** 2))
+                if s.endswith("KB"):
+                    num = float(s[:-2].strip())
+                    return int(num * 1024)
+                try:
+                    return int(float(s))
+                except Exception:
+                    return 0
+            return 0
+
+        # 直接在此设置：0 / "10GB" / "20GB" / "500MB" 等
+        target_size = 0  # 示例：target_size = "10GB" 或 0 表示不构造
+        target_bytes = _parse_size(target_size)
+        if target_bytes and base_bytes > 0 and len(self.use_df) > 0:
+            factor = max(1, int((target_bytes + base_bytes - 1) // max(1, base_bytes)))
+            if factor > 1:
+                print(f"[Handler] 构造 mock 规模: 目标={target_bytes/1024/1024/1024:.2f} GB, 重复因子={factor}")
+                # 通过按块重复来近似扩容，避免一次性巨大 concat 造成峰值内存
+                blocks = []
+                chunk = self.use_df
+                remaining = factor
+                while remaining > 0:
+                    take = min(remaining, 8)  # 每次最多重复 8 次以控制峰值
+                    blocks.append(pd.concat([chunk] * take, ignore_index=True))
+                    remaining -= take
+                self.use_df = pd.concat(blocks, ignore_index=True)
+                try:
+                    mock_bytes = int(self.use_df.memory_usage(deep=True).sum())
+                except Exception:
+                    mock_bytes = self.use_df.memory_usage().sum()
+                print(f"[Handler] mock 后估算内存: {mock_bytes/1024/1024/1024:.2f} GB")
 
     def create_snapshots_from_graph(self, df, is_malicious=False, mode="time"):
         """
