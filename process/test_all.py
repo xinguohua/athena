@@ -796,16 +796,8 @@ def print_snapshot_throughput(snapshots, proc_times: Optional[List[float]] = Non
                 edge_count = 0
 
         # 时间跨度
-        time_span_secs = 0.0
-        try:
-            if hasattr(G, 'es') and ('timestamp' in G.es.attributes()):
-                ts = G.es['timestamp']
-                if ts:
-                    tmin = float(min(ts))
-                    tmax = float(max(ts))
-                    time_span_secs = max(1e-6, tmax - tmin)
-        except Exception:
-            pass
+        # 时间跨度：统一按 1 分钟 = 60 秒
+        time_span_secs = 60.0
 
         # 处理时间
         if proc_times is not None and i < len(proc_times) and proc_times[i] is not None:
