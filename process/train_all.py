@@ -6,6 +6,7 @@ import yaml
 from datahandlers import get_handler
 from embedders import get_embedder_by_name
 from process.classfy import get_classfy
+from process.utils.measure import measure_func
 
 # ---------------- 配置参数 ----------------
 CONFIG_PATH = "config.yaml"
@@ -38,6 +39,7 @@ def load_config(path: str) -> dict:
     return config["local"] if "windows" in system else config["remote"]
 
 
+@measure_func("prepare_data", realtime=True, interval=1.0)
 def prepare_data(path_map: dict):
     """加载数据并生成快照。内部使用全局 SCENE_NAME 控制场景过滤。"""
     handler = get_handler(DATASET_NAME, True, path_map, scene_name=SCENE_NAME)
@@ -45,7 +47,7 @@ def prepare_data(path_map: dict):
     handler.build_graph(GLOBAL_ID)
     return handler
 
-
+@measure_func("build_embeddings", realtime=True, interval=1.0)
 def build_embeddings(handler):
     """构建并训练嵌入器，仅使用良性快照训练"""
     embedder_cls = get_embedder_by_name(EMBEDDER_NAME)
@@ -95,7 +97,12 @@ def main():
     benign_embeddings = snapshot_embeddings[handler.benign_idx_start:handler.benign_idx_end + 1]
     # 统一：将 gid 传入分类器，内部自行拼接/处理持久化路径
     classify = get_classfy(CLASSIFY_NAME, gid=GLOBAL_ID)
-    classify.train(benign_embeddings)
+    # 用注解测量该阶段（实时采样，每 1 秒记录一次）
+    @measure_func("classify.train", realtime=True, interval=1.0)
+    def _run_train(clf, X):
+        clf.train(X)
+
+    _run_train(classify, benign_embeddings)
 
 if __name__ == "__main__":
     # 实时（周期）采样，但只在结束时打印平均值
