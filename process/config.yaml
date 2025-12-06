@@ -20,3 +20,5 @@ remote:
     trace: "/mnt/bigdata/aptdata/data_files/trace"
     atlas: "/mnt/bigdata/aptdata/atlas_data"
     cadets5: "/mnt/bigdata/aptdata/data_files5/cadets"
+    theia5: "/mnt/bigdata/aptdata/data_files5/theia"
+    optcday1: "/mnt/bigdata/aptdata/data_files_optc/day1"

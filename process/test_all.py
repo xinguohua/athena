@@ -39,7 +39,7 @@ GLOBAL_ID = "xgh"
 
 # 二次筛选配置（仅基于“攻击技术序列库”）
 SEQ_FILTER = {
-    "enable": False,           # 开关：是否启用二次筛选
+    "enable": True,           # 开关：是否启用二次筛选
     "library_path": "technique_sequences.txt",  # 技术序列库文件（每行一条序列，逗号/空白分隔）
     "lcs_min_ratio": 0.6,     # LCS 匹配阈值：LCS_len / len(库内序列) >= 该比例才视为命中
 }
