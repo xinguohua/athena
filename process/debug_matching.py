@@ -40,8 +40,8 @@ OUTPUT_FILE = "debug_matching_output.json"
 DIAG_INDEX = 0
 
 MAPPER_CONFIG = {
-    "csv_path": "data/mitreembed_master_Chroma.csv",
-    "persist_dir": "./chroma_db",
+    "csv_path": os.path.join(os.path.dirname(__file__), "data/mitreembed_master_Chroma.csv"),
+    "persist_dir": os.path.join(os.path.dirname(__file__), "chroma_db"),
     "model_name": "sentence-transformers/all-MiniLM-L12-v2",
     "page_content_column": "Body",
     "code_column": "Subject",
