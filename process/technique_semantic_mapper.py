@@ -55,7 +55,7 @@ class TechniqueSemanticMapper:
             api_key="sk-doxpoyNwE1kfZtZeYZEwqwd0MyHxYsr5pP8OG3NYcepsbQdM",
             endpoint="https://api.chatanywhere.org/v1"
         )
-        self.summarize = "llm"
+        self.summarize = "simple"
 
         # ======== 构建或打开向量库 ========
         self._vectordb, self._emb = self._open_or_build()

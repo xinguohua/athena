@@ -1492,7 +1492,8 @@ if __name__ == "__main__":
     sys.stdout = _Tee(sys.stdout, logf)
     sys.stderr = _Tee(sys.stderr, logf)
     print(f"[Log] writing to {log_name}")
-    with open("config.yaml", "r", encoding="utf-8") as f:
+    _config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
+    with open(_config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     env = config["local"] if "windows" in sys.platform else config["remote"]

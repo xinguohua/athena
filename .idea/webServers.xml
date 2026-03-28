@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="11b3ccab-9192-43fc-827c-a311feb59ded" name="tju">
+        <fileTransfer accessType="SFTP" host="labserver.dack.top" port="8950" sshConfigId="44845bb9-197b-4e47-be06-e9cbdd3bc284" sshConfig="nsas2020@labserver.dack.top:8950 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
