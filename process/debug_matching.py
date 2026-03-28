@@ -1,10 +1,10 @@
 """
-攻击技术匹配诊断脚本。
+攻击技术匹配诊断脚本 — 只跑1个恶意快照，重点对比查询文本 vs 匹配到的技术描述。
 
 远程运行：
     conda activate prographer && cd /home/nsas2020/fuzz/prographer && python -m process.debug_matching
 
-产出：debug_matching_output.json — 推到 GitHub 后本地分析
+产出：debug_matching_output.json
 """
 import json
 import os
@@ -36,6 +36,8 @@ sys.stdout = _Tee(sys.__stdout__, _log_fh)
 GLOBAL_ID = "xgh"
 SNAPSHOT_FILE = f"snapshot_data_{GLOBAL_ID}.pkl"
 OUTPUT_FILE = "debug_matching_output.json"
+# 只诊断第几个恶意快照（从0开始），选一个 true_label=1 的效果最好
+DIAG_INDEX = 0
 
 MAPPER_CONFIG = {
     "csv_path": "data/mitreembed_master_Chroma.csv",
@@ -45,7 +47,6 @@ MAPPER_CONFIG = {
     "code_column": "Subject",
     "top_k": 5,
 }
-SEQ_LIBRARY_PATH = "technique_sequences.txt"
 
 
 def main():
@@ -61,13 +62,28 @@ def main():
     mal_start = snapshot_data["malicious_idx_start"]
     mal_end = snapshot_data["malicious_idx_end"]
     mal_snapshots = all_snapshots[mal_start: mal_end + 1]
-    print(f"恶意快照数量: {len(mal_snapshots)}")
+    print(f"恶意快照总数: {len(mal_snapshots)}")
+
+    # 找第一个 true_label=1 的快照
+    target_idx = DIAG_INDEX
+    for i, snap in enumerate(mal_snapshots):
+        try:
+            for v in snap.vs:
+                if int(v.attributes().get("label", 0)) == 1:
+                    target_idx = i
+                    break
+            if target_idx != DIAG_INDEX or i == DIAG_INDEX:
+                break
+        except Exception:
+            pass
+
+    snap = mal_snapshots[target_idx]
+    print(f"\n===== 诊断快照 [{target_idx}] (全局索引 {mal_start + target_idx}) =====")
 
     # 2) 初始化语义映射器
     from process.technique_semantic_mapper import TechniqueSemanticMapper
     mapper = TechniqueSemanticMapper(**MAPPER_CONFIG)
 
-    # 3) 向量库基本信息
     db_count = 0
     try:
         db_count = mapper._vectordb._collection.count()
@@ -75,138 +91,100 @@ def main():
         pass
     print(f"向量库文档数: {db_count}")
 
-    # 4) 逐快照诊断
-    results = []
-    for i, snap in enumerate(mal_snapshots):
-        # 真实标签
-        true_label = 0
+    # 3) 快照节点详情
+    node_count = snap.vcount()
+    mal_nodes = []
+    all_nodes = []
+    for v in snap.vs:
+        attrs = v.attributes()
+        label = 0
         try:
-            for v in snap.vs:
-                if int(v.attributes().get("label", 0)) == 1:
-                    true_label = 1
-                    break
+            label = int(attrs.get("label", 0))
         except Exception:
             pass
+        node_info = {
+            "type": str(attrs.get("type") or attrs.get("type_name") or ""),
+            "properties": str(attrs.get("properties") or ""),
+            "frequency": attrs.get("frequency", ""),
+            "label": label,
+        }
+        all_nodes.append(node_info)
+        if label == 1:
+            mal_nodes.append(node_info)
 
-        # 生成查询文本
-        query = mapper.snapshot_to_query(snap)
+    print(f"节点总数: {node_count}, 恶意节点数: {len(mal_nodes)}")
 
-        # 节点统计
-        node_count = snap.vcount()
-        mal_node_count = 0
-        try:
-            mal_node_count = sum(1 for v in snap.vs if int(v.attributes().get("label", 0)) == 1)
-        except Exception:
-            pass
+    # 4) 生成查询文本（完整，不截断）
+    query = mapper.snapshot_to_query(snap)
+    print(f"\n----- 查询文本 (长度={len(query)}) -----")
+    print(query)
 
-        # 向量检索 top_k 全部候选
-        candidates = []
-        try:
-            raw_results = mapper._vectordb.similarity_search_with_score(query, k=mapper.top_k)
-            for doc, score in raw_results:
-                filepath = str(doc.metadata.get("filepath", ""))
-                m = re.search(r"\bT\d{4}(?:[/.]\d{3})?\b", filepath, flags=re.IGNORECASE)
-                tech_id = m.group(0).replace(".", "/") if m else "UNKNOWN"
-                candidates.append({
-                    "tech_id": tech_id,
-                    "score": round(float(score), 6),
-                    "filepath": filepath,
-                    "content_preview": doc.page_content[:300],
-                })
-        except Exception as ex:
-            candidates.append({"error": str(ex)})
+    # 5) 向量检索 top_k，输出完整技术描述
+    print(f"\n----- Top {mapper.top_k} 匹配结果 -----")
+    candidates = []
+    try:
+        raw_results = mapper._vectordb.similarity_search_with_score(query, k=mapper.top_k)
+        for rank, (doc, score) in enumerate(raw_results):
+            filepath = str(doc.metadata.get("filepath", ""))
+            m = re.search(r"\bT\d{4}(?:[/.]\d{3})?\b", filepath, flags=re.IGNORECASE)
+            tech_id = m.group(0).replace(".", "/") if m else "UNKNOWN"
+            full_content = doc.page_content
 
-        best_tech = candidates[0]["tech_id"] if candidates and "tech_id" in candidates[0] else "UNKNOWN"
-        best_score = candidates[0].get("score") if candidates else None
+            candidate = {
+                "rank": rank + 1,
+                "tech_id": tech_id,
+                "score": round(float(score), 6),
+                "filepath": filepath,
+                "metadata": {k: str(v) for k, v in doc.metadata.items()},
+                "full_content": full_content,
+            }
+            candidates.append(candidate)
 
-        # 候选之间的分数差距（区分度）
-        score_gap = None
-        if len(candidates) >= 2 and "score" in candidates[0] and "score" in candidates[1]:
-            score_gap = round(candidates[1]["score"] - candidates[0]["score"], 6)
+            print(f"\n  [{rank+1}] {tech_id}  score={float(score):.6f}")
+            print(f"      filepath: {filepath}")
+            print(f"      内容 (前500字):")
+            print(f"      {full_content[:500]}")
+    except Exception as ex:
+        print(f"  检索失败: {ex}")
 
-        results.append({
-            "snapshot_idx": i,
-            "global_idx": mal_start + i,
-            "true_label": true_label,
-            "node_count": node_count,
-            "malicious_node_count": mal_node_count,
-            "query_text": query[:2000],
-            "query_length": len(query),
-            "best_match": best_tech,
-            "best_score": best_score,
-            "score_gap_1st_2nd": score_gap,
-            "candidates": candidates,
-        })
+    # 6) 语义差距分析
+    print(f"\n----- 语义差距分析 -----")
+    if candidates:
+        best = candidates[0]
+        print(f"最佳匹配: {best['tech_id']}  距离={best['score']:.6f}")
+        if len(candidates) >= 2:
+            gap = candidates[1]["score"] - candidates[0]["score"]
+            print(f"第1名 vs 第2名 距离差: {gap:.6f} ({'区分度高' if gap > 0.05 else '区分度低，匹配不确定'})")
+        # 查询文本里的关键词 vs 最佳匹配内容里的关键词
+        query_words = set(query.lower().split())
+        best_words = set(best["full_content"].lower().split())
+        overlap = query_words & best_words
+        only_query = query_words - best_words
+        print(f"词汇重叠数: {len(overlap)}")
+        print(f"查询独有词(前30): {list(only_query)[:30]}")
 
-        status = f"score={best_score:.4f} gap={score_gap:.4f}" if best_score and score_gap else "FAILED"
-        print(f"  [{i:3d}] label={true_label} nodes={node_count:4d} mal={mal_node_count:3d} -> {best_tech:12s} {status}")
-
-    # 5) 加载序列库
-    lib = []
-    if os.path.exists(SEQ_LIBRARY_PATH):
-        with open(SEQ_LIBRARY_PATH, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                parts = [x for x in line.replace("\t", " ").replace(",", " ").split(" ") if x]
-                if parts:
-                    lib.append(parts)
-
-    # 6) 汇总
-    all_scores = [r["best_score"] for r in results if r["best_score"] is not None]
-    all_gaps = [r["score_gap_1st_2nd"] for r in results if r["score_gap_1st_2nd"] is not None]
-    tech_seq_all = [r["best_match"] for r in results]
-
-    # 统计每个技术码出现次数
-    tech_freq = {}
-    for t in tech_seq_all:
-        tech_freq[t] = tech_freq.get(t, 0) + 1
-
-    # 真阳性快照的技术码分布
-    tech_freq_positive = {}
-    for r in results:
-        if r["true_label"] == 1:
-            t = r["best_match"]
-            tech_freq_positive[t] = tech_freq_positive.get(t, 0) + 1
-
+    # 7) 输出 JSON
     output = {
         "config": {
-            "global_id": GLOBAL_ID,
-            "mal_start": mal_start,
-            "mal_end": mal_end,
-            "mal_snapshot_count": len(mal_snapshots),
+            "snapshot_idx": target_idx,
+            "global_idx": mal_start + target_idx,
             "vectordb_doc_count": db_count,
-            "mapper_config": MAPPER_CONFIG,
         },
-        "summary": {
-            "score_min": min(all_scores) if all_scores else None,
-            "score_max": max(all_scores) if all_scores else None,
-            "score_mean": round(sum(all_scores) / len(all_scores), 6) if all_scores else None,
-            "gap_min": min(all_gaps) if all_gaps else None,
-            "gap_max": max(all_gaps) if all_gaps else None,
-            "gap_mean": round(sum(all_gaps) / len(all_gaps), 6) if all_gaps else None,
-            "tech_frequency": tech_freq,
-            "tech_frequency_positive_only": tech_freq_positive,
-            "unique_techs_matched": len(set(tech_seq_all) - {"UNKNOWN"}),
-            "unknown_count": tech_seq_all.count("UNKNOWN"),
+        "query_text": query,
+        "query_length": len(query),
+        "snapshot_nodes": {
+            "total": node_count,
+            "malicious_count": len(mal_nodes),
+            "malicious_nodes": mal_nodes[:50],
+            "all_nodes_sample": all_nodes[:20],
         },
-        "tech_sequence_all": tech_seq_all,
-        "tech_sequence_library": lib,
-        "snapshots": results,
+        "candidates": candidates,
     }
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
-    print(f"\n========== 汇总 ==========")
-    print(f"诊断结果已写入: {OUTPUT_FILE}")
-    print(f"分数范围: [{output['summary']['score_min']}, {output['summary']['score_max']}]  均值: {output['summary']['score_mean']}")
-    print(f"1st-2nd 差距范围: [{output['summary']['gap_min']}, {output['summary']['gap_max']}]  均值: {output['summary']['gap_mean']}")
-    print(f"技术码分布: {tech_freq}")
-    print(f"真阳性技术码分布: {tech_freq_positive}")
-    print(f"UNKNOWN 数量: {output['summary']['unknown_count']}")
-    print(f"序列库: {lib}")
+    print(f"\n诊断结果已写入: {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
