@@ -1,43 +1,47 @@
 恶意快照总数: 120
+选择恶意节点最多的快照: [77] 恶意节点数=3
 
-===== 诊断快照 [0] (全局索引 174) =====
+===== 诊断快照 [77] (全局索引 251) =====
 向量库文档数: 3626
-节点总数: 35, 恶意节点数: 0
+节点总数: 100, 恶意节点数: 3
 
------ 查询文本 (长度=6) -----
-Types:
+----- 查询文本 (长度=502) -----
+Types:SUBJECT_PROCESS=1, FILE_OBJECT_FILE=2
+[SUBJECT_PROCESS|freq=330] {' EVENT_WRITE memhelp.so', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_SENDTO', ' EVENT_READ eWq10bVcx', ' EVENT_WRITE /tmp/injectLog.txt', ' EVENT_LSEEK', ' EVENT_CLOSE', ' EVENT_RECVFROM', ' EVENT_OPEN /tmp/memhelp.so'}
+[FILE_OBJECT_FILE|freq=5] {' EVENT_WRITE memhelp.so', ' EVENT_CLOSE', ' EVENT_OPEN /tmp/memhelp.so'}
+[FILE_OBJECT_FILE|freq=4] {' EVENT_READ eWq10bVcx', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_CLOSE', ' EVENT_LSEEK'}
 
 ----- Top 5 匹配结果 -----
 
-  [1] T1027/003  score=1.239371
-      filepath: https://attack.mitre.org/techniques/T1027/003/
+  [1] T1574/002  score=1.103566
+      filepath: https://attack.mitre.org/techniques/T1574/002/
       内容 (前500字):
-      {'selection': {'type': 'EXECVE', 'a0': 'steghide', 'a1': 'embed', 'a2': ['-cf', '-ef'], 'a4': ['-cf', '-ef']}, 'condition': 'selection'}
+      {'selection': {'EventID': [11, 12], 'ProcessPath|endswith': ['\\MpCmdRun.exe', '\\NisSrv.exe']}, 'condition': 'selection'}
 
-  [2] T1529  score=1.289067
-      filepath: https://attack.mitre.org/techniques/T1529/
+  [2] T1562/004  score=1.162444
+      filepath: https://attack.mitre.org/techniques/T1562/004/
       内容 (前500字):
-      {'execve': {'type': 'EXECVE'}, 'shutdowncmd': ['shutdown', 'reboot', 'halt', 'poweroff'], 'init': ['init', 'telinit'], 'initselection': [0, 6], 'condition': 'execve and (shutdowncmd or (init and initselection))'}
+      {'selection': {'EventID': [2006, 2052]}, 'filter_main_generic': {'ModifyingApplication|startswith': ['C:\\Program Files\\', 'C:\\Program Files (x86)\\']}, 'filter_main_svchost': {'ModifyingApplication': 'C:\\Windows\\System32\\svchost.exe'}, 'filter_optional_msmpeng': {'ModifyingApplication|startswith': 'C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\', 'ModifyingApplication|endswith': '\\MsMpEng.exe'}, 'filter_main_null': {'ModifyingApplication': None}, 'filter_main_empty': {'Modifying
 
-  [3] T1123  score=1.304871
-      filepath: https://attack.mitre.org/techniques/T1123/
+  [3] T1552  score=1.164096
+      filepath: https://attack.mitre.org/techniques/T1552/
       内容 (前500字):
-      {'selection': {'type': 'EXECVE', 'a0': 'arecord', 'a1': '-vv', 'a2': '-fdat'}, 'condition': 'selection'}
+      {'selection_wmi': {'CommandLine|contains|all': ['Select', 'Win32_NTLogEvent']}, 'selection_wevtutil_img': [{'Image|endswith': '\\wevtutil.exe'}, {'OriginalFileName': 'wevtutil.exe'}], 'selection_wevtutil_cli': {'CommandLine|contains': [' qe ', ' query-events ']}, 'selection_wmic_img': [{'Image|endswith': '\\wmic.exe'}, {'OriginalFileName': 'wmic.exe'}], 'selection_wmic_cli': {'CommandLine|contains': ' ntevent'}, 'selection_cmdlet': {'CommandLine|contains': ['Get-WinEvent ', 'get-eventlog ']}, 's
 
-  [4] T1070/006  score=1.347012
-      filepath: https://attack.mitre.org/techniques/T1070/006/
+  [4] T1552  score=1.164096
+      filepath: https://attack.mitre.org/techniques/T1552/
       内容 (前500字):
-      {'execve': {'type': 'EXECVE'}, 'touch': ['touch'], 'selection2': ['-t', '-acmr', '-d', '-r'], 'condition': 'execve and touch and selection2'}
+      {'selection_wmi': {'CommandLine|contains|all': ['Select', 'Win32_NTLogEvent']}, 'selection_wevtutil_img': [{'Image|endswith': '\\wevtutil.exe'}, {'OriginalFileName': 'wevtutil.exe'}], 'selection_wevtutil_cli': {'CommandLine|contains': [' qe ', ' query-events ']}, 'selection_wmic_img': [{'Image|endswith': '\\wmic.exe'}, {'OriginalFileName': 'wmic.exe'}], 'selection_wmic_cli': {'CommandLine|contains': ' ntevent'}, 'selection_cmdlet': {'CommandLine|contains': ['Get-WinEvent ', 'get-eventlog ']}, 'c
 
-  [5] T1564/001  score=1.362316
-      filepath: https://attack.mitre.org/techniques/T1564/001/
+  [5] T1566/001  score=1.171632
+      filepath: https://attack.mitre.org/techniques/T1566/001/
       内容 (前500字):
-      {'commands': {'type': 'EXECVE', 'a0': ['mkdir', 'touch', 'vim', 'nano', 'vi']}, 'arguments': [{'a1|contains': '/.'}, {'a1|startswith': '.'}, {'a2|contains': '/.'}, {'a2|startswith': '.'}], 'condition': 'commands and arguments'}
+      {'selection': {'EventID': 4663, 'ObjectServer': 'Security', 'ObjectType': 'File', 'ObjectName|startswith': '\\Device\\CdRom'}, 'filter_main_generic': {'ObjectName': ['\\Device\\CdRom0\\autorun.ico', '\\Device\\CdRom0\\setup.exe', '\\Device\\CdRom0\\setup64.exe']}, 'condition': 'selection and not 1 of filter_main_*'}
 
 ----- 语义差距分析 -----
-最佳匹配: T1027/003  距离=1.239371
-第1名 vs 第2名 距离差: 0.049696 (区分度低，匹配不确定)
+最佳匹配: T1574/002  距离=1.103566
+第1名 vs 第2名 距离差: 0.058878 (区分度高)
 词汇重叠数: 0
-查询独有词(前30): ['types:']
+查询独有词(前30): ['[file_object_file|freq=4]', "ewq10bvcx',", 'event_write', "event_lseek',", 'types:subject_process=1,', "event_recvfrom',", "/tmp/injectlog.txt',", "'", "memhelp.so',", '[file_object_file|freq=5]', "{'", 'event_read', "/tmp/memhelp.so'}", "event_lseek'}", "event_sendto',", 'file_object_file=2', "/tmp/ewq10bvcx',", '[subject_process|freq=330]', "event_close',", 'event_open']
 
 诊断结果已写入: debug_matching_output.json

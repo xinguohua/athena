@@ -1,20 +1,105 @@
 {
   "config": {
-    "snapshot_idx": 0,
-    "global_idx": 174,
+    "snapshot_idx": 77,
+    "global_idx": 251,
     "vectordb_doc_count": 3626
   },
-  "query_text": "Types:",
-  "query_length": 6,
+  "query_text": "Types:SUBJECT_PROCESS=1, FILE_OBJECT_FILE=2\n[SUBJECT_PROCESS|freq=330] {' EVENT_WRITE memhelp.so', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_SENDTO', ' EVENT_READ eWq10bVcx', ' EVENT_WRITE /tmp/injectLog.txt', ' EVENT_LSEEK', ' EVENT_CLOSE', ' EVENT_RECVFROM', ' EVENT_OPEN /tmp/memhelp.so'}\n[FILE_OBJECT_FILE|freq=5] {' EVENT_WRITE memhelp.so', ' EVENT_CLOSE', ' EVENT_OPEN /tmp/memhelp.so'}\n[FILE_OBJECT_FILE|freq=4] {' EVENT_READ eWq10bVcx', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_CLOSE', ' EVENT_LSEEK'}",
+  "query_length": 502,
   "snapshot_nodes": {
-    "total": 35,
-    "malicious_count": 0,
-    "malicious_nodes": [],
+    "total": 100,
+    "malicious_count": 3,
+    "malicious_nodes": [
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_WRITE memhelp.so', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_SENDTO', ' EVENT_READ eWq10bVcx', ' EVENT_WRITE /tmp/injectLog.txt', ' EVENT_LSEEK', ' EVENT_CLOSE', ' EVENT_RECVFROM', ' EVENT_OPEN /tmp/memhelp.so'}",
+        "frequency": 330,
+        "label": 1
+      },
+      {
+        "type": "FILE_OBJECT_FILE",
+        "properties": "{' EVENT_WRITE memhelp.so', ' EVENT_CLOSE', ' EVENT_OPEN /tmp/memhelp.so'}",
+        "frequency": 5,
+        "label": 1
+      },
+      {
+        "type": "FILE_OBJECT_FILE",
+        "properties": "{' EVENT_READ eWq10bVcx', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_CLOSE', ' EVENT_LSEEK'}",
+        "frequency": 4,
+        "label": 1
+      }
+    ],
     "all_nodes_sample": [
       {
         "type": "SUBJECT_PROCESS",
-        "properties": "{' EVENT_FORK', ' EVENT_READ <unknown>', ' EVENT_EXIT', ' EVENT_CREATE_OBJECT', ' EVENT_CLOSE'}",
-        "frequency": 8,
+        "properties": "{' EVENT_WRITE memhelp.so', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_SENDTO', ' EVENT_READ eWq10bVcx', ' EVENT_WRITE /tmp/injectLog.txt', ' EVENT_LSEEK', ' EVENT_CLOSE', ' EVENT_RECVFROM', ' EVENT_OPEN /tmp/memhelp.so'}",
+        "frequency": 330,
+        "label": 1
+      },
+      {
+        "type": "NetFlowObject",
+        "properties": "{'128.55.12.73,63341,53.158.101.118,80'}",
+        "frequency": 5,
+        "label": 0
+      },
+      {
+        "type": "FILE_OBJECT_FILE",
+        "properties": "{' EVENT_WRITE memhelp.so', ' EVENT_CLOSE', ' EVENT_OPEN /tmp/memhelp.so'}",
+        "frequency": 5,
+        "label": 1
+      },
+      {
+        "type": "FILE_OBJECT_FILE",
+        "properties": "{' EVENT_READ eWq10bVcx', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_CLOSE', ' EVENT_LSEEK'}",
+        "frequency": 4,
+        "label": 1
+      },
+      {
+        "type": "FILE_OBJECT_FILE",
+        "properties": "{' EVENT_WRITE /tmp/injectLog.txt'}",
+        "frequency": 316,
+        "label": 0
+      },
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_MODIFY_PROCESS', ' EVENT_CONNECT', ' EVENT_SENDTO', ' EVENT_FORK', ' EVENT_EXIT', ' EVENT_CREATE_OBJECT', ' EVENT_CLOSE', ' EVENT_RECVFROM', ' EVENT_SENDMSG'}",
+        "frequency": 36,
+        "label": 0
+      },
+      {
+        "type": "FILE_OBJECT_UNIX_SOCKET",
+        "properties": "{' EVENT_CLOSE'}",
+        "frequency": 1,
+        "label": 0
+      },
+      {
+        "type": "FILE_OBJECT_FILE",
+        "properties": "{' EVENT_CLOSE'}",
+        "frequency": 1,
+        "label": 0
+      },
+      {
+        "type": "FILE_OBJECT_FILE",
+        "properties": "{' EVENT_CLOSE'}",
+        "frequency": 1,
+        "label": 0
+      },
+      {
+        "type": "FILE_OBJECT_UNIX_SOCKET",
+        "properties": "{' EVENT_CLOSE'}",
+        "frequency": 1,
+        "label": 0
+      },
+      {
+        "type": "FILE_OBJECT_UNIX_SOCKET",
+        "properties": "{' EVENT_CREATE_OBJECT'}",
+        "frequency": 1,
+        "label": 0
+      },
+      {
+        "type": "FILE_OBJECT_UNIX_SOCKET",
+        "properties": "{' EVENT_CREATE_OBJECT', ' EVENT_CLOSE'}",
+        "frequency": 2,
         "label": 0
       },
       {
@@ -25,110 +110,44 @@
       },
       {
         "type": "SUBJECT_PROCESS",
-        "properties": "{' EVENT_MODIFY_PROCESS', ' EVENT_CONNECT', ' EVENT_SENDTO', ' EVENT_FORK', ' EVENT_READ <unknown>', ' EVENT_CHANGE_PRINCIPAL', ' EVENT_EXIT', ' EVENT_CREATE_OBJECT', ' EVENT_CLOSE'}",
-        "frequency": 31,
-        "label": 0
-      },
-      {
-        "type": "FILE_OBJECT_UNIX_SOCKET",
-        "properties": "{' EVENT_CONNECT', ' EVENT_CLOSE', ' EVENT_SENDTO'}",
-        "frequency": 3,
-        "label": 0
-      },
-      {
-        "type": "SUBJECT_PROCESS",
-        "properties": "{' EVENT_MODIFY_PROCESS', ' EVENT_CONNECT', ' EVENT_SENDTO', ' EVENT_FORK', ' EVENT_CHANGE_PRINCIPAL', ' EVENT_EXIT', ' EVENT_CLOSE'}",
-        "frequency": 18,
-        "label": 0
-      },
-      {
-        "type": "FILE_OBJECT_UNIX_SOCKET",
-        "properties": "{' EVENT_CONNECT', ' EVENT_CLOSE', ' EVENT_SENDTO'}",
-        "frequency": 3,
-        "label": 0
-      },
-      {
-        "type": "SUBJECT_PROCESS",
-        "properties": "{' EVENT_MODIFY_PROCESS', ' EVENT_CONNECT', ' EVENT_SENDTO', ' EVENT_CHANGE_PRINCIPAL', ' EVENT_EXIT', ' EVENT_CLOSE'}",
+        "properties": "{' EVENT_MODIFY_PROCESS', ' EVENT_FORK', ' EVENT_CHANGE_PRINCIPAL', ' EVENT_EXIT', ' EVENT_CLOSE'}",
         "frequency": 13,
         "label": 0
       },
       {
-        "type": "FILE_OBJECT_UNIX_SOCKET",
-        "properties": "{' EVENT_CONNECT', ' EVENT_CLOSE', ' EVENT_SENDTO'}",
-        "frequency": 3,
-        "label": 0
-      },
-      {
-        "type": "SUBJECT_PROCESS",
-        "properties": "{' EVENT_FORK', ' EVENT_READ <unknown>', ' EVENT_EXIT', ' EVENT_CREATE_OBJECT', ' EVENT_CLOSE'}",
-        "frequency": 8,
-        "label": 0
-      },
-      {
-        "type": "UnnamedPipeObject",
-        "properties": "{' EVENT_CREATE_OBJECT', ' EVENT_CLOSE', ' EVENT_READ <unknown>'}",
-        "frequency": 3,
-        "label": 0
-      },
-      {
-        "type": "UnnamedPipeObject",
-        "properties": "{' EVENT_CREATE_OBJECT', ' EVENT_CLOSE', ' EVENT_READ <unknown>'}",
-        "frequency": 3,
-        "label": 0
-      },
-      {
-        "type": "UnnamedPipeObject",
-        "properties": "{' EVENT_CREATE_OBJECT', ' EVENT_CLOSE'}",
-        "frequency": 2,
-        "label": 0
-      },
-      {
-        "type": "UnnamedPipeObject",
-        "properties": "{' EVENT_WRITE <unknown>', ' EVENT_CREATE_OBJECT', ' EVENT_CLOSE', ' EVENT_READ <unknown>'}",
+        "type": "NetFlowObject",
+        "properties": "{'localhost,-1,128.55.12.10,53'}",
         "frequency": 4,
         "label": 0
       },
       {
-        "type": "SUBJECT_PROCESS",
-        "properties": "{' EVENT_EXIT', ' EVENT_FORK', ' EVENT_WRITE <unknown>'}",
-        "frequency": 4,
+        "type": "FILE_OBJECT_FILE",
+        "properties": "{' EVENT_CLOSE'}",
+        "frequency": 1,
         "label": 0
       },
       {
-        "type": "SUBJECT_PROCESS",
-        "properties": "{' EVENT_EXIT', ' EVENT_FORK'}",
-        "frequency": 3,
+        "type": "FILE_OBJECT_FILE",
+        "properties": "{' EVENT_CLOSE'}",
+        "frequency": 1,
         "label": 0
       },
       {
-        "type": "SUBJECT_PROCESS",
-        "properties": "{' EVENT_EXIT', ' EVENT_FORK'}",
-        "frequency": 3,
+        "type": "FILE_OBJECT_FILE",
+        "properties": "{' EVENT_CLOSE'}",
+        "frequency": 1,
         "label": 0
       },
       {
-        "type": "SUBJECT_PROCESS",
-        "properties": "{' EVENT_EXIT', ' EVENT_FORK'}",
-        "frequency": 3,
+        "type": "FILE_OBJECT_FILE",
+        "properties": "{' EVENT_CLOSE'}",
+        "frequency": 1,
         "label": 0
       },
       {
-        "type": "SUBJECT_PROCESS",
-        "properties": "{' EVENT_EXIT', ' EVENT_FORK'}",
-        "frequency": 3,
-        "label": 0
-      },
-      {
-        "type": "SUBJECT_PROCESS",
-        "properties": "{' EVENT_EXIT', ' EVENT_FORK'}",
-        "frequency": 3,
-        "label": 0
-      },
-      {
-        "type": "SUBJECT_PROCESS",
-        "properties": "{' EVENT_EXIT', ' EVENT_FORK'}",
-        "frequency": 3,
+        "type": "FILE_OBJECT_FILE",
+        "properties": "{' EVENT_CLOSE'}",
+        "frequency": 1,
         "label": 0
       }
     ]
@@ -136,68 +155,68 @@
   "candidates": [
     {
       "rank": 1,
-      "tech_id": "T1027/003",
-      "score": 1.239371,
-      "filepath": "https://attack.mitre.org/techniques/T1027/003/",
+      "tech_id": "T1574/002",
+      "score": 1.103566,
+      "filepath": "https://attack.mitre.org/techniques/T1574/002/",
       "metadata": {
-        "filepath": "https://attack.mitre.org/techniques/T1027/003/",
-        "Date": "10/9/22",
         "Source": "SIGMA",
-        "Subject": "Detects embedding of files with usage of steghide binary, the adversaries may use this technique to prevent the detection of hidden information."
+        "Subject": "Detects Code Integrity (CI) engine blocking Microsoft Defender's processes (MpCmdRun and NisSrv) from loading unsigned DLLs which may be an attempt to sideload arbitrary DLL",
+        "Date": "9/28/22",
+        "filepath": "https://attack.mitre.org/techniques/T1574/002/"
       },
-      "full_content": "{'selection': {'type': 'EXECVE', 'a0': 'steghide', 'a1': 'embed', 'a2': ['-cf', '-ef'], 'a4': ['-cf', '-ef']}, 'condition': 'selection'}"
+      "full_content": "{'selection': {'EventID': [11, 12], 'ProcessPath|endswith': ['\\\\MpCmdRun.exe', '\\\\NisSrv.exe']}, 'condition': 'selection'}"
     },
     {
       "rank": 2,
-      "tech_id": "T1529",
-      "score": 1.289067,
-      "filepath": "https://attack.mitre.org/techniques/T1529/",
+      "tech_id": "T1562/004",
+      "score": 1.162444,
+      "filepath": "https://attack.mitre.org/techniques/T1562/004/",
       "metadata": {
-        "Subject": "Adversaries may shutdown/reboot systems to interrupt access to, or aid in the destruction of, those systems.",
-        "filepath": "https://attack.mitre.org/techniques/T1529/",
-        "Date": "11/26/22",
-        "Source": "SIGMA"
+        "filepath": "https://attack.mitre.org/techniques/T1562/004/",
+        "Source": "SIGMA",
+        "Date": "6/12/23",
+        "Subject": "Detects when a single rules or all of the rules have been deleted from the Windows Defender Firewall"
       },
-      "full_content": "{'execve': {'type': 'EXECVE'}, 'shutdowncmd': ['shutdown', 'reboot', 'halt', 'poweroff'], 'init': ['init', 'telinit'], 'initselection': [0, 6], 'condition': 'execve and (shutdowncmd or (init and initselection))'}"
+      "full_content": "{'selection': {'EventID': [2006, 2052]}, 'filter_main_generic': {'ModifyingApplication|startswith': ['C:\\\\Program Files\\\\', 'C:\\\\Program Files (x86)\\\\']}, 'filter_main_svchost': {'ModifyingApplication': 'C:\\\\Windows\\\\System32\\\\svchost.exe'}, 'filter_optional_msmpeng': {'ModifyingApplication|startswith': 'C:\\\\ProgramData\\\\Microsoft\\\\Windows Defender\\\\Platform\\\\', 'ModifyingApplication|endswith': '\\\\MsMpEng.exe'}, 'filter_main_null': {'ModifyingApplication': None}, 'filter_main_empty': {'ModifyingApplication': ''}, 'condition': 'selection and not 1 of filter_main_* and not 1 of filter_optional_*'}"
     },
     {
       "rank": 3,
-      "tech_id": "T1123",
-      "score": 1.304871,
-      "filepath": "https://attack.mitre.org/techniques/T1123/",
+      "tech_id": "T1552",
+      "score": 1.164096,
+      "filepath": "https://attack.mitre.org/techniques/T1552/",
       "metadata": {
-        "filepath": "https://attack.mitre.org/techniques/T1123/",
-        "Date": "10/9/22",
+        "filepath": "https://attack.mitre.org/techniques/T1552/",
         "Source": "SIGMA",
-        "Subject": "Detects attempts to record audio with arecord utility"
+        "Date": "1/2/24",
+        "Subject": "Detects execution of different log query utilities and commands to search and dump the content of specific event logs or look for specific event IDs. This technique is used by threat actors in order to extract sensitive information from events logs such as usernames, IP addresses, hostnames, etc. "
       },
-      "full_content": "{'selection': {'type': 'EXECVE', 'a0': 'arecord', 'a1': '-vv', 'a2': '-fdat'}, 'condition': 'selection'}"
+      "full_content": "{'selection_wmi': {'CommandLine|contains|all': ['Select', 'Win32_NTLogEvent']}, 'selection_wevtutil_img': [{'Image|endswith': '\\\\wevtutil.exe'}, {'OriginalFileName': 'wevtutil.exe'}], 'selection_wevtutil_cli': {'CommandLine|contains': [' qe ', ' query-events ']}, 'selection_wmic_img': [{'Image|endswith': '\\\\wmic.exe'}, {'OriginalFileName': 'wmic.exe'}], 'selection_wmic_cli': {'CommandLine|contains': ' ntevent'}, 'selection_cmdlet': {'CommandLine|contains': ['Get-WinEvent ', 'get-eventlog ']}, 'selection_logs_name': {'CommandLine|contains': ['Microsoft-Windows-TerminalServices-LocalSessionManager/Operational', 'Microsoft-Windows-Terminal-Services-RemoteConnectionManager/Operational', 'Security']}, 'selection_logs_eid': {'CommandLine|contains': ['-InstanceId 4624', 'System[EventID=4624]', 'EventCode=?4624?', 'EventIdentifier=?4624?', '-InstanceId 4778', 'System[EventID=4778]', 'EventCode=?4778?', 'EventIdentifier=?4778?', '-InstanceId 25', 'System[EventID=25]', 'EventCode=?25?', 'EventIdentifier=?25?']}, 'condition': '1 of selection_logs_* and (selection_wmi or all of selection_wevtutil_* or all of selection_wmic_* or selection_cmdlet)'}"
     },
     {
       "rank": 4,
-      "tech_id": "T1070/006",
-      "score": 1.347012,
-      "filepath": "https://attack.mitre.org/techniques/T1070/006/",
+      "tech_id": "T1552",
+      "score": 1.164096,
+      "filepath": "https://attack.mitre.org/techniques/T1552/",
       "metadata": {
+        "Date": "1/24/24",
+        "filepath": "https://attack.mitre.org/techniques/T1552/",
         "Source": "SIGMA",
-        "Subject": "Detect file time attribute change to hide new or changes to existing files.",
-        "Date": "11/28/22",
-        "filepath": "https://attack.mitre.org/techniques/T1070/006/"
+        "Subject": "Detect attempts to query the contents of the event log using command line utilities. Attackers use this technique in order to look for sensitive information in the logs such as passwords, usernames, IPs, etc. "
       },
-      "full_content": "{'execve': {'type': 'EXECVE'}, 'touch': ['touch'], 'selection2': ['-t', '-acmr', '-d', '-r'], 'condition': 'execve and touch and selection2'}"
+      "full_content": "{'selection_wmi': {'CommandLine|contains|all': ['Select', 'Win32_NTLogEvent']}, 'selection_wevtutil_img': [{'Image|endswith': '\\\\wevtutil.exe'}, {'OriginalFileName': 'wevtutil.exe'}], 'selection_wevtutil_cli': {'CommandLine|contains': [' qe ', ' query-events ']}, 'selection_wmic_img': [{'Image|endswith': '\\\\wmic.exe'}, {'OriginalFileName': 'wmic.exe'}], 'selection_wmic_cli': {'CommandLine|contains': ' ntevent'}, 'selection_cmdlet': {'CommandLine|contains': ['Get-WinEvent ', 'get-eventlog ']}, 'condition': 'selection_wmi or all of selection_wevtutil_* or all of selection_wmic_* or selection_cmdlet'}"
     },
     {
       "rank": 5,
-      "tech_id": "T1564/001",
-      "score": 1.362316,
-      "filepath": "https://attack.mitre.org/techniques/T1564/001/",
+      "tech_id": "T1566/001",
+      "score": 1.171632,
+      "filepath": "https://attack.mitre.org/techniques/T1566/001/",
       "metadata": {
-        "Subject": "Detects adversary creating hidden file or directory, by detecting directories or files with . as the first character",
-        "filepath": "https://attack.mitre.org/techniques/T1564/001/",
+        "Subject": "Detects the mount of an ISO image on an endpoint",
         "Source": "SIGMA",
-        "Date": "10/9/22"
+        "filepath": "https://attack.mitre.org/techniques/T1566/001/",
+        "Date": "11/9/23"
       },
-      "full_content": "{'commands': {'type': 'EXECVE', 'a0': ['mkdir', 'touch', 'vim', 'nano', 'vi']}, 'arguments': [{'a1|contains': '/.'}, {'a1|startswith': '.'}, {'a2|contains': '/.'}, {'a2|startswith': '.'}], 'condition': 'commands and arguments'}"
+      "full_content": "{'selection': {'EventID': 4663, 'ObjectServer': 'Security', 'ObjectType': 'File', 'ObjectName|startswith': '\\\\Device\\\\CdRom'}, 'filter_main_generic': {'ObjectName': ['\\\\Device\\\\CdRom0\\\\autorun.ico', '\\\\Device\\\\CdRom0\\\\setup.exe', '\\\\Device\\\\CdRom0\\\\setup64.exe']}, 'condition': 'selection and not 1 of filter_main_*'}"
     }
   ]
 }
