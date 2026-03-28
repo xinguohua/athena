@@ -29,7 +29,7 @@ class TechniqueSemanticMapper:
     def __init__(
         self,
         *,
-        csv_path: str = "data/mitreembed_master_Chroma.csv",
+        csv_path: str = "data/attack_techniques.csv",
         persist_dir: str = "./chroma_db",
         model_name: str = "sentence-transformers/all-MiniLM-L12-v2",
         page_content_column: str = "Body",

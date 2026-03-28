@@ -773,7 +773,7 @@ def print_snapshot_throughput(snapshots, proc_times: Optional[List[float]] = Non
             proc_times = _compute_seq_filter_proc_times(
                 snapshots,
                 mapper_config={
-                    "csv_path": "data/mitreembed_master_Chroma.csv",
+                    "csv_path": "data/attack_techniques.csv",
                     "persist_dir": "./chroma_db",
                     "model_name": "sentence-transformers/all-MiniLM-L12-v2",
                     "page_content_column": "Body",
@@ -1369,7 +1369,7 @@ def run_evaluation(path_map: dict) -> None:
 
     if SEQ_FILTER.get("enable", False):
         mapper_cfg = {
-            "csv_path": "data/mitreembed_master_Chroma.csv",
+            "csv_path": "data/attack_techniques.csv",
             "persist_dir": "./chroma_db",
             "model_name": "sentence-transformers/all-MiniLM-L12-v2",
             "page_content_column": "Body",
