@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run train_all",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",              // 运行当前文件，而不是绝对路径
+            "cwd": "${fileDirname}",           // 运行目录 = 当前文件目录
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "console": "integratedTerminal"
+        }
+    ]
+}
