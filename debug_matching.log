@@ -1,0 +1,43 @@
+恶意快照总数: 120
+
+===== 诊断快照 [0] (全局索引 174) =====
+向量库文档数: 3626
+节点总数: 35, 恶意节点数: 0
+
+----- 查询文本 (长度=6) -----
+Types:
+
+----- Top 5 匹配结果 -----
+
+  [1] T1027/003  score=1.239371
+      filepath: https://attack.mitre.org/techniques/T1027/003/
+      内容 (前500字):
+      {'selection': {'type': 'EXECVE', 'a0': 'steghide', 'a1': 'embed', 'a2': ['-cf', '-ef'], 'a4': ['-cf', '-ef']}, 'condition': 'selection'}
+
+  [2] T1529  score=1.289067
+      filepath: https://attack.mitre.org/techniques/T1529/
+      内容 (前500字):
+      {'execve': {'type': 'EXECVE'}, 'shutdowncmd': ['shutdown', 'reboot', 'halt', 'poweroff'], 'init': ['init', 'telinit'], 'initselection': [0, 6], 'condition': 'execve and (shutdowncmd or (init and initselection))'}
+
+  [3] T1123  score=1.304871
+      filepath: https://attack.mitre.org/techniques/T1123/
+      内容 (前500字):
+      {'selection': {'type': 'EXECVE', 'a0': 'arecord', 'a1': '-vv', 'a2': '-fdat'}, 'condition': 'selection'}
+
+  [4] T1070/006  score=1.347012
+      filepath: https://attack.mitre.org/techniques/T1070/006/
+      内容 (前500字):
+      {'execve': {'type': 'EXECVE'}, 'touch': ['touch'], 'selection2': ['-t', '-acmr', '-d', '-r'], 'condition': 'execve and touch and selection2'}
+
+  [5] T1564/001  score=1.362316
+      filepath: https://attack.mitre.org/techniques/T1564/001/
+      内容 (前500字):
+      {'commands': {'type': 'EXECVE', 'a0': ['mkdir', 'touch', 'vim', 'nano', 'vi']}, 'arguments': [{'a1|contains': '/.'}, {'a1|startswith': '.'}, {'a2|contains': '/.'}, {'a2|startswith': '.'}], 'condition': 'commands and arguments'}
+
+----- 语义差距分析 -----
+最佳匹配: T1027/003  距离=1.239371
+第1名 vs 第2名 距离差: 0.049696 (区分度低，匹配不确定)
+词汇重叠数: 0
+查询独有词(前30): ['types:']
+
+诊断结果已写入: debug_matching_output.json

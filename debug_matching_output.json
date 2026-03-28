@@ -1,0 +1,203 @@
+{
+  "config": {
+    "snapshot_idx": 0,
+    "global_idx": 174,
+    "vectordb_doc_count": 3626
+  },
+  "query_text": "Types:",
+  "query_length": 6,
+  "snapshot_nodes": {
+    "total": 35,
+    "malicious_count": 0,
+    "malicious_nodes": [],
+    "all_nodes_sample": [
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_FORK', ' EVENT_READ <unknown>', ' EVENT_EXIT', ' EVENT_CREATE_OBJECT', ' EVENT_CLOSE'}",
+        "frequency": 8,
+        "label": 0
+      },
+      {
+        "type": "UnnamedPipeObject",
+        "properties": "{' EVENT_CREATE_OBJECT', ' EVENT_CLOSE'}",
+        "frequency": 2,
+        "label": 0
+      },
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_MODIFY_PROCESS', ' EVENT_CONNECT', ' EVENT_SENDTO', ' EVENT_FORK', ' EVENT_READ <unknown>', ' EVENT_CHANGE_PRINCIPAL', ' EVENT_EXIT', ' EVENT_CREATE_OBJECT', ' EVENT_CLOSE'}",
+        "frequency": 31,
+        "label": 0
+      },
+      {
+        "type": "FILE_OBJECT_UNIX_SOCKET",
+        "properties": "{' EVENT_CONNECT', ' EVENT_CLOSE', ' EVENT_SENDTO'}",
+        "frequency": 3,
+        "label": 0
+      },
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_MODIFY_PROCESS', ' EVENT_CONNECT', ' EVENT_SENDTO', ' EVENT_FORK', ' EVENT_CHANGE_PRINCIPAL', ' EVENT_EXIT', ' EVENT_CLOSE'}",
+        "frequency": 18,
+        "label": 0
+      },
+      {
+        "type": "FILE_OBJECT_UNIX_SOCKET",
+        "properties": "{' EVENT_CONNECT', ' EVENT_CLOSE', ' EVENT_SENDTO'}",
+        "frequency": 3,
+        "label": 0
+      },
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_MODIFY_PROCESS', ' EVENT_CONNECT', ' EVENT_SENDTO', ' EVENT_CHANGE_PRINCIPAL', ' EVENT_EXIT', ' EVENT_CLOSE'}",
+        "frequency": 13,
+        "label": 0
+      },
+      {
+        "type": "FILE_OBJECT_UNIX_SOCKET",
+        "properties": "{' EVENT_CONNECT', ' EVENT_CLOSE', ' EVENT_SENDTO'}",
+        "frequency": 3,
+        "label": 0
+      },
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_FORK', ' EVENT_READ <unknown>', ' EVENT_EXIT', ' EVENT_CREATE_OBJECT', ' EVENT_CLOSE'}",
+        "frequency": 8,
+        "label": 0
+      },
+      {
+        "type": "UnnamedPipeObject",
+        "properties": "{' EVENT_CREATE_OBJECT', ' EVENT_CLOSE', ' EVENT_READ <unknown>'}",
+        "frequency": 3,
+        "label": 0
+      },
+      {
+        "type": "UnnamedPipeObject",
+        "properties": "{' EVENT_CREATE_OBJECT', ' EVENT_CLOSE', ' EVENT_READ <unknown>'}",
+        "frequency": 3,
+        "label": 0
+      },
+      {
+        "type": "UnnamedPipeObject",
+        "properties": "{' EVENT_CREATE_OBJECT', ' EVENT_CLOSE'}",
+        "frequency": 2,
+        "label": 0
+      },
+      {
+        "type": "UnnamedPipeObject",
+        "properties": "{' EVENT_WRITE <unknown>', ' EVENT_CREATE_OBJECT', ' EVENT_CLOSE', ' EVENT_READ <unknown>'}",
+        "frequency": 4,
+        "label": 0
+      },
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_EXIT', ' EVENT_FORK', ' EVENT_WRITE <unknown>'}",
+        "frequency": 4,
+        "label": 0
+      },
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_EXIT', ' EVENT_FORK'}",
+        "frequency": 3,
+        "label": 0
+      },
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_EXIT', ' EVENT_FORK'}",
+        "frequency": 3,
+        "label": 0
+      },
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_EXIT', ' EVENT_FORK'}",
+        "frequency": 3,
+        "label": 0
+      },
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_EXIT', ' EVENT_FORK'}",
+        "frequency": 3,
+        "label": 0
+      },
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_EXIT', ' EVENT_FORK'}",
+        "frequency": 3,
+        "label": 0
+      },
+      {
+        "type": "SUBJECT_PROCESS",
+        "properties": "{' EVENT_EXIT', ' EVENT_FORK'}",
+        "frequency": 3,
+        "label": 0
+      }
+    ]
+  },
+  "candidates": [
+    {
+      "rank": 1,
+      "tech_id": "T1027/003",
+      "score": 1.239371,
+      "filepath": "https://attack.mitre.org/techniques/T1027/003/",
+      "metadata": {
+        "Subject": "Detects embedding of files with usage of steghide binary, the adversaries may use this technique to prevent the detection of hidden information.",
+        "Date": "10/9/22",
+        "filepath": "https://attack.mitre.org/techniques/T1027/003/",
+        "Source": "SIGMA"
+      },
+      "full_content": "{'selection': {'type': 'EXECVE', 'a0': 'steghide', 'a1': 'embed', 'a2': ['-cf', '-ef'], 'a4': ['-cf', '-ef']}, 'condition': 'selection'}"
+    },
+    {
+      "rank": 2,
+      "tech_id": "T1529",
+      "score": 1.289067,
+      "filepath": "https://attack.mitre.org/techniques/T1529/",
+      "metadata": {
+        "Date": "11/26/22",
+        "Source": "SIGMA",
+        "Subject": "Adversaries may shutdown/reboot systems to interrupt access to, or aid in the destruction of, those systems.",
+        "filepath": "https://attack.mitre.org/techniques/T1529/"
+      },
+      "full_content": "{'execve': {'type': 'EXECVE'}, 'shutdowncmd': ['shutdown', 'reboot', 'halt', 'poweroff'], 'init': ['init', 'telinit'], 'initselection': [0, 6], 'condition': 'execve and (shutdowncmd or (init and initselection))'}"
+    },
+    {
+      "rank": 3,
+      "tech_id": "T1123",
+      "score": 1.304871,
+      "filepath": "https://attack.mitre.org/techniques/T1123/",
+      "metadata": {
+        "Date": "10/9/22",
+        "Source": "SIGMA",
+        "filepath": "https://attack.mitre.org/techniques/T1123/",
+        "Subject": "Detects attempts to record audio with arecord utility"
+      },
+      "full_content": "{'selection': {'type': 'EXECVE', 'a0': 'arecord', 'a1': '-vv', 'a2': '-fdat'}, 'condition': 'selection'}"
+    },
+    {
+      "rank": 4,
+      "tech_id": "T1070/006",
+      "score": 1.347012,
+      "filepath": "https://attack.mitre.org/techniques/T1070/006/",
+      "metadata": {
+        "filepath": "https://attack.mitre.org/techniques/T1070/006/",
+        "Subject": "Detect file time attribute change to hide new or changes to existing files.",
+        "Date": "11/28/22",
+        "Source": "SIGMA"
+      },
+      "full_content": "{'execve': {'type': 'EXECVE'}, 'touch': ['touch'], 'selection2': ['-t', '-acmr', '-d', '-r'], 'condition': 'execve and touch and selection2'}"
+    },
+    {
+      "rank": 5,
+      "tech_id": "T1564/001",
+      "score": 1.362316,
+      "filepath": "https://attack.mitre.org/techniques/T1564/001/",
+      "metadata": {
+        "Source": "SIGMA",
+        "Subject": "Detects adversary creating hidden file or directory, by detecting directories or files with . as the first character",
+        "Date": "10/9/22",
+        "filepath": "https://attack.mitre.org/techniques/T1564/001/"
+      },
+      "full_content": "{'commands': {'type': 'EXECVE', 'a0': ['mkdir', 'touch', 'vim', 'nano', 'vi']}, 'arguments': [{'a1|contains': '/.'}, {'a1|startswith': '.'}, {'a2|contains': '/.'}, {'a2|startswith': '.'}], 'condition': 'commands and arguments'}"
+    }
+  ]
+}
