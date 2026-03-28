@@ -34,7 +34,7 @@ sys.stdout = _Tee(sys.__stdout__, _log_fh)
 
 # ========== 配置 ==========
 GLOBAL_ID = "xgh"
-SNAPSHOT_FILE = f"snapshot_data_{GLOBAL_ID}.pkl"
+SNAPSHOT_FILE = os.path.join(os.path.dirname(__file__), f"snapshot_data_{GLOBAL_ID}.pkl")
 OUTPUT_FILE = "debug_matching_output.json"
 # 只诊断第几个恶意快照（从0开始），选一个 true_label=1 的效果最好
 DIAG_INDEX = 0
