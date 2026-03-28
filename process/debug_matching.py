@@ -64,18 +64,18 @@ def main():
     mal_snapshots = all_snapshots[mal_start: mal_end + 1]
     print(f"恶意快照总数: {len(mal_snapshots)}")
 
-    # 找第一个 true_label=1 的快照
-    target_idx = DIAG_INDEX
+    # 找恶意节点数最多的快照
+    target_idx = 0
+    max_mal = 0
     for i, snap in enumerate(mal_snapshots):
         try:
-            for v in snap.vs:
-                if int(v.attributes().get("label", 0)) == 1:
-                    target_idx = i
-                    break
-            if target_idx != DIAG_INDEX or i == DIAG_INDEX:
-                break
+            cnt = sum(1 for v in snap.vs if int(v.attributes().get("label", 0)) == 1)
+            if cnt > max_mal:
+                max_mal = cnt
+                target_idx = i
         except Exception:
             pass
+    print(f"选择恶意节点最多的快照: [{target_idx}] 恶意节点数={max_mal}")
 
     snap = mal_snapshots[target_idx]
     print(f"\n===== 诊断快照 [{target_idx}] (全局索引 {mal_start + target_idx}) =====")
