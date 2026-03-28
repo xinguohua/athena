@@ -15,6 +15,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# ========== 日志同时写终端和文件 ==========
+LOG_FILE = "debug_matching.log"
+
+class _Tee:
+    def __init__(self, *streams):
+        self.streams = streams
+    def write(self, msg):
+        for s in self.streams:
+            s.write(msg)
+            s.flush()
+    def flush(self):
+        for s in self.streams:
+            s.flush()
+
+_log_fh = open(LOG_FILE, "w", encoding="utf-8")
+sys.stdout = _Tee(sys.__stdout__, _log_fh)
+
 # ========== 配置 ==========
 GLOBAL_ID = "xgh"
 SNAPSHOT_FILE = f"snapshot_data_{GLOBAL_ID}.pkl"
