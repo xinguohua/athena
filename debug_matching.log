@@ -1,43 +1,57 @@
 恶意快照总数: 120
+选择恶意节点最多的快照: [77] 恶意节点数=3
 
-===== 诊断快照 [0] (全局索引 174) =====
-向量库文档数: 3626
-节点总数: 35, 恶意节点数: 0
+===== 诊断快照 [77] (全局索引 251) =====
+向量库文档数: 691
+节点总数: 100, 恶意节点数: 3
 
------ 查询文本 (长度=6) -----
-Types:
+----- 查询文本 (长度=502) -----
+Types:SUBJECT_PROCESS=1, FILE_OBJECT_FILE=2
+[SUBJECT_PROCESS|freq=330] {' EVENT_WRITE memhelp.so', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_SENDTO', ' EVENT_READ eWq10bVcx', ' EVENT_WRITE /tmp/injectLog.txt', ' EVENT_LSEEK', ' EVENT_CLOSE', ' EVENT_RECVFROM', ' EVENT_OPEN /tmp/memhelp.so'}
+[FILE_OBJECT_FILE|freq=5] {' EVENT_WRITE memhelp.so', ' EVENT_CLOSE', ' EVENT_OPEN /tmp/memhelp.so'}
+[FILE_OBJECT_FILE|freq=4] {' EVENT_READ eWq10bVcx', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_CLOSE', ' EVENT_LSEEK'}
 
 ----- Top 5 匹配结果 -----
 
-  [1] T1027/003  score=1.239371
-      filepath: https://attack.mitre.org/techniques/T1027/003/
+  [1] T1070/001  score=1.269888
+      filepath: https://attack.mitre.org/techniques/T1070/001
       内容 (前500字):
-      {'selection': {'type': 'EXECVE', 'a0': 'steghide', 'a1': 'embed', 'a2': ['-cf', '-ef'], 'a4': ['-cf', '-ef']}, 'condition': 'selection'}
+      Clear Windows Event Logs. Adversaries may clear Windows Event Logs to hide the activity of an intrusion. Windows Event Logs are a record of a computer's alerts and notifications. There are three system-defined sources of events: System, Application, and Security, with five event types: Error, Warning, Information, Success Audit, and Failure Audit.
 
-  [2] T1529  score=1.289067
-      filepath: https://attack.mitre.org/techniques/T1529/
-      内容 (前500字):
-      {'execve': {'type': 'EXECVE'}, 'shutdowncmd': ['shutdown', 'reboot', 'halt', 'poweroff'], 'init': ['init', 'telinit'], 'initselection': [0, 6], 'condition': 'execve and (shutdowncmd or (init and initselection))'}
 
-  [3] T1123  score=1.304871
-      filepath: https://attack.mitre.org/techniques/T1123/
-      内容 (前500字):
-      {'selection': {'type': 'EXECVE', 'a0': 'arecord', 'a1': '-vv', 'a2': '-fdat'}, 'condition': 'selection'}
+With administrator privileges, the event logs can be cleared with the following utility commands:
 
-  [4] T1070/006  score=1.347012
-      filepath: https://attack.mitre.org/techniques/T1070/006/
-      内容 (前500字):
-      {'execve': {'type': 'EXECVE'}, 'touch': ['touch'], 'selection2': ['-t', '-acmr', '-d', '-r'], 'condition': 'execve and touch and selection2'}
+* <code>wevtutil cl system</code>
+* <code>wevtuti
 
-  [5] T1564/001  score=1.362316
-      filepath: https://attack.mitre.org/techniques/T1564/001/
+  [2] T1055/009  score=1.411428
+      filepath: https://attack.mitre.org/techniques/T1055/009
       内容 (前500字):
-      {'commands': {'type': 'EXECVE', 'a0': ['mkdir', 'touch', 'vim', 'nano', 'vi']}, 'arguments': [{'a1|contains': '/.'}, {'a1|startswith': '.'}, {'a2|contains': '/.'}, {'a2|startswith': '.'}], 'condition': 'commands and arguments'}
+      Proc Memory. Adversaries may inject malicious code into processes via the /proc filesystem in order to evade process-based defenses as well as possibly elevate privileges. Proc memory injection is a method of executing arbitrary code in the address space of a separate live process. 
+
+Proc memory injection involves enumerating the memory of a process via the /proc filesystem (<code>/proc/[pid]</code>) then crafting a return-oriented programming (ROP) payload with available gadgets/instructions. E
+
+  [3] T1027/011  score=1.428663
+      filepath: https://attack.mitre.org/techniques/T1027/011
+      内容 (前500字):
+      Fileless Storage. Adversaries may store data in "fileless" formats to conceal malicious activity from defenses. Fileless storage can be broadly defined as any format other than a file. Common examples of non-volatile fileless storage in Windows systems include the Windows Registry, event logs, or WMI repository. Shared memory directories on Linux systems (`/dev/shm`, `/run/shm`, `/var/run`, and `/var/lock`) and volatile directories on Network Devices (`/tmp` and `/volatile`) may also be consider
+
+  [4] T1055/002  score=1.431395
+      filepath: https://attack.mitre.org/techniques/T1055/002
+      内容 (前500字):
+      Portable Executable Injection. Adversaries may inject portable executables (PE) into processes in order to evade process-based defenses as well as possibly elevate privileges. PE injection is a method of executing arbitrary code in the address space of a separate live process. 
+
+PE injection is commonly performed by copying code (perhaps without a file on disk) into the virtual address space of the target process before invoking it via a new thread. The write can be performed with native Windows
+
+  [5] T1564/010  score=1.473418
+      filepath: https://attack.mitre.org/techniques/T1564/010
+      内容 (前500字):
+      Process Argument Spoofing. Adversaries may attempt to hide process command-line arguments by overwriting process memory. Process command-line arguments are stored in the process environment block (PEB), a data structure used by Windows to store various information about/used by a process. The PEB includes the process command-line arguments that are referenced when executing the process. When a process is created, defensive tools/sensors that monitor process creations may retrieve the process arg
 
 ----- 语义差距分析 -----
-最佳匹配: T1027/003  距离=1.239371
-第1名 vs 第2名 距离差: 0.049696 (区分度低，匹配不确定)
+最佳匹配: T1070/001  距离=1.269888
+第1名 vs 第2名 距离差: 0.141540 (区分度高)
 词汇重叠数: 0
-查询独有词(前30): ['types:']
+查询独有词(前30): ['[file_object_file|freq=4]', 'file_object_file=2', "/tmp/injectlog.txt',", "/tmp/ewq10bvcx',", 'event_open', "event_lseek'}", "{'", '[subject_process|freq=330]', "ewq10bvcx',", 'event_read', "event_close',", "event_recvfrom',", '[file_object_file|freq=5]', "event_sendto',", 'types:subject_process=1,', "event_lseek',", 'event_write', "'", "memhelp.so',", "/tmp/memhelp.so'}"]
 
 诊断结果已写入: debug_matching_output.json
