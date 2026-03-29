@@ -10,43 +10,35 @@ process: writes memhelp.so shared library (memhelp), opens /tmp/eWq10bVcx in tem
 
 ----- Top 5 匹配结果 -----
 
-  [1] T1055/002  score=1.005071
-      filepath: https://attack.mitre.org/techniques/T1055/002
-      内容 (前500字):
-      Observable system behaviors: process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process reads and writes memory mapped files, process maps memory regions. process creates file, process writes file to directory. process modifies process, process changes principal or user context
-
-Portable Executable Injection. Adversaries may inject portable executables (PE) into processes in order to evade process-based defenses as
-
-  [2] T1055/001  score=1.050949
-      filepath: https://attack.mitre.org/techniques/T1055/001
-      内容 (前500字):
-      Observable system behaviors: process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process loads shared library, process writes shared library (.dll) to disk. process loads shared library (.so), process writes shared library to temporary directory. process reads and writes memory mapped files, process maps memory regions. process creates file, process writes file to directory. process modifies process, process changes
-
-  [3] T1055/008  score=1.084788
-      filepath: https://attack.mitre.org/techniques/T1055/008
-      内容 (前500字):
-      Observable system behaviors: process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process attaches to another process, process reads and writes another process memory. process creates child process, process forks. process modifies process, process changes principal or user context
-
-Ptrace System Calls. Adversaries may inject malicious code into processes via ptrace (process trace) system calls in order to evade proce
-
-  [4] T1055  score=1.096191
-      filepath: https://attack.mitre.org/techniques/T1055
-      内容 (前500字):
-      Observable system behaviors: process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process sends and receives network data, process connects to network. process modifies process, process changes principal or user context
-
-Process Injection. Adversaries may inject code into processes in order to evade process-based defenses as well as possibly elevate privileges. Process injection is a method of executing arbitrary cod
-
-  [5] T1218/013  score=1.124556
+  [1] T1218/013  score=0.779841
       filepath: https://attack.mitre.org/techniques/T1218/013
       内容 (前500字):
-      Observable system behaviors: process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process loads shared library, process writes shared library (.dll) to disk. process loads shared library (.so), process writes shared library to temporary directory. process sends and receives network data through proxy, process connects to network
+      Mavinject. process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process loads shared library, process writes shared library (.dll) to disk. process loads shared library (.so), process writes shared library to temporary directory. process sends and receives network data through proxy, process connects to network. process receives network data, process writes file to disk. process executes command, process creates chil
 
-Mavinject. Adversaries may abuse mavinject.exe to proxy execution of malicious code. Mav
+  [2] T1055/002  score=0.798013
+      filepath: https://attack.mitre.org/techniques/T1055/002
+      内容 (前500字):
+      Portable Executable Injection. process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process reads and writes memory mapped files, process maps memory regions. process creates file, process writes file to directory. process modifies process, process changes principal or user context. process sends and receives network data, process connects to network
+
+  [3] T1129  score=0.812488
+      filepath: https://attack.mitre.org/techniques/T1129
+      内容 (前500字):
+      Shared Modules. process loads shared library (.so .dll), process writes shared module to disk. process sends and receives network data, process connects to network
+
+  [4] T1055/001  score=0.835169
+      filepath: https://attack.mitre.org/techniques/T1055/001
+      内容 (前500字):
+      Dynamic-link Library Injection. process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process loads shared library, process writes shared library (.dll) to disk. process loads shared library (.so), process writes shared library to temporary directory. process reads and writes memory mapped files, process maps memory regions. process creates file, process writes file to directory. process modifies process, process chan
+
+  [5] T1218/005  score=0.842406
+      filepath: https://attack.mitre.org/techniques/T1218/005
+      内容 (前500字):
+      Mshta. process writes log file, process reads log file. process sends and receives network data through proxy, process connects to network. process executes script file, process creates child process. process receives network data, process writes file to disk. process executes command, process creates child process
 
 ----- 语义差距分析 -----
-最佳匹配: T1055/002  距离=1.005071
-第1名 vs 第2名 距离差: 0.045878 (区分度低，匹配不确定)
-词汇重叠数: 9
-查询独有词(前30): ['directory', '/tmp/memhelp.so', 'bvcx),', 'file:', 'ewq10bvcx', '(ewq', '/tmp/injectlog.txt', '(memhelp),', 'network', 'text', 'memhelp.so', 'data,', '(memhelp).', 'seeks', 'process:', '/tmp/ewq10bvcx', 'sends', 'receives', '(injectlog),']
+最佳匹配: T1218/013  距离=0.779841
+第1名 vs 第2名 距离差: 0.018172 (区分度低，匹配不确定)
+词汇重叠数: 10
+查询独有词(前30): ['(injectlog),', '/tmp/memhelp.so', 'in', 'process:', '(ewq', '(memhelp).', '(memhelp),', 'seeks', 'file,', 'bvcx),', 'file:', 'reads', '/tmp/ewq10bvcx', 'text', 'ewq10bvcx', '/tmp/injectlog.txt', 'memhelp.so', 'directory']
 
 诊断结果已写入: debug_matching_output.json
