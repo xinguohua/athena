@@ -5,53 +5,50 @@
 向量库文档数: 691
 节点总数: 100, 恶意节点数: 3
 
------ 查询文本 (长度=502) -----
-Types:SUBJECT_PROCESS=1, FILE_OBJECT_FILE=2
-[SUBJECT_PROCESS|freq=330] {' EVENT_WRITE memhelp.so', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_SENDTO', ' EVENT_READ eWq10bVcx', ' EVENT_WRITE /tmp/injectLog.txt', ' EVENT_LSEEK', ' EVENT_CLOSE', ' EVENT_RECVFROM', ' EVENT_OPEN /tmp/memhelp.so'}
-[FILE_OBJECT_FILE|freq=5] {' EVENT_WRITE memhelp.so', ' EVENT_CLOSE', ' EVENT_OPEN /tmp/memhelp.so'}
-[FILE_OBJECT_FILE|freq=4] {' EVENT_READ eWq10bVcx', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_CLOSE', ' EVENT_LSEEK'}
+----- 查询文本 (长度=562) -----
+process: writes memhelp.so shared library (memhelp), opens /tmp/eWq10bVcx in temporary directory (ewq bvcx), sends network data, reads eWq10bVcx (ewq bvcx), writes /tmp/injectLog.txt in temporary directory text file (injectlog), seeks in file, receives network data, opens /tmp/memhelp.so in temporary directory shared library (memhelp). file: writes memhelp.so shared library (memhelp), opens /tmp/memhelp.so in temporary directory shared library (memhelp). file: reads eWq10bVcx (ewq bvcx), opens /tmp/eWq10bVcx in temporary directory (ewq bvcx), seeks in file
 
 ----- Top 5 匹配结果 -----
 
-  [1] T1070/001  score=1.269888
-      filepath: https://attack.mitre.org/techniques/T1070/001
-      内容 (前500字):
-      Clear Windows Event Logs. Adversaries may clear Windows Event Logs to hide the activity of an intrusion. Windows Event Logs are a record of a computer's alerts and notifications. There are three system-defined sources of events: System, Application, and Security, with five event types: Error, Warning, Information, Success Audit, and Failure Audit.
-
-
-With administrator privileges, the event logs can be cleared with the following utility commands:
-
-* <code>wevtutil cl system</code>
-* <code>wevtuti
-
-  [2] T1055/009  score=1.411428
+  [1] T1055/009  score=1.112782
       filepath: https://attack.mitre.org/techniques/T1055/009
       内容 (前500字):
       Proc Memory. Adversaries may inject malicious code into processes via the /proc filesystem in order to evade process-based defenses as well as possibly elevate privileges. Proc memory injection is a method of executing arbitrary code in the address space of a separate live process. 
 
 Proc memory injection involves enumerating the memory of a process via the /proc filesystem (<code>/proc/[pid]</code>) then crafting a return-oriented programming (ROP) payload with available gadgets/instructions. E
 
-  [3] T1027/011  score=1.428663
-      filepath: https://attack.mitre.org/techniques/T1027/011
+  [2] T1003/007  score=1.123135
+      filepath: https://attack.mitre.org/techniques/T1003/007
       内容 (前500字):
-      Fileless Storage. Adversaries may store data in "fileless" formats to conceal malicious activity from defenses. Fileless storage can be broadly defined as any format other than a file. Common examples of non-volatile fileless storage in Windows systems include the Windows Registry, event logs, or WMI repository. Shared memory directories on Linux systems (`/dev/shm`, `/run/shm`, `/var/run`, and `/var/lock`) and volatile directories on Network Devices (`/tmp` and `/volatile`) may also be consider
+      Proc Filesystem. Adversaries may gather credentials from the proc filesystem or `/proc`. The proc filesystem is a pseudo-filesystem used as an interface to kernel data structures for Linux based systems managing virtual memory. For each process, the `/proc/<PID>/maps` file shows how memory is mapped within the process’s virtual address space. And `/proc/<PID>/mem`, exposed for debugging purposes, provides access to the process’s virtual address space.
 
-  [4] T1055/002  score=1.431395
+When executing with root privileges, advers
+
+  [3] T1055/002  score=1.127899
       filepath: https://attack.mitre.org/techniques/T1055/002
       内容 (前500字):
       Portable Executable Injection. Adversaries may inject portable executables (PE) into processes in order to evade process-based defenses as well as possibly elevate privileges. PE injection is a method of executing arbitrary code in the address space of a separate live process. 
 
 PE injection is commonly performed by copying code (perhaps without a file on disk) into the virtual address space of the target process before invoking it via a new thread. The write can be performed with native Windows
 
-  [5] T1564/010  score=1.473418
-      filepath: https://attack.mitre.org/techniques/T1564/010
+  [4] T1055/001  score=1.164298
+      filepath: https://attack.mitre.org/techniques/T1055/001
       内容 (前500字):
-      Process Argument Spoofing. Adversaries may attempt to hide process command-line arguments by overwriting process memory. Process command-line arguments are stored in the process environment block (PEB), a data structure used by Windows to store various information about/used by a process. The PEB includes the process command-line arguments that are referenced when executing the process. When a process is created, defensive tools/sensors that monitor process creations may retrieve the process arg
+      Dynamic-link Library Injection. Adversaries may inject dynamic-link libraries (DLLs) into processes in order to evade process-based defenses as well as possibly elevate privileges. DLL injection is a method of executing arbitrary code in the address space of a separate live process.  
+
+DLL injection is commonly performed by writing the path to a DLL in the virtual address space of the target process before loading the DLL by invoking a new thread. The write can be performed with native Windows A
+
+  [5] T1129  score=1.227346
+      filepath: https://attack.mitre.org/techniques/T1129
+      内容 (前500字):
+      Shared Modules. Adversaries may execute malicious payloads via loading shared modules. Shared modules are executable files that are loaded into processes to provide access to reusable code, such as specific custom functions or invoking OS API functions (i.e., [Native API](https://attack.mitre.org/techniques/T1106)).
+
+Adversaries may use this functionality as a way to execute arbitrary payloads on a victim system. For example, adversaries can modularize functionality of their malware into shared 
 
 ----- 语义差距分析 -----
-最佳匹配: T1070/001  距离=1.269888
-第1名 vs 第2名 距离差: 0.141540 (区分度高)
-词汇重叠数: 0
-查询独有词(前30): ['[file_object_file|freq=5]', '[subject_process|freq=330]', 'event_write', "{'", "event_close',", '[file_object_file|freq=4]', "event_sendto',", "/tmp/injectlog.txt',", 'file_object_file=2', "ewq10bvcx',", "'", "/tmp/memhelp.so'}", "event_lseek'}", 'types:subject_process=1,', "/tmp/ewq10bvcx',", 'event_read', "event_lseek',", "memhelp.so',", "event_recvfrom',", 'event_open']
+最佳匹配: T1055/009  距离=1.112782
+第1名 vs 第2名 距离差: 0.010353 (区分度低，匹配不确定)
+词汇重叠数: 1
+查询独有词(前30): ['network', '(ewq', 'ewq10bvcx', 'library', 'temporary', 'file', 'writes', 'directory', '/tmp/memhelp.so', '/tmp/ewq10bvcx', 'file:', '/tmp/injectlog.txt', '(injectlog),', 'text', 'shared', 'reads', 'memhelp.so', 'data,', 'file,', 'receives', '(memhelp).', 'opens', '(memhelp),', 'process:', 'seeks', 'sends', 'bvcx),']
 
 诊断结果已写入: debug_matching_output.json

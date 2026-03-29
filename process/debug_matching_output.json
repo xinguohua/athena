@@ -4,8 +4,8 @@
     "global_idx": 251,
     "vectordb_doc_count": 691
   },
-  "query_text": "Types:SUBJECT_PROCESS=1, FILE_OBJECT_FILE=2\n[SUBJECT_PROCESS|freq=330] {' EVENT_WRITE memhelp.so', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_SENDTO', ' EVENT_READ eWq10bVcx', ' EVENT_WRITE /tmp/injectLog.txt', ' EVENT_LSEEK', ' EVENT_CLOSE', ' EVENT_RECVFROM', ' EVENT_OPEN /tmp/memhelp.so'}\n[FILE_OBJECT_FILE|freq=5] {' EVENT_WRITE memhelp.so', ' EVENT_CLOSE', ' EVENT_OPEN /tmp/memhelp.so'}\n[FILE_OBJECT_FILE|freq=4] {' EVENT_READ eWq10bVcx', ' EVENT_OPEN /tmp/eWq10bVcx', ' EVENT_CLOSE', ' EVENT_LSEEK'}",
-  "query_length": 502,
+  "query_text": "process: writes memhelp.so shared library (memhelp), opens /tmp/eWq10bVcx in temporary directory (ewq bvcx), sends network data, reads eWq10bVcx (ewq bvcx), writes /tmp/injectLog.txt in temporary directory text file (injectlog), seeks in file, receives network data, opens /tmp/memhelp.so in temporary directory shared library (memhelp). file: writes memhelp.so shared library (memhelp), opens /tmp/memhelp.so in temporary directory shared library (memhelp). file: reads eWq10bVcx (ewq bvcx), opens /tmp/eWq10bVcx in temporary directory (ewq bvcx), seeks in file",
+  "query_length": 562,
   "snapshot_nodes": {
     "total": 100,
     "malicious_count": 3,
@@ -155,63 +155,63 @@
   "candidates": [
     {
       "rank": 1,
-      "tech_id": "T1070/001",
-      "score": 1.269888,
-      "filepath": "https://attack.mitre.org/techniques/T1070/001",
-      "metadata": {
-        "Source": "MITRE-ATT&CK",
-        "filepath": "https://attack.mitre.org/techniques/T1070/001",
-        "Subject": "T1070.001: Clear Windows Event Logs"
-      },
-      "full_content": "Clear Windows Event Logs. Adversaries may clear Windows Event Logs to hide the activity of an intrusion. Windows Event Logs are a record of a computer's alerts and notifications. There are three system-defined sources of events: System, Application, and Security, with five event types: Error, Warning, Information, Success Audit, and Failure Audit.\n\n\nWith administrator privileges, the event logs can be cleared with the following utility commands:\n\n* <code>wevtutil cl system</code>\n* <code>wevtutil cl application</code>\n* <code>wevtutil cl security</code>\n\nThese logs may also be cleared through other mechanisms, such as the event viewer GUI or [PowerShell](https://attack.mitre.org/techniques/T1059/001). For example, adversaries may use the PowerShell command <code>Remove-EventLog -LogName Security</code> to delete the Security EventLog and after reboot, disable future logging.  Note: events may still be generated and logged in the .evtx file between the time the command is run and the reboot.\n\nAdversaries may also attempt to clear logs by directly deleting the stored log files within `C:\\Windows\\System32\\winevt\\logs\\`."
-    },
-    {
-      "rank": 2,
       "tech_id": "T1055/009",
-      "score": 1.411428,
+      "score": 1.112782,
       "filepath": "https://attack.mitre.org/techniques/T1055/009",
       "metadata": {
+        "Source": "MITRE-ATT&CK",
         "Subject": "T1055.009: Proc Memory",
-        "filepath": "https://attack.mitre.org/techniques/T1055/009",
-        "Source": "MITRE-ATT&CK"
+        "filepath": "https://attack.mitre.org/techniques/T1055/009"
       },
       "full_content": "Proc Memory. Adversaries may inject malicious code into processes via the /proc filesystem in order to evade process-based defenses as well as possibly elevate privileges. Proc memory injection is a method of executing arbitrary code in the address space of a separate live process. \n\nProc memory injection involves enumerating the memory of a process via the /proc filesystem (<code>/proc/[pid]</code>) then crafting a return-oriented programming (ROP) payload with available gadgets/instructions. Each running process has its own directory, which includes memory mappings. Proc memory injection is commonly performed by overwriting the target processes’ stack using memory mappings provided by the /proc filesystem. This information can be used to enumerate offsets (including the stack) and gadgets (or instructions within the program that can be used to build a malicious payload) otherwise hidden by process memory protections such as address space layout randomization (ASLR). Once enumerated, the target processes’ memory map within <code>/proc/[pid]/maps</code> can be overwritten using dd. \n\nOther techniques such as [Dynamic Linker Hijacking](https://attack.mitre.org/techniques/T1574/006) may be used to populate a target process with more available gadgets. Similar to [Process Hollowing](https://attack.mitre.org/techniques/T1055/012), proc memory injection may target child processes (such as a backgrounded copy of sleep). \n\nRunning code in the context of another process may allow access to the process's memory, system/network resources, and possibly elevated privileges. Execution via proc memory injection may also evade detection from security products since the execution is masked under a legitimate process."
     },
     {
-      "rank": 3,
-      "tech_id": "T1027/011",
-      "score": 1.428663,
-      "filepath": "https://attack.mitre.org/techniques/T1027/011",
+      "rank": 2,
+      "tech_id": "T1003/007",
+      "score": 1.123135,
+      "filepath": "https://attack.mitre.org/techniques/T1003/007",
       "metadata": {
         "Source": "MITRE-ATT&CK",
-        "Subject": "T1027.011: Fileless Storage",
-        "filepath": "https://attack.mitre.org/techniques/T1027/011"
+        "filepath": "https://attack.mitre.org/techniques/T1003/007",
+        "Subject": "T1003.007: Proc Filesystem"
       },
-      "full_content": "Fileless Storage. Adversaries may store data in \"fileless\" formats to conceal malicious activity from defenses. Fileless storage can be broadly defined as any format other than a file. Common examples of non-volatile fileless storage in Windows systems include the Windows Registry, event logs, or WMI repository. Shared memory directories on Linux systems (`/dev/shm`, `/run/shm`, `/var/run`, and `/var/lock`) and volatile directories on Network Devices (`/tmp` and `/volatile`) may also be considered fileless storage, as files written to these directories are mapped directly to RAM and not stored on the disk..\n\nSimilar to fileless in-memory behaviors such as [Reflective Code Loading](https://attack.mitre.org/techniques/T1620) and [Process Injection](https://attack.mitre.org/techniques/T1055), fileless data storage may remain undetected by anti-virus and other endpoint security tools that can only access specific file formats from disk storage. Leveraging fileless storage may also allow adversaries to bypass the protections offered by read-only file systems in Linux.\n\nAdversaries may use fileless storage to conceal various types of stored data, including payloads/shellcode (potentially being used as part of [Persistence](https://attack.mitre.org/tactics/TA0003)) and collected data not yet exfiltrated from the victim (e.g., [Local Data Staging](https://attack.mitre.org/techniques/T1074/001)). Adversaries also often encrypt, encode, splice, or otherwise obfuscate this fileless data when stored. \n\nSome forms of fileless storage activity may indirectly create artifacts in the file system, but in central and otherwise difficult to inspect formats such as the WMI (e.g., `%SystemRoot%\\System32\\Wbem\\Repository`) or Registry (e.g., `%SystemRoot%\\System32\\Config`) physical files."
+      "full_content": "Proc Filesystem. Adversaries may gather credentials from the proc filesystem or `/proc`. The proc filesystem is a pseudo-filesystem used as an interface to kernel data structures for Linux based systems managing virtual memory. For each process, the `/proc/<PID>/maps` file shows how memory is mapped within the process’s virtual address space. And `/proc/<PID>/mem`, exposed for debugging purposes, provides access to the process’s virtual address space.\n\nWhen executing with root privileges, adversaries can search these memory locations for all processes on a system that contain patterns indicative of credentials. Adversaries may use regex patterns, such as <code>grep -E \"^[0-9a-f-]* r\" /proc/\"$pid\"/maps | cut -d' ' -f 1</code>, to look for fixed strings in memory structures or cached hashes. When running without privileged access, processes can still view their own virtual memory locations. Some services or programs may save credentials in clear text inside the process’s memory.\n\nIf running as or with the permissions of a web browser, a process can search the `/maps` & `/mem` locations for common website credential patterns (that can also be used to find adjacent memory within the same structure) in which hashes or cleartext credentials may be located."
     },
     {
-      "rank": 4,
+      "rank": 3,
       "tech_id": "T1055/002",
-      "score": 1.431395,
+      "score": 1.127899,
       "filepath": "https://attack.mitre.org/techniques/T1055/002",
       "metadata": {
+        "Subject": "T1055.002: Portable Executable Injection",
         "filepath": "https://attack.mitre.org/techniques/T1055/002",
-        "Source": "MITRE-ATT&CK",
-        "Subject": "T1055.002: Portable Executable Injection"
+        "Source": "MITRE-ATT&CK"
       },
       "full_content": "Portable Executable Injection. Adversaries may inject portable executables (PE) into processes in order to evade process-based defenses as well as possibly elevate privileges. PE injection is a method of executing arbitrary code in the address space of a separate live process. \n\nPE injection is commonly performed by copying code (perhaps without a file on disk) into the virtual address space of the target process before invoking it via a new thread. The write can be performed with native Windows API calls such as <code>VirtualAllocEx</code> and <code>WriteProcessMemory</code>, then invoked with <code>CreateRemoteThread</code> or additional code (ex: shellcode). The displacement of the injected code does introduce the additional requirement for functionality to remap memory references.  \n\nRunning code in the context of another process may allow access to the process's memory, system/network resources, and possibly elevated privileges. Execution via PE injection may also evade detection from security products since the execution is masked under a legitimate process."
     },
     {
-      "rank": 5,
-      "tech_id": "T1564/010",
-      "score": 1.473418,
-      "filepath": "https://attack.mitre.org/techniques/T1564/010",
+      "rank": 4,
+      "tech_id": "T1055/001",
+      "score": 1.164298,
+      "filepath": "https://attack.mitre.org/techniques/T1055/001",
       "metadata": {
-        "filepath": "https://attack.mitre.org/techniques/T1564/010",
-        "Subject": "T1564.010: Process Argument Spoofing",
+        "filepath": "https://attack.mitre.org/techniques/T1055/001",
+        "Subject": "T1055.001: Dynamic-link Library Injection",
         "Source": "MITRE-ATT&CK"
       },
-      "full_content": "Process Argument Spoofing. Adversaries may attempt to hide process command-line arguments by overwriting process memory. Process command-line arguments are stored in the process environment block (PEB), a data structure used by Windows to store various information about/used by a process. The PEB includes the process command-line arguments that are referenced when executing the process. When a process is created, defensive tools/sensors that monitor process creations may retrieve the process arguments from the PEB.\n\nAdversaries may manipulate a process PEB to evade defenses. For example, [Process Hollowing](https://attack.mitre.org/techniques/T1055/012) can be abused to spawn a process in a suspended state with benign arguments. After the process is spawned and the PEB is initialized (and process information is potentially logged by tools/sensors), adversaries may override the PEB to modify the command-line arguments (ex: using the [Native API](https://attack.mitre.org/techniques/T1106) <code>WriteProcessMemory()</code> function) then resume process execution with malicious arguments.\n\nAdversaries may also execute a process with malicious command-line arguments then patch the memory with benign arguments that may bypass subsequent process memory analysis.\n\nThis behavior may also be combined with other tricks (such as [Parent PID Spoofing](https://attack.mitre.org/techniques/T1134/004)) to manipulate or further evade process-based detections."
+      "full_content": "Dynamic-link Library Injection. Adversaries may inject dynamic-link libraries (DLLs) into processes in order to evade process-based defenses as well as possibly elevate privileges. DLL injection is a method of executing arbitrary code in the address space of a separate live process.  \n\nDLL injection is commonly performed by writing the path to a DLL in the virtual address space of the target process before loading the DLL by invoking a new thread. The write can be performed with native Windows API calls such as <code>VirtualAllocEx</code> and <code>WriteProcessMemory</code>, then invoked with <code>CreateRemoteThread</code> (which calls the <code>LoadLibrary</code> API responsible for loading the DLL).  \n\nVariations of this method such as reflective DLL injection (writing a self-mapping DLL into a process) and memory module (map DLL when writing into process) overcome the address relocation issue as well as the additional APIs to invoke execution (since these methods load and execute the files in memory by manually preforming the function of <code>LoadLibrary</code>). \n\nAnother variation of this method, often referred to as Module Stomping/Overloading or DLL Hollowing, may be leveraged to conceal injected code within a process. This method involves loading a legitimate DLL into a remote process then manually overwriting the module's <code>AddressOfEntryPoint</code> before starting a new thread in the target process. This variation allows attackers to hide malicious injected code by potentially backing its execution with a legitimate DLL file on disk. \n\nRunning code in the context of another process may allow access to the process's memory, system/network resources, and possibly elevated privileges. Execution via DLL injection may also evade detection from security products since the execution is masked under a legitimate process."
+    },
+    {
+      "rank": 5,
+      "tech_id": "T1129",
+      "score": 1.227346,
+      "filepath": "https://attack.mitre.org/techniques/T1129",
+      "metadata": {
+        "Subject": "T1129: Shared Modules",
+        "filepath": "https://attack.mitre.org/techniques/T1129",
+        "Source": "MITRE-ATT&CK"
+      },
+      "full_content": "Shared Modules. Adversaries may execute malicious payloads via loading shared modules. Shared modules are executable files that are loaded into processes to provide access to reusable code, such as specific custom functions or invoking OS API functions (i.e., [Native API](https://attack.mitre.org/techniques/T1106)).\n\nAdversaries may use this functionality as a way to execute arbitrary payloads on a victim system. For example, adversaries can modularize functionality of their malware into shared objects that perform various functions such as managing C2 network communications or execution of specific actions on objective.\n\nThe Linux & macOS module loader can load and execute shared objects from arbitrary local paths. This functionality resides in `dlfcn.h` in functions such as `dlopen` and `dlsym`. Although macOS can execute `.so` files, common practice uses `.dylib` files.\n\nThe Windows module loader can be instructed to load DLLs from arbitrary local paths and arbitrary Universal Naming Convention (UNC) network paths. This functionality resides in `NTDLL.dll` and is part of the Windows [Native API](https://attack.mitre.org/techniques/T1106) which is called from functions like `LoadLibrary` at run time."
     }
   ]
 }

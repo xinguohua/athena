@@ -159,9 +159,9 @@
       "score": 1.112782,
       "filepath": "https://attack.mitre.org/techniques/T1055/009",
       "metadata": {
-        "Source": "MITRE-ATT&CK",
         "Subject": "T1055.009: Proc Memory",
-        "filepath": "https://attack.mitre.org/techniques/T1055/009"
+        "filepath": "https://attack.mitre.org/techniques/T1055/009",
+        "Source": "MITRE-ATT&CK"
       },
       "full_content": "Proc Memory. Adversaries may inject malicious code into processes via the /proc filesystem in order to evade process-based defenses as well as possibly elevate privileges. Proc memory injection is a method of executing arbitrary code in the address space of a separate live process. \n\nProc memory injection involves enumerating the memory of a process via the /proc filesystem (<code>/proc/[pid]</code>) then crafting a return-oriented programming (ROP) payload with available gadgets/instructions. Each running process has its own directory, which includes memory mappings. Proc memory injection is commonly performed by overwriting the target processes’ stack using memory mappings provided by the /proc filesystem. This information can be used to enumerate offsets (including the stack) and gadgets (or instructions within the program that can be used to build a malicious payload) otherwise hidden by process memory protections such as address space layout randomization (ASLR). Once enumerated, the target processes’ memory map within <code>/proc/[pid]/maps</code> can be overwritten using dd. \n\nOther techniques such as [Dynamic Linker Hijacking](https://attack.mitre.org/techniques/T1574/006) may be used to populate a target process with more available gadgets. Similar to [Process Hollowing](https://attack.mitre.org/techniques/T1055/012), proc memory injection may target child processes (such as a backgrounded copy of sleep). \n\nRunning code in the context of another process may allow access to the process's memory, system/network resources, and possibly elevated privileges. Execution via proc memory injection may also evade detection from security products since the execution is masked under a legitimate process."
     },
@@ -171,9 +171,9 @@
       "score": 1.123135,
       "filepath": "https://attack.mitre.org/techniques/T1003/007",
       "metadata": {
-        "Source": "MITRE-ATT&CK",
         "filepath": "https://attack.mitre.org/techniques/T1003/007",
-        "Subject": "T1003.007: Proc Filesystem"
+        "Subject": "T1003.007: Proc Filesystem",
+        "Source": "MITRE-ATT&CK"
       },
       "full_content": "Proc Filesystem. Adversaries may gather credentials from the proc filesystem or `/proc`. The proc filesystem is a pseudo-filesystem used as an interface to kernel data structures for Linux based systems managing virtual memory. For each process, the `/proc/<PID>/maps` file shows how memory is mapped within the process’s virtual address space. And `/proc/<PID>/mem`, exposed for debugging purposes, provides access to the process’s virtual address space.\n\nWhen executing with root privileges, adversaries can search these memory locations for all processes on a system that contain patterns indicative of credentials. Adversaries may use regex patterns, such as <code>grep -E \"^[0-9a-f-]* r\" /proc/\"$pid\"/maps | cut -d' ' -f 1</code>, to look for fixed strings in memory structures or cached hashes. When running without privileged access, processes can still view their own virtual memory locations. Some services or programs may save credentials in clear text inside the process’s memory.\n\nIf running as or with the permissions of a web browser, a process can search the `/maps` & `/mem` locations for common website credential patterns (that can also be used to find adjacent memory within the same structure) in which hashes or cleartext credentials may be located."
     },
@@ -196,8 +196,8 @@
       "filepath": "https://attack.mitre.org/techniques/T1055/001",
       "metadata": {
         "filepath": "https://attack.mitre.org/techniques/T1055/001",
-        "Subject": "T1055.001: Dynamic-link Library Injection",
-        "Source": "MITRE-ATT&CK"
+        "Source": "MITRE-ATT&CK",
+        "Subject": "T1055.001: Dynamic-link Library Injection"
       },
       "full_content": "Dynamic-link Library Injection. Adversaries may inject dynamic-link libraries (DLLs) into processes in order to evade process-based defenses as well as possibly elevate privileges. DLL injection is a method of executing arbitrary code in the address space of a separate live process.  \n\nDLL injection is commonly performed by writing the path to a DLL in the virtual address space of the target process before loading the DLL by invoking a new thread. The write can be performed with native Windows API calls such as <code>VirtualAllocEx</code> and <code>WriteProcessMemory</code>, then invoked with <code>CreateRemoteThread</code> (which calls the <code>LoadLibrary</code> API responsible for loading the DLL).  \n\nVariations of this method such as reflective DLL injection (writing a self-mapping DLL into a process) and memory module (map DLL when writing into process) overcome the address relocation issue as well as the additional APIs to invoke execution (since these methods load and execute the files in memory by manually preforming the function of <code>LoadLibrary</code>). \n\nAnother variation of this method, often referred to as Module Stomping/Overloading or DLL Hollowing, may be leveraged to conceal injected code within a process. This method involves loading a legitimate DLL into a remote process then manually overwriting the module's <code>AddressOfEntryPoint</code> before starting a new thread in the target process. This variation allows attackers to hide malicious injected code by potentially backing its execution with a legitimate DLL file on disk. \n\nRunning code in the context of another process may allow access to the process's memory, system/network resources, and possibly elevated privileges. Execution via DLL injection may also evade detection from security products since the execution is masked under a legitimate process."
     },
@@ -207,9 +207,9 @@
       "score": 1.227346,
       "filepath": "https://attack.mitre.org/techniques/T1129",
       "metadata": {
-        "Subject": "T1129: Shared Modules",
         "filepath": "https://attack.mitre.org/techniques/T1129",
-        "Source": "MITRE-ATT&CK"
+        "Source": "MITRE-ATT&CK",
+        "Subject": "T1129: Shared Modules"
       },
       "full_content": "Shared Modules. Adversaries may execute malicious payloads via loading shared modules. Shared modules are executable files that are loaded into processes to provide access to reusable code, such as specific custom functions or invoking OS API functions (i.e., [Native API](https://attack.mitre.org/techniques/T1106)).\n\nAdversaries may use this functionality as a way to execute arbitrary payloads on a victim system. For example, adversaries can modularize functionality of their malware into shared objects that perform various functions such as managing C2 network communications or execution of specific actions on objective.\n\nThe Linux & macOS module loader can load and execute shared objects from arbitrary local paths. This functionality resides in `dlfcn.h` in functions such as `dlopen` and `dlsym`. Although macOS can execute `.so` files, common practice uses `.dylib` files.\n\nThe Windows module loader can be instructed to load DLLs from arbitrary local paths and arbitrary Universal Naming Convention (UNC) network paths. This functionality resides in `NTDLL.dll` and is part of the Windows [Native API](https://attack.mitre.org/techniques/T1106) which is called from functions like `LoadLibrary` at run time."
     }
