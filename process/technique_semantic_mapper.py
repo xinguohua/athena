@@ -6,11 +6,7 @@
 2. 向量检索：用翻译后的查询文本在 ATT&CK 技术向量库中检索最相似的技术
 3. 技术码提取：从检索结果中提取 MITRE ATT&CK 技术 ID
 
-匹配思路：
-  查询侧（快照系统调用） → 规则翻译 → 系统事件自然语言 ← 规则翻译 ← 技术侧（ATT&CK描述）
-  两侧都翻译到同一个中间层，用 embedding 做语义匹配。
-
-依赖：pandas, langchain-community, chromadb, sentence-transformers
+翻译规则定义在 process/translation_rules.py 中。
 """
 from __future__ import annotations
 from typing import List, Tuple, Optional, Any
@@ -23,156 +19,18 @@ from langchain_community.document_loaders import DataFrameLoader
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+from process.translation_rules import (
+    TYPE_MAP, EVENT_MAP, LOW_INFO_EVENTS,
+    translate_event,
+)
+
 
 # ============================================================
-# 查询侧翻译规则：系统调用 → 系统事件自然语言
+# 查询侧翻译：快照 → 系统事件自然语言
 # ============================================================
-
-# 节点类型翻译
-TYPE_MAP = {
-    "SUBJECT_PROCESS": "process",
-    "FILE_OBJECT_FILE": "file",
-    "FILE_OBJECT_UNIX_SOCKET": "unix socket",
-    "NetFlowObject": "network connection",
-    "UnnamedPipeObject": "pipe",
-    "SUBJECT_UNIT": "service unit",
-    "FILE_OBJECT_DIR": "directory",
-    "FILE_OBJECT_BLOCK": "block device",
-    "FILE_OBJECT_CHAR": "character device",
-    "RegistryKeyObject": "registry key",
-    "SrcSinkObject": "source sink",
-}
-
-# 系统调用事件翻译
-EVENT_MAP = {
-    "EVENT_WRITE": "writes",
-    "EVENT_READ": "reads",
-    "EVENT_OPEN": "opens",
-    "EVENT_CLOSE": "closes",
-    "EVENT_EXECUTE": "executes",
-    "EVENT_FORK": "creates child process",
-    "EVENT_EXIT": "exits",
-    "EVENT_CONNECT": "connects to network",
-    "EVENT_SENDTO": "sends network data",
-    "EVENT_RECVFROM": "receives network data",
-    "EVENT_SENDMSG": "sends message",
-    "EVENT_RECVMSG": "receives message",
-    "EVENT_MODIFY_PROCESS": "modifies process",
-    "EVENT_CREATE_OBJECT": "creates object",
-    "EVENT_CHANGE_PRINCIPAL": "changes principal",
-    "EVENT_LSEEK": "seeks in file",
-    "EVENT_MODIFY_FILE_ATTRIBUTES": "modifies file attributes",
-    "EVENT_RENAME": "renames",
-    "EVENT_UNLINK": "deletes",
-    "EVENT_MMAP": "maps memory",
-    "EVENT_MPROTECT": "changes memory protection",
-    "EVENT_CLONE": "clones process",
-    "EVENT_BIND": "binds to port",
-    "EVENT_ACCEPT": "accepts connection",
-    "EVENT_LOGIN": "logs in",
-    "EVENT_LOGOUT": "logs out",
-}
-
-# 文件扩展名翻译
-EXT_MAP = {
-    ".so": "shared library",
-    ".dll": "dynamic library",
-    ".exe": "executable",
-    ".sh": "shell script",
-    ".py": "python script",
-    ".pl": "perl script",
-    ".conf": "configuration file",
-    ".cfg": "configuration file",
-    ".log": "log file",
-    ".txt": "text file",
-    ".key": "key file",
-    ".pem": "certificate file",
-    ".crt": "certificate file",
-    ".db": "database file",
-    ".sqlite": "database file",
-    ".json": "json file",
-    ".xml": "xml file",
-    ".zip": "archive file",
-    ".tar": "archive file",
-    ".gz": "compressed file",
-}
-
-# 路径关键词翻译
-PATH_MAP = {
-    "/tmp": "temporary directory",
-    "/etc": "system configuration directory",
-    "/proc": "process filesystem",
-    "/dev": "device directory",
-    "/bin": "binary directory",
-    "/sbin": "system binary directory",
-    "/usr/bin": "user binary directory",
-    "/var/log": "log directory",
-    "/home": "user home directory",
-    "/root": "root home directory",
-}
-
-# 低信息量事件，翻译后过滤掉
-_LOW_INFO_EVENTS = {"closes", "exits"}
-
-
-def _translate_event(event_str: str) -> str:
-    """将单个事件字符串翻译为自然语言。
-    输入: ' EVENT_WRITE memhelp.so' 或 ' EVENT_SENDTO'
-    输出: 'writes shared library memhelp.so' 或 'sends network data'
-    """
-    event_str = event_str.strip()
-    if not event_str:
-        return ""
-
-    parts = event_str.split(None, 1)
-    event_type = parts[0]
-    obj = parts[1] if len(parts) > 1 else ""
-
-    action = EVENT_MAP.get(event_type, event_type.replace("EVENT_", "").lower())
-    if not obj:
-        return action
-
-    return f"{action} {_describe_object(obj)}"
-
-
-def _describe_object(obj: str) -> str:
-    """为文件路径/对象名生成自然语言描述。"""
-    obj = obj.strip()
-    descriptions = []
-
-    # 路径前缀
-    for path_prefix, desc in PATH_MAP.items():
-        if path_prefix in obj:
-            descriptions.append(f"in {desc}")
-            break
-
-    # 文件扩展名
-    for ext, desc in EXT_MAP.items():
-        if obj.endswith(ext) or ext in obj:
-            descriptions.append(desc)
-            break
-
-    # 从文件名中提取有意义的词（如 inject, backdoor, shell）
-    basename = obj.rsplit("/", 1)[-1] if "/" in obj else obj
-    name_stem = basename.rsplit(".", 1)[0] if "." in basename else basename
-    words = re.findall(r'[a-zA-Z]+', name_stem)
-    meaningful = [w.lower() for w in words if len(w) > 2]
-    if meaningful:
-        descriptions.append("(" + " ".join(meaningful) + ")")
-
-    if descriptions:
-        return obj + " " + " ".join(descriptions)
-    return obj
-
 
 def snapshot_to_query(snapshot, *, node_scope: str = "malicious", max_nodes: int = 200) -> str:
-    """将快照图翻译为系统事件自然语言查询文本。
-
-    Args:
-        snapshot: igraph 快照图
-        node_scope: "malicious" 只取恶意节点，"all" 取全部
-        max_nodes: 最多处理的节点数
-    """
+    """将快照图翻译为系统事件自然语言查询文本。"""
     # 1. 收集节点
     nodes = []
     for v in snapshot.vs:
@@ -209,8 +67,8 @@ def snapshot_to_query(snapshot, *, node_scope: str = "malicious", max_nodes: int
         seen = set()
         translated = []
         for e in event_items:
-            t = _translate_event(e)
-            if t and t not in _LOW_INFO_EVENTS and t not in seen:
+            t = translate_event(e)
+            if t and t not in LOW_INFO_EVENTS and t not in seen:
                 seen.add(t)
                 translated.append(t)
 
