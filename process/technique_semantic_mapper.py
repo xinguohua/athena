@@ -151,10 +151,151 @@ class TechniqueSemanticMapper:
 
 
     # ------------------------------
-    # 内部：将节点聚合为文本
+    # 节点类型翻译
+    # ------------------------------
+    _TYPE_MAP = {
+        "SUBJECT_PROCESS": "process",
+        "FILE_OBJECT_FILE": "file",
+        "FILE_OBJECT_UNIX_SOCKET": "unix socket",
+        "NetFlowObject": "network connection",
+        "UnnamedPipeObject": "pipe",
+        "SUBJECT_UNIT": "service unit",
+        "FILE_OBJECT_DIR": "directory",
+        "FILE_OBJECT_BLOCK": "block device",
+        "FILE_OBJECT_CHAR": "character device",
+        "RegistryKeyObject": "registry key",
+        "SrcSinkObject": "source sink",
+    }
+
+    # 系统调用事件翻译
+    _EVENT_MAP = {
+        "EVENT_WRITE": "writes",
+        "EVENT_READ": "reads",
+        "EVENT_OPEN": "opens",
+        "EVENT_CLOSE": "closes",
+        "EVENT_EXECUTE": "executes",
+        "EVENT_FORK": "creates child process",
+        "EVENT_EXIT": "exits",
+        "EVENT_CONNECT": "connects to network",
+        "EVENT_SENDTO": "sends network data",
+        "EVENT_RECVFROM": "receives network data",
+        "EVENT_SENDMSG": "sends message",
+        "EVENT_RECVMSG": "receives message",
+        "EVENT_MODIFY_PROCESS": "modifies process",
+        "EVENT_CREATE_OBJECT": "creates object",
+        "EVENT_CHANGE_PRINCIPAL": "changes principal",
+        "EVENT_LSEEK": "seeks in file",
+        "EVENT_MODIFY_FILE_ATTRIBUTES": "modifies file attributes",
+        "EVENT_RENAME": "renames",
+        "EVENT_UNLINK": "deletes",
+        "EVENT_MMAP": "maps memory",
+        "EVENT_MPROTECT": "changes memory protection",
+        "EVENT_CLONE": "clones process",
+        "EVENT_BIND": "binds to port",
+        "EVENT_ACCEPT": "accepts connection",
+        "EVENT_LOGIN": "logs in",
+        "EVENT_LOGOUT": "logs out",
+    }
+
+    # 文件扩展名翻译
+    _EXT_MAP = {
+        ".so": "shared library",
+        ".dll": "dynamic library",
+        ".exe": "executable",
+        ".sh": "shell script",
+        ".py": "python script",
+        ".pl": "perl script",
+        ".conf": "configuration file",
+        ".cfg": "configuration file",
+        ".log": "log file",
+        ".txt": "text file",
+        ".key": "key file",
+        ".pem": "certificate file",
+        ".crt": "certificate file",
+        ".db": "database file",
+        ".sqlite": "database file",
+        ".json": "json file",
+        ".xml": "xml file",
+        ".zip": "archive file",
+        ".tar": "archive file",
+        ".gz": "compressed file",
+    }
+
+    # 路径关键词翻译
+    _PATH_MAP = {
+        "/tmp": "temporary directory",
+        "/etc": "system configuration directory",
+        "/proc": "process filesystem",
+        "/dev": "device directory",
+        "/bin": "binary directory",
+        "/sbin": "system binary directory",
+        "/usr/bin": "user binary directory",
+        "/var/log": "log directory",
+        "/home": "user home directory",
+        "/root": "root home directory",
+    }
+
+    def _translate_event(self, event_str: str) -> str:
+        """将单个事件字符串翻译为自然语言。
+        输入: ' EVENT_WRITE memhelp.so' 或 ' EVENT_SENDTO'
+        输出: 'writes shared library memhelp.so' 或 'sends network data'
+        """
+        event_str = event_str.strip()
+        if not event_str:
+            return ""
+
+        # 分离事件类型和操作对象
+        parts = event_str.split(None, 1)
+        event_type = parts[0]
+        obj = parts[1] if len(parts) > 1 else ""
+
+        # 翻译事件类型
+        action = self._EVENT_MAP.get(event_type, event_type.replace("EVENT_", "").lower())
+
+        if not obj:
+            return action
+
+        # 翻译操作对象
+        obj_desc = self._describe_object(obj)
+        return f"{action} {obj_desc}"
+
+    def _describe_object(self, obj: str) -> str:
+        """为文件路径/对象名生成自然语言描述。"""
+        obj = obj.strip()
+        descriptions = []
+
+        # 提取路径前缀描述
+        for path_prefix, desc in self._PATH_MAP.items():
+            if path_prefix in obj:
+                descriptions.append(f"in {desc}")
+                break
+
+        # 提取文件扩展名描述
+        for ext, desc in self._EXT_MAP.items():
+            if obj.endswith(ext) or f"{ext}" in obj:
+                descriptions.append(desc)
+                break
+
+        # 提取文件名中有意义的词（如 inject, backdoor, shell 等）
+        basename = obj.rsplit("/", 1)[-1] if "/" in obj else obj
+        # 去掉扩展名取文件名主体
+        name_parts = basename.rsplit(".", 1)
+        name_stem = name_parts[0] if name_parts else basename
+        # 用驼峰/下划线分割提取有意义的词
+        import re as _re
+        words = _re.findall(r'[a-zA-Z]+', name_stem)
+        meaningful_words = [w.lower() for w in words if len(w) > 2]
+        if meaningful_words:
+            descriptions.append("(" + " ".join(meaningful_words) + ")")
+
+        if descriptions:
+            return obj + " " + " ".join(descriptions)
+        return obj
+
+    # ------------------------------
+    # 内部：将节点聚合为自然语言文本
     # ------------------------------
     def _nodes_to_text(self, nodes: List[dict]) -> str:
-        # 限制节点数量，优先频率高者
         try:
             def _freq(x: Any) -> int:
                 try:
@@ -165,22 +306,40 @@ class TechniqueSemanticMapper:
             nodes_sorted = sorted(nodes, key=lambda d: _freq(d.get("frequency")), reverse=True)
             nodes_cut = nodes_sorted[: self.summary_max_nodes]
 
-            # 类型计数
-            type_counts = {}
+            lines = []
             for n in nodes_cut:
-                t = n.get("type", "").strip()
-                type_counts[t] = type_counts.get(t, 0) + 1
+                node_type = n.get("type", "").strip()
+                props = n.get("properties", "").strip()
 
-            header = "Types:" + ", ".join(f"{k}={v}" for k, v in type_counts.items() if k)
-            lines = [header]
-            for n in nodes_cut:
-                t = n.get("type", "")
-                f = n.get("frequency", "")
-                p = n.get("properties", "")
-                lines.append(f"[{t}|freq={f}] {p}")
-            return "\n".join(lines)
+                # 翻译节点类型
+                type_desc = self._TYPE_MAP.get(node_type, node_type.lower())
+
+                # 解析 properties 中的事件列表
+                # 格式: "{' EVENT_WRITE memhelp.so', ' EVENT_CLOSE', ...}"
+                events_raw = props.strip("{} '\"")
+                event_items = [e.strip().strip("'\"") for e in events_raw.split(",")]
+                event_items = [e for e in event_items if e]
+
+                # 翻译每个事件
+                translated = []
+                for e in event_items:
+                    t = self._translate_event(e)
+                    if t and t not in ("closes",):  # 过滤掉低信息量的 close 事件
+                        translated.append(t)
+
+                # 去重保持顺序
+                seen = set()
+                unique = []
+                for t in translated:
+                    if t not in seen:
+                        seen.add(t)
+                        unique.append(t)
+
+                if unique:
+                    lines.append(f"{type_desc}: {', '.join(unique)}")
+
+            return ". ".join(lines) if lines else ""
         except Exception:
-            # 最小回退：拼接 properties
             return "\n".join(str(n.get("properties", "")) for n in nodes[: self.summary_max_nodes])
 
     # ------------------------------
