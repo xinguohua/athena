@@ -49,6 +49,6 @@ Adversaries may use this functionality as a way to execute arbitrary payloads on
 最佳匹配: T1055/009  距离=1.112782
 第1名 vs 第2名 距离差: 0.010353 (区分度低，匹配不确定)
 词汇重叠数: 7
-查询独有词(前30): ['file:', 'seeks', '(ewq', 'file', 'ewq10bvcx', '(memhelp).', 'bvcx),', 'directory', '/tmp/injectlog.txt', 'data,', 'file,', 'memhelp.so', '/tmp/memhelp.so', 'network', '(injectlog),', 'receives', '/tmp/ewq10bvcx', 'text', 'sends', '(memhelp),', 'process:']
+查询独有词(前30): ['file,', 'seeks', 'bvcx),', 'file', 'text', '(memhelp),', '(injectlog),', 'process:', 'directory', '/tmp/memhelp.so', '/tmp/ewq10bvcx', 'ewq10bvcx', '/tmp/injectlog.txt', 'receives', '(ewq', '(memhelp).', 'data,', 'sends', 'network', 'memhelp.so', 'file:']
 
 诊断结果已写入: debug_matching_output.json
