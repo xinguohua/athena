@@ -257,10 +257,10 @@ def main():
 
         is_sub = obj.get("x_mitre_is_subtechnique", False)
 
-        # 生成系统事件描述，放到 Body 开头（embedding 模型有 token 限制，开头的内容优先被编码）
+        # 有系统事件描述的只用系统事件描述，没有的保留原始描述
         sys_behaviors = generate_system_behaviors(description)
         if sys_behaviors:
-            body = f"Observable system behaviors: {sys_behaviors}\n\n{name}. {description}"
+            body = f"{name}. {sys_behaviors}"
             enriched_count += 1
         else:
             body = f"{name}. {description}"
