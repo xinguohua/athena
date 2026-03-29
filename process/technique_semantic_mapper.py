@@ -30,7 +30,7 @@ class TechniqueSemanticMapper:
         self,
         *,
         csv_path: str = "data/attack_techniques.csv",
-        persist_dir: str = "./chroma_db",
+        persist_dir: str = os.path.join(os.path.dirname(__file__), "chroma_db"),
         model_name: str = "sentence-transformers/all-MiniLM-L12-v2",
         page_content_column: str = "Body",
         code_column: str = "Subject",

@@ -774,7 +774,7 @@ def print_snapshot_throughput(snapshots, proc_times: Optional[List[float]] = Non
                 snapshots,
                 mapper_config={
                     "csv_path": "data/attack_techniques.csv",
-                    "persist_dir": "./chroma_db",
+                    "persist_dir": os.path.join(os.path.dirname(__file__), "chroma_db"),
                     "model_name": "sentence-transformers/all-MiniLM-L12-v2",
                     "page_content_column": "Body",
                     "code_column": "Subject",
@@ -1370,7 +1370,7 @@ def run_evaluation(path_map: dict) -> None:
     if SEQ_FILTER.get("enable", False):
         mapper_cfg = {
             "csv_path": "data/attack_techniques.csv",
-            "persist_dir": "./chroma_db",
+            "persist_dir": os.path.join(os.path.dirname(__file__), "chroma_db"),
             "model_name": "sentence-transformers/all-MiniLM-L12-v2",
             "page_content_column": "Body",
             "code_column": "Subject",
