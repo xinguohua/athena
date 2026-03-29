@@ -2,7 +2,7 @@
 选择恶意节点最多的快照: [77] 恶意节点数=3
 
 ===== 诊断快照 [77] (全局索引 251) =====
-向量库文档数: 3626
+向量库文档数: 691
 节点总数: 100, 恶意节点数: 3
 
 ----- 查询文本 (长度=502) -----
@@ -13,35 +13,45 @@ Types:SUBJECT_PROCESS=1, FILE_OBJECT_FILE=2
 
 ----- Top 5 匹配结果 -----
 
-  [1] T1574/002  score=1.103566
-      filepath: https://attack.mitre.org/techniques/T1574/002/
+  [1] T1070/001  score=1.269888
+      filepath: https://attack.mitre.org/techniques/T1070/001
       内容 (前500字):
-      {'selection': {'EventID': [11, 12], 'ProcessPath|endswith': ['\\MpCmdRun.exe', '\\NisSrv.exe']}, 'condition': 'selection'}
+      Clear Windows Event Logs. Adversaries may clear Windows Event Logs to hide the activity of an intrusion. Windows Event Logs are a record of a computer's alerts and notifications. There are three system-defined sources of events: System, Application, and Security, with five event types: Error, Warning, Information, Success Audit, and Failure Audit.
 
-  [2] T1562/004  score=1.162444
-      filepath: https://attack.mitre.org/techniques/T1562/004/
-      内容 (前500字):
-      {'selection': {'EventID': [2006, 2052]}, 'filter_main_generic': {'ModifyingApplication|startswith': ['C:\\Program Files\\', 'C:\\Program Files (x86)\\']}, 'filter_main_svchost': {'ModifyingApplication': 'C:\\Windows\\System32\\svchost.exe'}, 'filter_optional_msmpeng': {'ModifyingApplication|startswith': 'C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\', 'ModifyingApplication|endswith': '\\MsMpEng.exe'}, 'filter_main_null': {'ModifyingApplication': None}, 'filter_main_empty': {'Modifying
 
-  [3] T1552  score=1.164096
-      filepath: https://attack.mitre.org/techniques/T1552/
-      内容 (前500字):
-      {'selection_wmi': {'CommandLine|contains|all': ['Select', 'Win32_NTLogEvent']}, 'selection_wevtutil_img': [{'Image|endswith': '\\wevtutil.exe'}, {'OriginalFileName': 'wevtutil.exe'}], 'selection_wevtutil_cli': {'CommandLine|contains': [' qe ', ' query-events ']}, 'selection_wmic_img': [{'Image|endswith': '\\wmic.exe'}, {'OriginalFileName': 'wmic.exe'}], 'selection_wmic_cli': {'CommandLine|contains': ' ntevent'}, 'selection_cmdlet': {'CommandLine|contains': ['Get-WinEvent ', 'get-eventlog ']}, 's
+With administrator privileges, the event logs can be cleared with the following utility commands:
 
-  [4] T1552  score=1.164096
-      filepath: https://attack.mitre.org/techniques/T1552/
-      内容 (前500字):
-      {'selection_wmi': {'CommandLine|contains|all': ['Select', 'Win32_NTLogEvent']}, 'selection_wevtutil_img': [{'Image|endswith': '\\wevtutil.exe'}, {'OriginalFileName': 'wevtutil.exe'}], 'selection_wevtutil_cli': {'CommandLine|contains': [' qe ', ' query-events ']}, 'selection_wmic_img': [{'Image|endswith': '\\wmic.exe'}, {'OriginalFileName': 'wmic.exe'}], 'selection_wmic_cli': {'CommandLine|contains': ' ntevent'}, 'selection_cmdlet': {'CommandLine|contains': ['Get-WinEvent ', 'get-eventlog ']}, 'c
+* <code>wevtutil cl system</code>
+* <code>wevtuti
 
-  [5] T1566/001  score=1.171632
-      filepath: https://attack.mitre.org/techniques/T1566/001/
+  [2] T1055/009  score=1.411428
+      filepath: https://attack.mitre.org/techniques/T1055/009
       内容 (前500字):
-      {'selection': {'EventID': 4663, 'ObjectServer': 'Security', 'ObjectType': 'File', 'ObjectName|startswith': '\\Device\\CdRom'}, 'filter_main_generic': {'ObjectName': ['\\Device\\CdRom0\\autorun.ico', '\\Device\\CdRom0\\setup.exe', '\\Device\\CdRom0\\setup64.exe']}, 'condition': 'selection and not 1 of filter_main_*'}
+      Proc Memory. Adversaries may inject malicious code into processes via the /proc filesystem in order to evade process-based defenses as well as possibly elevate privileges. Proc memory injection is a method of executing arbitrary code in the address space of a separate live process. 
+
+Proc memory injection involves enumerating the memory of a process via the /proc filesystem (<code>/proc/[pid]</code>) then crafting a return-oriented programming (ROP) payload with available gadgets/instructions. E
+
+  [3] T1027/011  score=1.428663
+      filepath: https://attack.mitre.org/techniques/T1027/011
+      内容 (前500字):
+      Fileless Storage. Adversaries may store data in "fileless" formats to conceal malicious activity from defenses. Fileless storage can be broadly defined as any format other than a file. Common examples of non-volatile fileless storage in Windows systems include the Windows Registry, event logs, or WMI repository. Shared memory directories on Linux systems (`/dev/shm`, `/run/shm`, `/var/run`, and `/var/lock`) and volatile directories on Network Devices (`/tmp` and `/volatile`) may also be consider
+
+  [4] T1055/002  score=1.431395
+      filepath: https://attack.mitre.org/techniques/T1055/002
+      内容 (前500字):
+      Portable Executable Injection. Adversaries may inject portable executables (PE) into processes in order to evade process-based defenses as well as possibly elevate privileges. PE injection is a method of executing arbitrary code in the address space of a separate live process. 
+
+PE injection is commonly performed by copying code (perhaps without a file on disk) into the virtual address space of the target process before invoking it via a new thread. The write can be performed with native Windows
+
+  [5] T1564/010  score=1.473418
+      filepath: https://attack.mitre.org/techniques/T1564/010
+      内容 (前500字):
+      Process Argument Spoofing. Adversaries may attempt to hide process command-line arguments by overwriting process memory. Process command-line arguments are stored in the process environment block (PEB), a data structure used by Windows to store various information about/used by a process. The PEB includes the process command-line arguments that are referenced when executing the process. When a process is created, defensive tools/sensors that monitor process creations may retrieve the process arg
 
 ----- 语义差距分析 -----
-最佳匹配: T1574/002  距离=1.103566
-第1名 vs 第2名 距离差: 0.058878 (区分度高)
+最佳匹配: T1070/001  距离=1.269888
+第1名 vs 第2名 距离差: 0.141540 (区分度高)
 词汇重叠数: 0
-查询独有词(前30): ['[file_object_file|freq=4]', "ewq10bvcx',", 'event_write', "event_lseek',", 'types:subject_process=1,', "event_recvfrom',", "/tmp/injectlog.txt',", "'", "memhelp.so',", '[file_object_file|freq=5]', "{'", 'event_read', "/tmp/memhelp.so'}", "event_lseek'}", "event_sendto',", 'file_object_file=2', "/tmp/ewq10bvcx',", '[subject_process|freq=330]', "event_close',", 'event_open']
+查询独有词(前30): ['[file_object_file|freq=5]', '[subject_process|freq=330]', 'event_write', "{'", "event_close',", '[file_object_file|freq=4]', "event_sendto',", "/tmp/injectlog.txt',", 'file_object_file=2', "ewq10bvcx',", "'", "/tmp/memhelp.so'}", "event_lseek'}", 'types:subject_process=1,', "/tmp/ewq10bvcx',", 'event_read', "event_lseek',", "memhelp.so',", "event_recvfrom',", 'event_open']
 
 诊断结果已写入: debug_matching_output.json
