@@ -10,45 +10,43 @@ process: writes memhelp.so shared library (memhelp), opens /tmp/eWq10bVcx in tem
 
 ----- Top 5 匹配结果 -----
 
-  [1] T1055/009  score=1.112782
-      filepath: https://attack.mitre.org/techniques/T1055/009
-      内容 (前500字):
-      Proc Memory. Adversaries may inject malicious code into processes via the /proc filesystem in order to evade process-based defenses as well as possibly elevate privileges. Proc memory injection is a method of executing arbitrary code in the address space of a separate live process. 
-
-Proc memory injection involves enumerating the memory of a process via the /proc filesystem (<code>/proc/[pid]</code>) then crafting a return-oriented programming (ROP) payload with available gadgets/instructions. E
-
-  [2] T1003/007  score=1.123135
-      filepath: https://attack.mitre.org/techniques/T1003/007
-      内容 (前500字):
-      Proc Filesystem. Adversaries may gather credentials from the proc filesystem or `/proc`. The proc filesystem is a pseudo-filesystem used as an interface to kernel data structures for Linux based systems managing virtual memory. For each process, the `/proc/<PID>/maps` file shows how memory is mapped within the process’s virtual address space. And `/proc/<PID>/mem`, exposed for debugging purposes, provides access to the process’s virtual address space.
-
-When executing with root privileges, advers
-
-  [3] T1055/002  score=1.127899
+  [1] T1055/002  score=1.005071
       filepath: https://attack.mitre.org/techniques/T1055/002
       内容 (前500字):
-      Portable Executable Injection. Adversaries may inject portable executables (PE) into processes in order to evade process-based defenses as well as possibly elevate privileges. PE injection is a method of executing arbitrary code in the address space of a separate live process. 
+      Observable system behaviors: process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process reads and writes memory mapped files, process maps memory regions. process creates file, process writes file to directory. process modifies process, process changes principal or user context
 
-PE injection is commonly performed by copying code (perhaps without a file on disk) into the virtual address space of the target process before invoking it via a new thread. The write can be performed with native Windows
+Portable Executable Injection. Adversaries may inject portable executables (PE) into processes in order to evade process-based defenses as
 
-  [4] T1055/001  score=1.164298
+  [2] T1055/001  score=1.050949
       filepath: https://attack.mitre.org/techniques/T1055/001
       内容 (前500字):
-      Dynamic-link Library Injection. Adversaries may inject dynamic-link libraries (DLLs) into processes in order to evade process-based defenses as well as possibly elevate privileges. DLL injection is a method of executing arbitrary code in the address space of a separate live process.  
+      Observable system behaviors: process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process loads shared library, process writes shared library (.dll) to disk. process loads shared library (.so), process writes shared library to temporary directory. process reads and writes memory mapped files, process maps memory regions. process creates file, process writes file to directory. process modifies process, process changes
 
-DLL injection is commonly performed by writing the path to a DLL in the virtual address space of the target process before loading the DLL by invoking a new thread. The write can be performed with native Windows A
-
-  [5] T1129  score=1.227346
-      filepath: https://attack.mitre.org/techniques/T1129
+  [3] T1055/008  score=1.084788
+      filepath: https://attack.mitre.org/techniques/T1055/008
       内容 (前500字):
-      Shared Modules. Adversaries may execute malicious payloads via loading shared modules. Shared modules are executable files that are loaded into processes to provide access to reusable code, such as specific custom functions or invoking OS API functions (i.e., [Native API](https://attack.mitre.org/techniques/T1106)).
+      Observable system behaviors: process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process attaches to another process, process reads and writes another process memory. process creates child process, process forks. process modifies process, process changes principal or user context
 
-Adversaries may use this functionality as a way to execute arbitrary payloads on a victim system. For example, adversaries can modularize functionality of their malware into shared 
+Ptrace System Calls. Adversaries may inject malicious code into processes via ptrace (process trace) system calls in order to evade proce
+
+  [4] T1055  score=1.096191
+      filepath: https://attack.mitre.org/techniques/T1055
+      内容 (前500字):
+      Observable system behaviors: process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process sends and receives network data, process connects to network. process modifies process, process changes principal or user context
+
+Process Injection. Adversaries may inject code into processes in order to evade process-based defenses as well as possibly elevate privileges. Process injection is a method of executing arbitrary cod
+
+  [5] T1218/013  score=1.124556
+      filepath: https://attack.mitre.org/techniques/T1218/013
+      内容 (前500字):
+      Observable system behaviors: process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process loads shared library, process writes shared library (.dll) to disk. process loads shared library (.so), process writes shared library to temporary directory. process sends and receives network data through proxy, process connects to network
+
+Mavinject. Adversaries may abuse mavinject.exe to proxy execution of malicious code. Mav
 
 ----- 语义差距分析 -----
-最佳匹配: T1055/009  距离=1.112782
-第1名 vs 第2名 距离差: 0.010353 (区分度低，匹配不确定)
-词汇重叠数: 7
-查询独有词(前30): ['file,', 'seeks', 'bvcx),', 'file', 'text', '(memhelp),', '(injectlog),', 'process:', 'directory', '/tmp/memhelp.so', '/tmp/ewq10bvcx', 'ewq10bvcx', '/tmp/injectlog.txt', 'receives', '(ewq', '(memhelp).', 'data,', 'sends', 'network', 'memhelp.so', 'file:']
+最佳匹配: T1055/002  距离=1.005071
+第1名 vs 第2名 距离差: 0.045878 (区分度低，匹配不确定)
+词汇重叠数: 9
+查询独有词(前30): ['directory', '/tmp/memhelp.so', 'bvcx),', 'file:', 'ewq10bvcx', '(ewq', '/tmp/injectlog.txt', '(memhelp),', 'network', 'text', 'memhelp.so', 'data,', '(memhelp).', 'seeks', 'process:', '/tmp/ewq10bvcx', 'sends', 'receives', '(injectlog),']
 
 诊断结果已写入: debug_matching_output.json
