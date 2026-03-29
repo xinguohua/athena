@@ -231,9 +231,9 @@ def main():
     stix_data = resp.json()
     print(f"下载完成，共 {len(stix_data.get('objects', []))} 个 STIX 对象")
 
-    # 2) 提取 attack-pattern（技术）
-    rows = []
-    enriched_count = 0
+    # 2) 提取 attack-pattern（技术），先收集所有技术信息
+    tech_info = {}  # tech_id -> {name, description, stix_id, is_sub}
+    stix_id_to_tech_id = {}  # STIX id -> tech_id
     for obj in stix_data.get("objects", []):
         if obj.get("type") != "attack-pattern":
             continue
@@ -251,28 +251,66 @@ def main():
                 tech_id = ref.get("external_id", "")
                 url = ref.get("url", "")
                 break
-
         if not tech_id:
             continue
 
         is_sub = obj.get("x_mitre_is_subtechnique", False)
+        stix_id = obj.get("id", "")
+        stix_id_to_tech_id[stix_id] = tech_id
+        tech_info[tech_id] = {
+            "name": name, "description": description, "url": url,
+            "is_sub": is_sub, "stix_id": stix_id,
+        }
+
+    # 3) 建立子技术 → 父技术的映射
+    sub_to_parent = {}  # 子技术 tech_id -> 父技术 tech_id
+    for obj in stix_data.get("objects", []):
+        if obj.get("type") == "relationship" and obj.get("relationship_type") == "subtechnique-of":
+            src = stix_id_to_tech_id.get(obj.get("source_ref", ""), "")
+            tgt = stix_id_to_tech_id.get(obj.get("target_ref", ""), "")
+            if src and tgt:
+                sub_to_parent[src] = tgt
+
+    print(f"子技术→父技术映射: {len(sub_to_parent)} 条")
+
+    # 4) 生成系统事件描述，子技术继承父技术的描述
+    rows = []
+    enriched_count = 0
+    for tech_id, info in tech_info.items():
+        # 自己的系统事件描述
+        sys_behaviors = generate_system_behaviors(info["description"])
+
+        # 子技术继承父技术的系统事件描述
+        if info["is_sub"] and tech_id in sub_to_parent:
+            parent_id = sub_to_parent[tech_id]
+            if parent_id in tech_info:
+                parent_behaviors = generate_system_behaviors(tech_info[parent_id]["description"])
+                if parent_behaviors:
+                    if sys_behaviors:
+                        # 合并去重
+                        existing = set(sys_behaviors.split(". "))
+                        for b in parent_behaviors.split(". "):
+                            if b not in existing:
+                                existing.add(b)
+                                sys_behaviors += ". " + b
+                    else:
+                        sys_behaviors = parent_behaviors
 
         # 有系统事件描述的只用系统事件描述，没有的保留原始描述
-        sys_behaviors = generate_system_behaviors(description)
         if sys_behaviors:
-            body = f"{name}. {sys_behaviors}"
+            body = f"{info['name']}. {sys_behaviors}"
             enriched_count += 1
         else:
-            body = f"{name}. {description}"
+            body = f"{info['name']}. {info['description']}"
 
         rows.append({
-            "Subject": f"{tech_id}: {name}",
-            "filepath": url,
+            "Subject": f"{tech_id}: {info['name']}",
+            "filepath": info["url"],
             "Date": "",
             "Body": body,
             "Source": "MITRE-ATT&CK",
             "tech_id": tech_id,
-            "is_subtechnique": is_sub,
+            "is_subtechnique": info["is_sub"],
         })
 
     print(f"提取到 {len(rows)} 个有效技术（含子技术）")
