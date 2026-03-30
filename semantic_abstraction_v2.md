@@ -1,180 +1,117 @@
-# Snapshot-level Semantic Abstraction（v2）
+# 快照级语义抽象
 
-对每个异常快照，我们执行三步语义抽象，包括关键路径提取、路径语义提升、技术匹配，将其映射到标准化的 ATT&CK 技术标签。核心思路：日志侧通过可配置的语义提升规则表（configurable semantic lifting mapping）将系统事件翻译为安全领域自然语言，拼接为路径级行为描述；ATT&CK 侧直接使用技术描述原文。两边通过 Sentence-BERT 映射到统一语义空间进行匹配。路径级上下文是消解单事件歧义、实现准确匹配的关键。
+在识别出异常快照后，我们通过关键路径提取、双侧语义提升和语义匹配三个阶段，将快照映射到 ATT&CK 技术标签。
 
-## Key Path Extraction（不变）
+## 关键路径提取（不变）
 
-在检测到异常快照后，我们从对应的溯源有向图中提取因果路径以表征快照级行为。\tool 枚举图中所有由入度为零节点通向出度为零节点的因果路径，并经过去重与合并得到快照级路径集合。随后，我们依据下述指标对路径进行优先级排序。
+在检测到异常快照后，我们从对应的溯源有向图中提取因果路径以表征快照级行为。我们枚举图中所有从入度为零的源节点到出度为零的汇节点的因果路径，经去重与合并得到快照级路径集合，然后按照两个互补指标对路径进行优先级排序。
 
-**Path Bridging.** 在隐蔽攻击中，攻击进程常混入大量良性操作以规避检测，导致其在溯源图中的度显著增大。经过此类高度数节点的路径更可能经过攻击相关实体。我们引入路径桥接性指标，量化路径经过高度数节点的程度。具体地，路径桥接性定义为路径上节点度的均值：
+**路径桥接性。** 在隐蔽攻击中，攻击进程频繁地与大量良性操作交织，导致其在溯源图中的度显著增大。经过此类高度节点的路径更可能穿越攻击相关实体。我们通过路径上节点度的均值来量化路径穿越高度节点的倾向：
 
 $$f_{\text{bridge}}(P) = \frac{1}{|P|} \sum_{v_i \in P} \deg(v_i)$$
 
-**Path Rarity.** 异常快照中的因果路径分为两类：在周期性系统任务中反复出现的常规路径，以及仅在特定上下文中出现的稀有路径。后者更可能携带与异常事件直接相关的行为。路径稀有性定义为路径在历史良性行为语料中出现频率的倒数：
+**路径稀有性。** 异常快照中的因果路径分为两类：在周期性系统任务中反复出现的常规路径，以及仅在特定上下文中出现的稀有路径。后者更可能携带与异常事件直接相关的行为。路径稀有性定义为路径在历史良性行为语料中出现频率的倒数：
 
 $$f_{\text{rarity}}(P) = \frac{1}{\text{Freq}(P)}$$
 
-基于路径桥接性和路径稀有性，我们以相同权重计算每条路径的优先级得分，并据此排序，选择排名前 $m$ 的路径作为关键路径。
+我们以等权重组合桥接性与稀有性计算每条路径的优先级得分，选取排名前 $m$ 的路径作为关键路径。
 
 ---
 
-## Path Semantic Lifting and Behavior Description Generation
+## 语义提升
 
-关键路径由一串因果有序的系统事件三元组构成：$P = [(s_1, op_1, o_1), (s_2, op_2, o_2), \ldots, (s_n, op_n, o_n)]$，其中 $s$ 是主体进程，$op$ 是系统调用，$o$ 是目标实体（文件、网络地址或进程）。这些三元组使用系统特定标识符（进程名、文件路径、系统调用名），而 ATT&CK 技术描述使用安全领域的自然语言。两者之间存在词汇鸿沟，无法直接匹配。
+将关键路径映射到 ATT&CK 技术需要弥合两个语义层次之间的鸿沟。以进程注入攻击为例，日志侧记录的是 `EVENT_WRITE memhelp.so`、`EVENT_SENDTO` 等系统调用，而 ATT&CK 对应技术 T1055 的描述为 "Adversaries may inject malicious code into processes"。前者是操作级标识符，后者是意图级自然语言，二者之间不存在词汇交集，嵌入模型无法建立有效关联。然而，系统调用和攻击意图都可以用"做了什么操作、操作了什么对象"这一统一形式来表达。例如，`EVENT_WRITE memhelp.so` 可以描述为 "process writes shared library"；而 "inject code into processes" 的实现过程同样可以分解为 "process writes shared library, process modifies another process memory"。我们将这种以动作和对象为核心的自然语言表述称为*系统事件描述*，并据此提出*双侧语义提升*：日志侧将系统调用向上提升为系统事件描述，技术侧将攻击意图向下分解为系统事件描述，两侧通过统一的词汇表在同一语义空间汇合。
 
-为弥合这一鸿沟，我们对路径中的每个三元组执行语义提升（Semantic Lifting），通过可配置的映射规则表（configurable mapping table）将系统标识符转换为安全领域的自然语言表示，然后将所有提升后的三元组拼接为一段路径级行为描述。
+**日志侧语义提升。** 溯源图中一条边记录的是三元组 $\langle$主体进程, 事件类型, 客体实体$\rangle$，其中主体和客体均以系统内部标识符表示（进程名 `bash`、文件路径 `/tmp/memhelp.so`、套接字 `192.168.1.1:80`），事件类型为粗粒度的系统调用类别（EVENT_READ、EVENT_WRITE、EVENT_EXECUTE 等）。日志侧提升的目标是将主体和客体标识符翻译为 ATT&CK 共享词汇，同时保留事件类型的原始操作语义（reads、writes、executes），使提升后的描述忠实反映日志中可直接观察到的系统行为，而不引入日志无法支撑的语义推断。
 
-我们提供一套默认映射规则，涵盖 N 条条目，基于操作系统命令文档和安全知识库构建。用户可根据其部署环境扩展或定制该映射表，无需修改系统其他部分。映射规则表以 JSON 配置文件形式管理，支持增量更新。
+我们对 691 项 ATT&CK Enterprise 技术描述进行词频统计，将全部词汇按语义角色归入四类（进程、文件、网络/套接字、动作），并进一步区分*系统级*词汇（可从日志直接观察或推导，如 "process"、"shared library"、"credential file"）与*意图级*词汇（仅描述攻击目的，如 "adversary"、"evade"、"persistence"）。统计显示，ATT&CK 描述中约 44% 为系统级词汇，涵盖 2 424 个进程角色词、1 227 个文件类型词和 1 695 个网络实体词。这一系统级子集构成双侧对齐的共享词表：日志侧将实体标识符向上翻译至该词表，技术侧将攻击意图向下分解至该词表。
 
-### Subject Lifting（主体进程 → 自然语言工具描述）
+我们构建主客体映射规则表，将主体进程名翻译为功能角色，将客体文件路径和网络地址翻译为系统级类型。映射的合理性基于操作系统的标准化约定：文件扩展名与类型之间存在确定性对应，目录结构遵循 FHS 等规范，知名端口号由 IANA 统一分配，IP 地址依据 RFC 1918 划分内外网。这些映射均基于公开标准，具有确定性和可验证性。未命中规则表的进程名保持原样，因其本身已是嵌入模型可理解的自然语言标识。
 
-基于进程名和命令行参数，将主体进程映射为可读的工具描述。默认映射规则参考操作系统命令文档构建，以下为示例条目：
+| 类别 | 日志原始标识符 | 系统级类型 |
+|------|--------------|-----------|
+| **进程** | bash / sh / zsh | command shell |
+| | python / perl / ruby | scripting interpreter |
+| | sshd / telnetd | SSH service |
+| | crond / at | task scheduler |
+| | apache / nginx | web server |
+| | mysqld / postgres | database service |
+| | curl / wget | network utility |
+| | systemd / init | system service manager |
+| **文件** | .so / .dll / .dylib | shared library |
+| | .conf / .cfg / .ini | configuration file |
+| | /etc/shadow / /etc/passwd / SAM | credential file |
+| | /var/log/* / *.evtx / *.log | log file |
+| | /proc/* | process information |
+| | crontab / systemd unit / /etc/init.d/* | scheduled task configuration |
+| | .pem / .key / authorized_keys | authentication key file |
+| | .exe / ELF binary | executable |
+| **网络/套接字** | :80 / :443 | HTTP / HTTPS |
+| | :22 | SSH |
+| | :53 | DNS |
+| | :25 / :587 | SMTP |
+| | RFC 1918 内网IP | internal connection |
+| | 其他IP | external connection |
 
-| 系统标识符 | 提升后 |
-|---|---|
-| `bash`, `sh`, `cmd.exe` | shell |
-| `python3`, `perl`, `ruby` | script interpreter |
-| `curl`, `wget` | download tool |
-| `scp`, `sftp`, `ftp` | file transfer tool |
-| `cat`, `less`, `more` | file reader |
-| `gcc`, `make` | compiler |
-| ... | ... |
+经过主体和客体提升后，事件类型直接翻译为对应的基本操作动词（EVENT_READ $\to$ reads，EVENT_WRITE $\to$ writes，EVENT_EXECUTE $\to$ executes，EVENT_SENDTO $\to$ sends，EVENT_RECVFROM $\to$ receives），不做进一步的语义推断。例如，溯源图中 $\langle$`bash`, EVENT_WRITE, `/tmp/memhelp.so`$\rangle$ 被翻译为 "command shell writes shared library"。日志侧的动作词汇保持在操作层面（reads、writes、executes），与 ATT&CK 意图层面的动词（inject、load、exfiltrate）之间的鸿沟留给技术侧提升来弥合。提升后的事件按因果顺序拼接，形成路径级行为描述。
 
-对于同一进程名可能对应不同功能的情况（如 `python3` 既可以是下载器也可以是扫描器），我们结合命令行参数进行区分。
+**技术侧语义提升。** 日志侧提升后的描述使用操作动词（writes、reads、sends），而 ATT&CK 使用意图动词（inject、exfiltrate、persist）。二者描述同一行为却处于不同抽象层：日志中不存在 "inject" 事件，实际发生的是一系列 writes 和 reads。技术侧提升的目标是将意图动词展开为操作动词序列，使技术描述降落至与日志侧相同的操作语义层。
 
-### Operation Lifting（系统调用 → 语义动词）
+设技术 $i$ 的原始描述为 $D_i$，翻译后的操作级描述为 $s_i = \mathcal{T}(D_i)$。流水线 $\mathcal{T}$ 依次完成结构化解析、语义层转换和操作级实例化。
 
-将系统调用映射为语义层面的操作动词。同一语义动作在不同操作系统上可能对应不同的系统调用，统一提升后可实现跨平台匹配。示例条目：
+**结构化解析。** 对 $D_i$ 断句后，使用依赖句法分析从每个句子中抽取（主语, 谓语动词, 宾语）三元组。例如 "Adversaries may inject malicious code into processes" 产生 (adversaries, inject, code into processes)。
 
-| 系统调用 | 提升后 |
-|---|---|
-| `read`, `pread`, `readv` | read |
-| `write`, `pwrite`, `writev` | write |
-| `execve`, `execveat` | execute |
-| `connect` | connect |
-| `fork`, `clone`, `vfork` | create process |
-| `unlink`, `rmdir` | delete |
-| `chmod`, `fchmod` | change permission |
-| `sendto`, `sendmsg` | send |
-| `recvfrom`, `recvmsg` | receive |
-| ... | ... |
+**语义层转换。** 对每个三元组的主谓宾分别执行转换，转换规则由以下映射表统一定义：
 
-### Object Lifting（目标实体 → 安全语义描述）
+| 类别 | 意图级（ATT&CK原始） | 系统级（转换后） |
+|------|---------------------|----------------|
+| **进程** | adversaries / threat actors | process |
+| | legitimate users | user |
+| | victim | process |
+| **动作** | inject | writes, reads |
+| | exfiltrate | reads, sends |
+| | persist / establish | writes |
+| | dump | reads, writes |
+| | escalate | reads, executes |
+| | steal | reads, sends |
+| | enumerate / discover | reads |
+| | encrypt | reads, writes |
+| **文件** | malicious code / arbitrary code | shared library / executable |
+| | credentials / passwords | credential file |
+| | data / collected data | file |
+| | registry | configuration file |
+| | scheduled task | scheduled task configuration |
+| **网络/套接字** | C2 channel / command and control | network connection |
+| | exfiltration channel | network data |
+| | remote services | remote connection |
+| | phishing / spearphishing | email |
 
-将文件路径、网络地址等系统标识符映射为包含安全语义的自然语言描述。映射规则基于路径模式匹配（正则表达式），示例条目：
+主语命中进程类映射时执行替换；谓语若命中动作类映射则保留并展开，未命中则丢弃整个三元组——这自然过滤掉背景句和检测建议句；宾语剥离意图修饰词（malicious, stolen）后命中文件类或网络类映射时执行替换。
 
-**文件路径提升：**
+**操作级实例化。** 语义层转换中一个意图动词映射为多个操作动词，因此一个三元组展开为多个操作级三元组。例如 (adversaries, inject, code into processes) 经转换与展开后生成：
 
-| 路径模式 | 提升后 |
-|---|---|
-| `/etc/shadow`, `/etc/passwd` | credential file |
-| `/etc/crontab`, `HKLM\...\Run` | autostart configuration |
-| `/proc/[PID]/mem` | process memory |
-| `/tmp/*`, `%TEMP%\*` | temporary file |
-| `/var/log/*` | log file |
-| `/bin/*`, `/usr/bin/*` | system binary |
-| `*.so`, `*.dll` | shared library |
-| `/home/*/.*` | user configuration file |
-| ... | ... |
+- (process, writes, shared library)
+- (process, writes, process memory)
+- (process, reads, process information)
 
-**网络地址提升：**
-
-| 地址模式 | 提升后 |
-|---|---|
-| `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` | internal network address |
-| 其他 IP | external network address |
-| 可反向 DNS 解析的 IP | 对应域名 |
-
-### Lifted 三元组序列生成
-
-对路径中的每个事件三元组分别完成三个槽位的语义提升后，保持三元组结构不变，按因果顺序排列为 lifted 三元组序列 $T_P = [(s'_1, op'_1, o'_1), \ldots, (s'_n, op'_n, o'_n)]$。
-
-**示例：**
-
-原始路径：
-```
-(bash, fork, python3)
-(python3, read, /etc/shadow)
-(python3, write, /tmp/creds.txt)
-(python3, connect, 10.0.0.5:4444)
-(python3, sendto, socket)
-```
-
-Lifted 三元组序列：
-```
-(shell, create process, script interpreter)
-(script interpreter, read, credential file)
-(script interpreter, write, temporary file)
-(script interpreter, connect, external network address)
-(script interpreter, send, external network address)
-```
-
-与 LLM 生成自由文本行为描述相比，规则表提升具有确定性（同一路径始终产生相同结果）、可审计（每一步提升可追溯到具体规则）、无幻觉风险的优势。对于规则表未覆盖的系统标识符，我们采用 fallback 策略：保留原始标识符作为提升结果（例如未识别的进程名直接保留），由下游 Sentence-BERT 的语义泛化能力处理。
+全部三元组去重拼接为技术 $i$ 的操作级描述 $s_i$。我们对 691 项 ATT&CK Enterprise 技术离线执行 $\mathcal{T}$，预构建描述库 $\{s_i\}_{i \in I}$，检测时直接加载。对于子技术，将父技术的翻译合并以确保行为覆盖完整。
 
 ---
 
-## Semantic Matching
+## 语义匹配
 
-语义提升将日志侧的系统事件翻译为安全领域自然语言后，匹配的核心问题是：如何将路径级行为描述与 216 个 ATT&CK 技术进行语义比对。
+经过双侧提升后，日志侧行为描述与技术侧描述均处于共享的系统事件自然语言空间，可通过句子嵌入模型直接比较。设 $d$ 为日志侧提升后的行为描述，$s_i$ 为技术 $i$ 的翻译后描述。我们使用 Sentence-BERT 对两者进行编码，并计算余弦相似度：
 
-### 为什么需要路径级上下文：单事件匹配的固有歧义
+$$t_e = \arg\max_{i \in I} \; S\bigl(\mathcal{V}(d),\; \mathcal{V}(s_i)\bigr)$$
 
-将单个 lifted 事件直接匹配 ATT&CK 技术存在固有歧义。一条孤立的事件 $(script\ interpreter, read, credential\ file)$ 可能对应多个完全不同的技术：
+其中 $I$ 为 ATT&CK 技术集合，$\mathcal{V}(\cdot)$ 表示 Sentence-BERT 编码器，$S(\cdot, \cdot)$ 计算余弦相似度。当 $\max_{i} S(\mathcal{V}(d), \mathcal{V}(s_i)) < \gamma$ 时，该快照标记为*未匹配*。
 
-- **T1003 OS Credential Dumping**：读取凭据文件以提取密码哈希
-- **T1552 Unsecured Credentials**：搜索未加密存储的凭据
-- **正常系统管理操作**：例如用户认证服务的常规读取
-
-仅凭单事件无法区分上述情况。这一歧义是操作层到意图层映射的根本困难——同一操作在不同上下文中承载不同意图。
-
-### 路径级序列上下文消解歧义
-
-因果路径天然保留了事件之间的时序和因果关系，为每个事件提供了上下文。同一个 $(*, read, credential\ file)$ 事件：
-
-- 当其后跟随 $(*, write, temporary\ file) \to (*, connect, external\ address) \to (*, send, external\ address)$ 时，完整序列编码了 **"读取凭据 → 暂存 → 外传"** 的步骤逻辑，明确指向 T1003（OS Credential Dumping）；
-- 当其后跟随 $(*, write, autostart\ configuration)$ 时，序列指向 **持久化** 相关技术；
-- 当其前后均为常规系统操作时，更可能是 **良性行为**。
-
-路径级序列上下文提供三方面优势：
-
-**（1）歧义消解。** 如上所述，序列上下文将单事件的多义性收窄为确定的攻击意图。这是路径级匹配相比单事件匹配（如 KnowHow 的逐事件 lifting + 逐事件匹配）最核心的优势。
-
-**（2）容错能力。** 即使路径中某个事件因映射规则未覆盖而未能完全提升（fallback 为原始标识符），路径中其他已成功提升的事件仍可提供足够的上下文支撑正确匹配。单事件匹配则无此容错机制——一旦单事件提升失败，匹配即失败。
-
-**（3）丰富的语义信号。** 路径级行为描述包含多个事件的语义信息，为 Sentence-BERT 提供了更丰富的输入，使其能够捕捉到单事件无法表达的组合语义模式。
-
-**示例：**
-
-Lifted 路径级行为描述（线性化后）：
-```
-"shell create process script interpreter. script interpreter read credential file.
- script interpreter write temporary file. script interpreter connect external network address.
- script interpreter send external network address."
-```
-
-这段描述编码了完整的攻击步骤链，与 ATT&CK T1003 的技术描述（"Adversaries may attempt to dump credentials... Tools such as Mimikatz access LSASS process memory to extract plaintext passwords..."）在语义空间中具有高相似度。
-
-### 日志侧与 ATT&CK 侧的语义对齐
-
-经过语义提升后，日志侧的路径级行为描述已使用安全领域的自然语言词汇（如 "credential file"、"external network address"、"create process"）。ATT&CK 技术描述本身也使用安全领域的自然语言。两者处于同一词汇空间，可直接通过语义嵌入模型进行比对。
-
-**日志侧：** 将 lifted 三元组序列按因果顺序线性化为行为描述文本 $d$。每个三元组的三个槽位以自然语言拼接，三元组之间以句号分隔，保留因果顺序。
-
-**ATT&CK 侧：** 直接使用每个技术 $i$ 的官方描述原文 $s_i$（含子技术描述）。ATT&CK 描述本身已是结构化的安全领域自然语言，包含攻击动作、工具、目标等关键语义元素，无需额外处理即可作为匹配目标。这避免了中间 NLP 提取步骤引入的信息损失和噪声。
-
-两边通过 Sentence-BERT 编码为向量，以余弦相似度衡量匹配程度：
-
-$$t_e = \arg\max_{i \in I} S(\mathcal{V}(d), \mathcal{V}(s_i))$$
-
-其中 $I$ 为 216 个父技术集合；$d$ 为日志侧 lifted 路径行为描述；$s_i$ 为技术 $i$ 的 ATT&CK 官方描述原文；$\mathcal{V}$ 表示 Sentence-BERT 嵌入模型；$S(\cdot,\cdot)$ 计算余弦相似度。
-
-当 $\max_{i \in I} S(\mathcal{V}(d), \mathcal{V}(s_i)) < \gamma$ 时，该快照标记为 unmatched。
+**路径级上下文的作用。** 将单个提升后的事件直接匹配 ATT&CK 技术存在固有歧义。孤立事件 *(process, reads, credential file)* 可能对应 T1003（凭据转储）、T1552（不安全的凭据存储）或常规身份认证操作，仅凭单事件无法消歧。路径级序列上下文通过三种机制解决这一问题。其一，歧义消解：当该事件后跟随 *(process, writes, temporary file) $\to$ (process, sends network data)*，完整序列编码了"读取凭据→暂存→外传"的行为链，明确指向凭据转储。其二，容错能力：即使路径中某个事件未能完全提升，其余事件仍可提供足够上下文支撑正确匹配。其三，更丰富的语义信号：路径级描述聚合多个事件的语义信息，使嵌入模型能够捕捉单事件无法表达的组合行为模式。
 
 ---
 
-## Attack Sequence Alignment（不变）
+## 攻击序列对齐
 
-（同原文，此处省略）
+（与前一版本相同，此处省略。）
 
 ---
-

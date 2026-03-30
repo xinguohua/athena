@@ -21,7 +21,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from process.translation_rules import (
     TYPE_MAP, EVENT_MAP, LOW_INFO_EVENTS,
-    translate_event,
+    translate_event, get_process_role,
 )
 
 
@@ -57,7 +57,15 @@ def snapshot_to_query(snapshot, *, node_scope: str = "malicious", max_nodes: int
     # 3. 翻译每个节点
     lines = []
     for n in nodes:
-        type_desc = TYPE_MAP.get(n["type"].strip(), n["type"].strip().lower())
+        raw_type = n["type"].strip()
+        type_desc = TYPE_MAP.get(raw_type, raw_type.lower())
+        # 主体提升：进程节点翻译为功能角色
+        if raw_type == "SUBJECT_PROCESS":
+            # 从 properties 中提取进程名并翻译为功能角色
+            props = n["properties"]
+            proc_name = _extract_process_name(props)
+            if proc_name:
+                type_desc = get_process_role(proc_name)
 
         # 解析 properties: "{' EVENT_WRITE memhelp.so', ' EVENT_CLOSE', ...}"
         events_raw = n["properties"].strip("{} '\"")
@@ -165,6 +173,23 @@ class TechniqueSemanticMapper:
         )
         vectordb.persist()
         return vectordb, emb
+
+
+def _extract_process_name(properties: str) -> str:
+    """从节点 properties 中提取进程名。"""
+    # properties 格式类似: "{'name': 'bash', ...}" 或 "bash"
+    props = properties.strip()
+    # 尝试匹配 name 字段
+    m = re.search(r"'name'\s*:\s*'([^']+)'", props)
+    if m:
+        return m.group(1)
+    m = re.search(r'"name"\s*:\s*"([^"]+)"', props)
+    if m:
+        return m.group(1)
+    # 如果 properties 本身就是进程名
+    if props and not props.startswith("{") and len(props) < 50:
+        return props
+    return ""
 
 
 def _extract_mitre_id(filepath: str) -> str:
