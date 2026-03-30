@@ -6087,5 +6087,331 @@
       "verb": "may send",
       "object": "an AS-REQ message without the encrypted timestamp and receive an AS-REP message with TGT data which may be encrypted with an insecure algorithm such as RC4"
     }
+  ],
+  "T1558.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to steal",
+      "object": "Kerberos tickets stored in credential cache files (or ccache)"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can collect tickets from ccache files stored on disk and authenticate as the current user without their password to perform",
+      "object": "Pass the Ticket attacks"
+    }
+  ],
+  "T1559": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "inter-process communication (IPC) mechanisms for local code or command execution"
+    }
+  ],
+  "T1559.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "the Windows Component Object Model (COM) for local code execution"
+    },
+    {
+      "subject": "Various COM interfaces",
+      "verb": "are exposed that can be abused to invoke",
+      "object": "arbitrary execution via a variety of programming languages such as C, C++, Java, and Visual Basic"
+    }
+  ],
+  "T1559.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "Windows Dynamic Data Exchange (DDE) to execute arbitrary commands"
+    },
+    {
+      "subject": "Microsoft Office documents",
+      "verb": "can be poisoned with",
+      "object": "DDE commands, directly or through embedded files"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may infect payloads to execute",
+      "object": "applications and/or commands on a victim device by way of embedding DDE formulas within a CSV file"
+    }
+  ],
+  "T1559.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "provide",
+      "object": "malicious content to an XPC service daemon for local code execution"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can abuse XPC services to execute",
+      "object": "malicious content"
+    }
+  ],
+  "T1560": [
+    {
+      "subject": "An adversary",
+      "verb": "compress and/or encrypt",
+      "object": "data that is collected prior to exfiltration"
+    }
+  ],
+  "T1560.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "utilities to compress and/or encrypt collected data prior to exfiltration"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may use",
+      "object": "certutil to Base64 encode collected data before exfiltration"
+    }
+  ],
+  "T1560.002": [
+    {
+      "subject": "An adversary",
+      "verb": "compress or encrypt",
+      "object": "data that is collected prior to exfiltration using 3rd party libraries"
+    }
+  ],
+  "T1560.003": [
+    {
+      "subject": "An adversary",
+      "verb": "compress or encrypt",
+      "object": "data that is collected prior to exfiltration using a custom method"
+    }
+  ],
+  "T1561": [
+    {
+      "subject": "Adversaries",
+      "verb": "wipe or corrupt",
+      "object": "raw disk data on specific systems or in large numbers in a network to interrupt availability"
+    },
+    {
+      "subject": "malware used for wiping disks",
+      "verb": "may have worm-like features to propagate across",
+      "object": "a network by leveraging additional techniques like Valid Accounts, OS Credential Dumping, and SMB/Windows Admin Shares"
+    }
+  ],
+  "T1561.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "erase",
+      "object": "the contents of storage devices on specific systems or in large numbers in a network"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may partially or completely overwrite",
+      "object": "the contents of a storage device rendering the data irrecoverable"
+    }
+  ],
+  "T1561.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "corrupt or wipe",
+      "object": "the disk data structures on a hard drive necessary to boot a system"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may attempt to render the system unable to boot by overwriting",
+      "object": "critical data located in structures such as the master boot record (MBR) or partition table"
+    }
+  ],
+  "T1562": [
+    {
+      "subject": "Adversaries",
+      "verb": "maliciously modify",
+      "object": "components of a victim environment in order to hinder or disable defensive mechanisms"
+    }
+  ],
+  "T1562.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify and/or disable",
+      "object": "security tools to avoid possible detection of their malware/tools and activities"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also tamper with",
+      "object": "artifacts deployed and utilized by security tools"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may unhook or otherwise modify",
+      "object": "features added by tools to avoid detection"
+    }
+  ],
+  "T1562.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "disable",
+      "object": "Windows event logging to limit data that can be leveraged for detections and audits"
+    },
+    {
+      "subject": "The EventLog service",
+      "verb": "may be disabled using",
+      "object": "the Set-Service -Name EventLog -Status Stopped or sc config eventlog start=disabled commands"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may use auditpol and its sub-commands to disable",
+      "object": "auditing or clear the audit policy"
+    }
+  ],
+  "T1562.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "impair",
+      "object": "command history logging to hide commands they run on a compromised system"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may clear the history environment variable",
+      "object": "(unset HISTFILE) or set the command history size to zero (export HISTFILESIZE=0)"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may run the PowerShell command Set-PSReadLineOption -HistorySavePath to change",
+      "object": "where command history logs are saved"
+    }
+  ],
+  "T1562.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "disable or modify",
+      "object": "system firewalls in order to bypass controls limiting network usage"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may add",
+      "object": "a new firewall rule for a well-known protocol (such as RDP) using a non-traditional and potentially less securitized port"
+    }
+  ],
+  "T1562.006": [
+    {
+      "subject": "An adversary",
+      "verb": "attempt to block",
+      "object": "indicators or events typically captured by sensors from being gathered and analyzed"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may modify the File value in HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Security to hide",
+      "object": "their malicious actions in a new or different .evtx log file"
+    }
+  ],
+  "T1562.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "disable or modify",
+      "object": "a firewall within a cloud environment to bypass controls that limit access to cloud resources"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may introduce",
+      "object": "new firewall rules or policies to allow access into a victim cloud environment"
+    }
+  ],
+  "T1562.008": [
+    {
+      "subject": "An adversary",
+      "verb": "disable or modify",
+      "object": "cloud logging capabilities and integrations to limit what data is collected on their activities"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may disable",
+      "object": "CloudWatch/CloudTrail integrations prior to conducting further malicious activity"
+    }
+  ],
+  "T1562.009": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Windows safe mode to disable endpoint defenses"
+    },
+    {
+      "subject": "Hosts",
+      "verb": "can be forced into safe mode after the next reboot via modifications to",
+      "object": "Boot Configuration Data (BCD) stores"
+    }
+  ],
+  "T1562.010": [
+    {
+      "subject": "Adversaries",
+      "verb": "downgrade or use a version of system features that may be",
+      "object": "outdated, vulnerable, and/or does not support updated security controls"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may attempt to execute",
+      "object": "a previous version of PowerShell that does not support SBL"
+    }
+  ],
+  "T1562.011": [
+    {
+      "subject": "Adversaries",
+      "verb": "spoof",
+      "object": "security alerting from tools, presenting false evidence to impair defenders' awareness of malicious activity"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may show",
+      "object": "a fake Windows Security GUI and tray icon with a healthy system status after Windows Defender and other system tools have been disabled"
+    }
+  ],
+  "T1562.012": [
+    {
+      "subject": "Adversaries",
+      "verb": "disable or modify",
+      "object": "the Linux audit system to hide malicious activity and avoid detection"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may be able to ensure their activity is not logged through",
+      "object": "disabling the Audit system service, editing the configuration/rule files, or by hooking the Audit system library functions"
+    }
+  ],
+  "T1562.013": [
+    {
+      "subject": "Adversaries",
+      "verb": "disable",
+      "object": "network device-based firewall mechanisms entirely or add, delete, or modify particular rules in order to bypass controls limiting network usage"
+    }
+  ],
+  "T1563": [
+    {
+      "subject": "Adversaries",
+      "verb": "take control of",
+      "object": "preexisting sessions with remote services to move laterally in an environment"
+    }
+  ],
+  "T1563.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "hijack",
+      "object": "a legitimate user's SSH session to move laterally within an environment"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may take advantage of",
+      "object": "trust relationships established with other systems via public key authentication in active SSH sessions by hijacking an existing connection to another system"
+    }
+  ],
+  "T1563.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "hijack",
+      "object": "a legitimate user's remote desktop session to move laterally within an environment"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "perform RDP session hijacking which involves stealing",
+      "object": "a legitimate user's remote session"
+    },
+    {
+      "subject": "using Terminal Services Console",
+      "verb": "an adversary can hijack",
+      "object": "a session without the need for credentials or prompts to the user"
+    }
   ]
 }
