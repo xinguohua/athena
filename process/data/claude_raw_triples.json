@@ -6413,5 +6413,1645 @@
       "verb": "an adversary can hijack",
       "object": "a session without the need for credentials or prompts to the user"
     }
+  ],
+  "T1564": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to hide",
+      "object": "artifacts associated with their behaviors to evade detection"
+    }
+  ],
+  "T1564.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "set",
+      "object": "files and directories to be hidden to evade detection mechanisms"
+    },
+    {
+      "subject": "users",
+      "verb": "can mark specific files as hidden simply by putting",
+      "object": "a . as the first character in the file or folder name"
+    },
+    {
+      "subject": "on Windows, users",
+      "verb": "can mark specific files as hidden by using",
+      "object": "the attrib.exe binary"
+    }
+  ],
+  "T1564.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "hidden users to hide the presence of user accounts they create or modify"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "can set the userID to be under 500 and set the key value Hide500Users to TRUE in",
+      "object": "the /Library/Preferences/com.apple.loginwindow plist file"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can set the HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\SpecialAccounts\\UserList Registry key value to 0 for",
+      "object": "a specific user to prevent that user from being listed on the logon screen"
+    }
+  ],
+  "T1564.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "hidden windows to conceal malicious activity from the plain sight of users"
+    },
+    {
+      "subject": "Windows",
+      "verb": "supports the CreateDesktop() API that can create",
+      "object": "a hidden desktop window with its own corresponding explorer.exe process"
+    }
+  ],
+  "T1564.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "NTFS file attributes to hide their malicious data in order to evade detection"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may store",
+      "object": "malicious data or binaries in file attribute metadata instead of directly in files"
+    }
+  ],
+  "T1564.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "a hidden file system to conceal malicious activity from users and security tools"
+    }
+  ],
+  "T1564.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "carry out malicious operations using",
+      "object": "a virtual instance to avoid detection"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may create a shared folder between the guest and host with permissions that enable",
+      "object": "the virtual instance to interact with the host file system"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may also create virtual machines directly on ESXi servers by running",
+      "object": "a valid .vmx file with the /bin/vmx utility"
+    }
+  ],
+  "T1564.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "hide",
+      "object": "malicious Visual Basic for Applications (VBA) payloads embedded within MS Office documents by replacing the VBA source code with benign data"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may hide malicious VBA code by overwriting",
+      "object": "the VBA source code location with zero's, benign code, or random bytes while leaving the previously compiled malicious p-code"
+    }
+  ],
+  "T1564.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "email rules to hide inbound emails in a compromised user's mailbox"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may utilize email rules within a compromised user's mailbox to delete and/or move",
+      "object": "emails to less noticeable folders"
+    },
+    {
+      "subject": "Malicious rules",
+      "verb": "commonly filter out emails based on key words such as",
+      "object": "malware, suspicious, phish, and hack found in message bodies and subject lines"
+    }
+  ],
+  "T1564.009": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "resource forks to hide malicious code or executables to evade detection and bypass security applications"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can execute content with an attached resource fork, at a specified offset, that is moved to",
+      "object": "an executable location then invoked"
+    }
+  ],
+  "T1564.010": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to hide",
+      "object": "process command-line arguments by overwriting process memory"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may override the PEB to modify",
+      "object": "the command-line arguments then resume process execution with malicious arguments"
+    }
+  ],
+  "T1564.011": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute commands that hide from",
+      "object": "process interrupt signals"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may invoke processes using",
+      "object": "nohup, PowerShell -ErrorAction SilentlyContinue, or similar commands that may be immune to hangups"
+    }
+  ],
+  "T1564.012": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to hide their file-based artifacts by writing them to",
+      "object": "specific folders or file names excluded from antivirus (AV) scanning and other defensive capabilities"
+    }
+  ],
+  "T1564.013": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "bind mounts on file structures to hide their activity and artifacts from native utilities"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may use bind mounts to map either an empty directory or a benign /proc directory to",
+      "object": "a malicious process's /proc directory"
+    }
+  ],
+  "T1564.014": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "extended attributes (xattrs) on macOS and Linux to hide their malicious data in order to evade detection"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may leverage xattrs by embedding",
+      "object": "a second-stage payload into the extended attribute of a legitimate file"
+    }
+  ],
+  "T1565": [
+    {
+      "subject": "Adversaries",
+      "verb": "insert, delete, or manipulate",
+      "object": "data in order to influence external outcomes or hide activity"
+    }
+  ],
+  "T1565.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "insert, delete, or manipulate",
+      "object": "data at rest in order to influence external outcomes or hide activity"
+    }
+  ],
+  "T1565.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "alter",
+      "object": "data en route to storage or other systems in order to manipulate external outcomes or hide activity"
+    }
+  ],
+  "T1565.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "systems in order to manipulate the data as it is accessed and displayed to an end user"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may alter",
+      "object": "application binaries used to display data in order to cause runtime manipulations"
+    }
+  ],
+  "T1566": [
+    {
+      "subject": "Adversaries",
+      "verb": "send",
+      "object": "phishing messages to gain access to victim systems"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may send",
+      "object": "victims emails containing malicious attachments or links, typically to execute malicious code on victim systems"
+    }
+  ],
+  "T1566.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "send",
+      "object": "spearphishing emails with a malicious attachment in an attempt to gain access to victim systems"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "attach",
+      "object": "a file to the spearphishing email and usually rely upon User Execution to gain execution"
+    }
+  ],
+  "T1566.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "send",
+      "object": "spearphishing emails with a malicious link in an attempt to gain access to victim systems"
+    },
+    {
+      "subject": "the malicious emails",
+      "verb": "contain",
+      "object": "links that generally will be accompanied by social engineering text and require the user to actively click or copy and paste a URL into a browser"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also utilize links to perform consent phishing campaigns to",
+      "object": "Steal Application Access Tokens that grant immediate access to the victim environment"
+    }
+  ],
+  "T1566.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "send",
+      "object": "spearphishing messages via third-party services in an attempt to gain access to victim systems"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "will create",
+      "object": "fake social media accounts and message employees for potential job opportunities"
+    },
+    {
+      "subject": "The adversary",
+      "verb": "can then send",
+      "object": "malicious links or attachments through these services"
+    }
+  ],
+  "T1566.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "voice communications to ultimately gain access to victim systems"
+    },
+    {
+      "subject": "victims",
+      "verb": "may receive phishing messages that instruct them to call a phone number where they are directed to",
+      "object": "visit a malicious URL, download malware, or install adversary-accessible remote management tools onto their computer"
+    }
+  ],
+  "T1567": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "an existing, legitimate external Web service to exfiltrate data rather than their primary command and control channel"
+    }
+  ],
+  "T1567.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "exfiltrate",
+      "object": "data to a code repository rather than over their primary command and control channel"
+    }
+  ],
+  "T1567.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "exfiltrate",
+      "object": "data to a cloud storage service rather than over their primary command and control channel"
+    }
+  ],
+  "T1567.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "exfiltrate",
+      "object": "data to text storage sites instead of their primary command and control channel"
+    }
+  ],
+  "T1567.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "exfiltrate",
+      "object": "data to a webhook endpoint rather than over their primary command and control channel"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may link an adversary-owned environment to a victim-owned SaaS service to achieve",
+      "object": "repeated Automated Exfiltration of emails, chat messages, and other data"
+    }
+  ],
+  "T1568": [
+    {
+      "subject": "Adversaries",
+      "verb": "dynamically establish connections to",
+      "object": "command and control infrastructure to evade common detections and remediations"
+    }
+  ],
+  "T1568.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "Fast Flux DNS to hide a command and control channel behind an array of rapidly changing IP addresses linked to a single domain resolution"
+    }
+  ],
+  "T1568.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "make use of",
+      "object": "Domain Generation Algorithms (DGAs) to dynamically identify a destination domain for command and control traffic"
+    }
+  ],
+  "T1568.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "perform calculations on addresses returned in DNS results to determine",
+      "object": "which port and IP address to use for command and control"
+    }
+  ],
+  "T1569": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "system services or daemons to execute commands or programs"
+    }
+  ],
+  "T1569.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "launchctl to execute commands or programs"
+    }
+  ],
+  "T1569.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "the Windows service control manager to execute malicious commands or payloads"
+    },
+    {
+      "subject": "PsExec",
+      "verb": "can also be used to execute",
+      "object": "commands or payloads via a temporary Windows service created through the service control manager API"
+    }
+  ],
+  "T1569.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "systemctl to execute commands or programs"
+    }
+  ],
+  "T1570": [
+    {
+      "subject": "Adversaries",
+      "verb": "transfer",
+      "object": "tools or other files between systems in a compromised environment"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may copy files between internal victim systems using",
+      "object": "inherent file sharing protocols such as file sharing over SMB/Windows Admin Shares"
+    }
+  ],
+  "T1571": [
+    {
+      "subject": "Adversaries",
+      "verb": "communicate using",
+      "object": "a protocol and port pairing that are typically not associated"
+    }
+  ],
+  "T1572": [
+    {
+      "subject": "Adversaries",
+      "verb": "tunnel",
+      "object": "network communications to and from a victim system within a separate protocol to avoid detection/network filtering"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may perform",
+      "object": "SSH tunneling (also known as SSH port forwarding), which involves forwarding arbitrary data over an encrypted SSH tunnel"
+    }
+  ],
+  "T1573": [
+    {
+      "subject": "Adversaries",
+      "verb": "employ",
+      "object": "an encryption algorithm to conceal command and control traffic"
+    }
+  ],
+  "T1573.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "employ",
+      "object": "a known symmetric encryption algorithm to conceal command and control traffic"
+    }
+  ],
+  "T1573.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "employ",
+      "object": "a known asymmetric encryption algorithm to conceal command and control traffic"
+    }
+  ],
+  "T1574": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute their own malicious payloads by hijacking",
+      "object": "the way operating systems run programs"
+    }
+  ],
+  "T1574.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "dynamic-link library files (DLLs) in order to achieve persistence, escalate privileges, and evade defenses"
+    },
+    {
+      "subject": "Side-loading",
+      "verb": "involves hijacking",
+      "object": "which DLL a program loads by planting and then invoking a legitimate application that executes their payload(s)"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may execute their own malicious payloads by hijacking",
+      "object": "the search order that Windows uses to load DLLs"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may leverage phantom DLL hijacking by targeting",
+      "object": "references to non-existent DLL files"
+    }
+  ],
+  "T1574.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute their own payloads by placing",
+      "object": "a malicious dynamic library (dylib) with an expected name in a path a victim application searches at runtime"
+    }
+  ],
+  "T1574.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute their own malicious payloads by hijacking",
+      "object": "the binaries used by an installer"
+    }
+  ],
+  "T1574.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute their own malicious payloads by hijacking",
+      "object": "environment variables the dynamic linker uses to load shared libraries"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may set LD_PRELOAD to point to",
+      "object": "malicious libraries that match the name of legitimate libraries which are requested by a victim program"
+    }
+  ],
+  "T1574.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute their own malicious payloads by hijacking",
+      "object": "environment variables used to load libraries"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can place a malicious program in",
+      "object": "an earlier entry in the list of directories stored in the PATH environment variable"
+    }
+  ],
+  "T1574.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute their own malicious payloads by hijacking",
+      "object": "the search order used to load other programs"
+    }
+  ],
+  "T1574.009": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute their own malicious payloads by hijacking",
+      "object": "vulnerable file path references that lack surrounding quotations"
+    }
+  ],
+  "T1574.010": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute their own malicious payloads by hijacking",
+      "object": "the binaries used by services"
+    }
+  ],
+  "T1574.011": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute their own malicious payloads by hijacking",
+      "object": "the Registry entries used by services"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may change the service's binPath/ImagePath to point to",
+      "object": "a different executable under their control"
+    }
+  ],
+  "T1574.012": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "the COR_PROFILER environment variable to hijack the execution flow of programs that load the .NET CLR"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse COR_PROFILER to establish persistence that executes",
+      "object": "a malicious DLL in the context of all .NET processes every time the CLR is invoked"
+    }
+  ],
+  "T1574.013": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "the KernelCallbackTable of a process to hijack its execution flow in order to run their own payloads"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may hijack the execution flow by replacing",
+      "object": "an original callback function with a malicious payload"
+    }
+  ],
+  "T1574.014": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute their own malicious payloads by hijacking",
+      "object": "how the .NET AppDomainManager loads assemblies"
+    },
+    {
+      "subject": "configuration files (.config) or process environment variables",
+      "verb": "may be tampered with to instruct",
+      "object": "otherwise benign .NET applications to load a malicious assembly into the target process"
+    }
+  ],
+  "T1578": [
+    {
+      "subject": "An adversary",
+      "verb": "attempt to modify",
+      "object": "a cloud account's compute service infrastructure to evade defenses"
+    }
+  ],
+  "T1578.001": [
+    {
+      "subject": "An adversary",
+      "verb": "create",
+      "object": "a snapshot or data backup within a cloud account to evade defenses"
+    }
+  ],
+  "T1578.002": [
+    {
+      "subject": "An adversary",
+      "verb": "create",
+      "object": "a new instance or virtual machine (VM) within the compute service of a cloud account to evade defenses"
+    }
+  ],
+  "T1578.003": [
+    {
+      "subject": "An adversary",
+      "verb": "delete",
+      "object": "a cloud instance after they have performed malicious activities in an attempt to evade detection and remove evidence of their presence"
+    }
+  ],
+  "T1578.004": [
+    {
+      "subject": "An adversary",
+      "verb": "revert",
+      "object": "changes made to a cloud instance after they have performed malicious activities in attempt to evade detection and remove evidence of their presence"
+    }
+  ],
+  "T1578.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "settings that directly affect the size, locations, and resources available to cloud compute infrastructure in order to evade defenses"
+    }
+  ],
+  "T1580": [
+    {
+      "subject": "An adversary",
+      "verb": "attempt to discover",
+      "object": "infrastructure and resources that are available within an infrastructure-as-a-service (IaaS) environment"
+    }
+  ],
+  "T1583": [
+    {
+      "subject": "Adversaries",
+      "verb": "buy, lease, rent, or obtain",
+      "object": "infrastructure that can be used during targeting"
+    }
+  ],
+  "T1583.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "acquire",
+      "object": "domains that can be used during targeting"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may choose domains that are similar to legitimate domains, including through use of",
+      "object": "homoglyphs or use of a different top-level domain (TLD)"
+    }
+  ],
+  "T1583.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "set up their own",
+      "object": "Domain Name System (DNS) servers that can be used during targeting"
+    }
+  ],
+  "T1583.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "rent",
+      "object": "Virtual Private Servers (VPSs) that can be used during targeting"
+    }
+  ],
+  "T1583.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "buy, lease, rent, or obtain",
+      "object": "physical servers that can be used during targeting"
+    }
+  ],
+  "T1583.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "buy, lease, or rent",
+      "object": "a network of compromised systems (botnet) that can be used during targeting"
+    }
+  ],
+  "T1583.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "register for",
+      "object": "web services that can be used during targeting"
+    }
+  ],
+  "T1583.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "purchase and configure",
+      "object": "serverless cloud infrastructure, such as Cloudflare Workers, AWS Lambda functions, or Google Apps Scripts"
+    }
+  ],
+  "T1583.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "purchase",
+      "object": "online advertisements that can be abused to distribute malware to victims"
+    },
+    {
+      "subject": "these spoofed ads",
+      "verb": "may trick victims into clicking the ad which could then send them to",
+      "object": "a malicious domain that may be a clone of official websites containing trojanized versions of the advertised software"
+    }
+  ],
+  "T1584": [
+    {
+      "subject": "Adversaries",
+      "verb": "compromise",
+      "object": "third-party infrastructure that can be used during targeting"
+    }
+  ],
+  "T1584.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "hijack",
+      "object": "domains and/or subdomains that can be used during targeting"
+    },
+    {
+      "subject": "Adversaries who compromise a domain",
+      "verb": "may also engage in",
+      "object": "domain shadowing by creating malicious subdomains under their control"
+    }
+  ],
+  "T1584.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "compromise",
+      "object": "third-party DNS servers that can be used during targeting"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "can alter",
+      "object": "DNS records to redirect an organization's traffic"
+    }
+  ],
+  "T1584.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "compromise",
+      "object": "third-party Virtual Private Servers (VPSs) that can be used during targeting"
+    }
+  ],
+  "T1584.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "compromise",
+      "object": "third-party servers that can be used during targeting"
+    }
+  ],
+  "T1584.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "compromise",
+      "object": "numerous third-party systems to form a botnet that can be used during targeting"
+    }
+  ],
+  "T1584.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "compromise access to",
+      "object": "third-party web services that can be used during targeting"
+    }
+  ],
+  "T1584.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "compromise",
+      "object": "serverless cloud infrastructure that can be used during targeting"
+    }
+  ],
+  "T1584.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "compromise",
+      "object": "third-party network devices that can be used during targeting"
+    }
+  ],
+  "T1585": [
+    {
+      "subject": "Adversaries",
+      "verb": "create and cultivate",
+      "object": "accounts with services that can be used during targeting"
+    }
+  ],
+  "T1585.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "create and cultivate",
+      "object": "social media accounts that can be used during targeting"
+    }
+  ],
+  "T1585.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "create",
+      "object": "email accounts that can be used during targeting"
+    }
+  ],
+  "T1585.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "create",
+      "object": "accounts with cloud providers that can be used during targeting"
+    }
+  ],
+  "T1586": [
+    {
+      "subject": "Adversaries",
+      "verb": "compromise",
+      "object": "accounts with services that can be used during targeting"
+    }
+  ],
+  "T1586.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "compromise",
+      "object": "social media accounts that can be used during targeting"
+    }
+  ],
+  "T1586.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "compromise",
+      "object": "email accounts that can be used during targeting"
+    }
+  ],
+  "T1586.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "compromise",
+      "object": "cloud accounts that can be used during targeting"
+    }
+  ],
+  "T1587": [
+    {
+      "subject": "Adversaries",
+      "verb": "build",
+      "object": "capabilities that can be used during targeting"
+    }
+  ],
+  "T1587.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "develop",
+      "object": "malware and malware components that can be used during targeting"
+    }
+  ],
+  "T1587.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "create",
+      "object": "self-signed code signing certificates that can be used during targeting"
+    }
+  ],
+  "T1587.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "create",
+      "object": "self-signed SSL/TLS certificates that can be used during targeting"
+    }
+  ],
+  "T1587.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "develop",
+      "object": "exploits that can be used during targeting"
+    }
+  ],
+  "T1588": [
+    {
+      "subject": "Adversaries",
+      "verb": "buy and/or steal",
+      "object": "capabilities that can be used during targeting"
+    }
+  ],
+  "T1588.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "buy, steal, or download",
+      "object": "malware that can be used during targeting"
+    }
+  ],
+  "T1588.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "buy, steal, or download",
+      "object": "software tools that can be used during targeting"
+    }
+  ],
+  "T1588.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "buy and/or steal",
+      "object": "code signing certificates that can be used during targeting"
+    }
+  ],
+  "T1588.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "buy and/or steal",
+      "object": "SSL/TLS certificates that can be used during targeting"
+    }
+  ],
+  "T1588.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "buy, steal, or download",
+      "object": "exploits that can be used during targeting"
+    }
+  ],
+  "T1588.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "acquire",
+      "object": "information about vulnerabilities that can be used during targeting"
+    }
+  ],
+  "T1588.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "obtain access to",
+      "object": "generative artificial intelligence tools, such as large language models (LLMs), to aid various techniques during targeting"
+    }
+  ],
+  "T1589": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's identity that can be used during targeting"
+    }
+  ],
+  "T1589.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "credentials that can be used during targeting"
+    }
+  ],
+  "T1589.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "email addresses that can be used during targeting"
+    }
+  ],
+  "T1589.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "employee names that can be used during targeting"
+    }
+  ],
+  "T1590": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's networks that can be used during targeting"
+    }
+  ],
+  "T1590.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's network domain(s) that can be used during targeting"
+    }
+  ],
+  "T1590.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's DNS that can be used during targeting"
+    }
+  ],
+  "T1590.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's network trust dependencies that can be used during targeting"
+    }
+  ],
+  "T1590.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's network topology that can be used during targeting"
+    }
+  ],
+  "T1590.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "the victim's IP addresses that can be used during targeting"
+    }
+  ],
+  "T1590.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's network security appliances that can be used during targeting"
+    }
+  ],
+  "T1591": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's organization that can be used during targeting"
+    }
+  ],
+  "T1591.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "the victim's physical location(s) that can be used during targeting"
+    }
+  ],
+  "T1591.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's business relationships that can be used during targeting"
+    }
+  ],
+  "T1591.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's business tempo that can be used during targeting"
+    }
+  ],
+  "T1591.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about identities and roles within the victim organization that can be used during targeting"
+    }
+  ],
+  "T1592": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's hosts that can be used during targeting"
+    }
+  ],
+  "T1592.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's host hardware that can be used during targeting"
+    }
+  ],
+  "T1592.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's host software that can be used during targeting"
+    }
+  ],
+  "T1592.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's host firmware that can be used during targeting"
+    }
+  ],
+  "T1592.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information about the victim's client configurations that can be used during targeting"
+    }
+  ],
+  "T1593": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "freely available websites and/or domains for information about victims that can be used during targeting"
+    }
+  ],
+  "T1593.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "social media for information about victims that can be used during targeting"
+    }
+  ],
+  "T1593.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "search engines to collect information about victims that can be used during targeting"
+    }
+  ],
+  "T1593.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "public code repositories for information about victims that can be used during targeting"
+    }
+  ],
+  "T1594": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "websites owned by the victim for information that can be used during targeting"
+    }
+  ],
+  "T1595": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute",
+      "object": "active reconnaissance scans to gather information that can be used during targeting"
+    }
+  ],
+  "T1595.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "scan",
+      "object": "victim IP blocks to gather information that can be used during targeting"
+    }
+  ],
+  "T1595.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "scan",
+      "object": "victims for vulnerabilities that can be used during targeting"
+    }
+  ],
+  "T1595.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "iteratively probe",
+      "object": "infrastructure using brute-forcing and crawling techniques"
+    }
+  ],
+  "T1596": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "freely available technical databases for information about victims that can be used during targeting"
+    }
+  ],
+  "T1596.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "DNS data for information about victims that can be used during targeting"
+    }
+  ],
+  "T1596.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "public WHOIS data for information about victims that can be used during targeting"
+    }
+  ],
+  "T1596.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "public digital certificate data for information about victims that can be used during targeting"
+    }
+  ],
+  "T1596.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "content delivery network (CDN) data about victims that can be used during targeting"
+    }
+  ],
+  "T1596.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "within public scan databases for information about victims that can be used during targeting"
+    }
+  ],
+  "T1597": [
+    {
+      "subject": "Adversaries",
+      "verb": "search and gather",
+      "object": "information about victims from closed sources that can be used during targeting"
+    }
+  ],
+  "T1597.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "private data from threat intelligence vendors for information that can be used during targeting"
+    }
+  ],
+  "T1597.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "purchase",
+      "object": "technical information about victims that can be used during targeting"
+    }
+  ],
+  "T1598": [
+    {
+      "subject": "Adversaries",
+      "verb": "send",
+      "object": "phishing messages to elicit sensitive information that can be used during targeting"
+    }
+  ],
+  "T1598.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "send",
+      "object": "spearphishing messages via third-party services to elicit sensitive information"
+    }
+  ],
+  "T1598.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "send",
+      "object": "spearphishing messages with a malicious attachment to elicit sensitive information"
+    }
+  ],
+  "T1598.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "send",
+      "object": "spearphishing messages with a malicious link to elicit sensitive information"
+    }
+  ],
+  "T1598.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "voice communications to elicit sensitive information that can be used during targeting"
+    }
+  ],
+  "T1599": [
+    {
+      "subject": "Adversaries",
+      "verb": "bridge",
+      "object": "network boundaries by compromising perimeter network devices or internal devices responsible for network segmentation"
+    }
+  ],
+  "T1599.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "bridge",
+      "object": "network boundaries by modifying a network device's Network Address Translation (NAT) configuration"
+    }
+  ],
+  "T1600": [
+    {
+      "subject": "Adversaries",
+      "verb": "compromise",
+      "object": "a network device's encryption capability in order to bypass encryption that would otherwise protect data communications"
+    }
+  ],
+  "T1600.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "reduce",
+      "object": "the level of effort required to decrypt data transmitted over the network by reducing the cipher strength of encrypted communications"
+    }
+  ],
+  "T1600.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "disable",
+      "object": "a network device's dedicated hardware encryption"
+    }
+  ],
+  "T1601": [
+    {
+      "subject": "Adversaries",
+      "verb": "make changes to",
+      "object": "the operating system of embedded network devices to weaken defenses and provide new capabilities for themselves"
+    }
+  ],
+  "T1601.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "the operating system of a network device to introduce new capabilities or weaken existing defenses"
+    }
+  ],
+  "T1601.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "install",
+      "object": "an older version of the operating system of a network device to weaken security"
+    }
+  ],
+  "T1602": [
+    {
+      "subject": "Adversaries",
+      "verb": "collect",
+      "object": "data related to managed devices from configuration repositories"
+    }
+  ],
+  "T1602.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "target",
+      "object": "the Management Information Base (MIB) to collect and/or mine valuable information in a network managed using Simple Network Management Protocol (SNMP)"
+    }
+  ],
+  "T1602.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "access",
+      "object": "network configuration files to collect sensitive data about the device and the network"
+    }
+  ],
+  "T1606": [
+    {
+      "subject": "Adversaries",
+      "verb": "forge",
+      "object": "credential materials that can be used to gain access to web applications or Internet services"
+    }
+  ],
+  "T1606.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "forge",
+      "object": "web cookies that can be used to gain access to web applications or Internet services"
+    }
+  ],
+  "T1606.002": [
+    {
+      "subject": "An adversary",
+      "verb": "may forge",
+      "object": "SAML tokens with any permissions claims and lifetimes if they possess a valid SAML token-signing certificate"
+    }
+  ],
+  "T1608": [
+    {
+      "subject": "Adversaries",
+      "verb": "upload, install, or otherwise set up",
+      "object": "capabilities that can be used during targeting"
+    }
+  ],
+  "T1608.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "upload",
+      "object": "malware to third-party or adversary controlled infrastructure to make it accessible during targeting"
+    }
+  ],
+  "T1608.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "upload",
+      "object": "tools to third-party or adversary controlled infrastructure to make it accessible during targeting"
+    }
+  ],
+  "T1608.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "install",
+      "object": "SSL/TLS certificates that can be used during targeting"
+    }
+  ],
+  "T1608.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "prepare",
+      "object": "an operational environment to infect systems that visit a website over the normal course of browsing"
+    }
+  ],
+  "T1608.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "put in place",
+      "object": "resources that are referenced by a link that can be used during targeting"
+    }
+  ],
+  "T1608.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "poison",
+      "object": "mechanisms that influence search engine optimization (SEO) to further lure staged capabilities towards potential victims"
+    }
+  ],
+  "T1609": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "a container administration service to execute commands within a container"
+    }
+  ],
+  "T1610": [
+    {
+      "subject": "Adversaries",
+      "verb": "deploy",
+      "object": "a container into an environment to facilitate execution or evade defenses"
+    }
+  ],
+  "T1611": [
+    {
+      "subject": "Adversaries",
+      "verb": "break out of",
+      "object": "a container or virtualized environment to gain access to the underlying host"
+    }
+  ],
+  "T1612": [
+    {
+      "subject": "Adversaries",
+      "verb": "build",
+      "object": "a container image directly on a host to bypass defenses that monitor for the retrieval of malicious images from a public registry"
+    }
+  ],
+  "T1613": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to discover",
+      "object": "containers and other resources that are available within a containers environment"
+    }
+  ],
+  "T1614": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information in an attempt to calculate the geographical location of a victim host"
+    }
+  ],
+  "T1614.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to gather",
+      "object": "information about the system language of a victim in order to infer the geographical location of that host"
+    }
+  ],
+  "T1615": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "information on Group Policy settings to identify paths for privilege escalation"
+    }
+  ],
+  "T1619": [
+    {
+      "subject": "Adversaries",
+      "verb": "enumerate",
+      "object": "objects in cloud storage infrastructure"
+    }
+  ],
+  "T1620": [
+    {
+      "subject": "Adversaries",
+      "verb": "reflectively load",
+      "object": "code into a process in order to conceal the execution of malicious payloads"
+    }
+  ],
+  "T1621": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to bypass",
+      "object": "multi-factor authentication (MFA) mechanisms and gain access to accounts by generating MFA requests sent to users"
+    }
+  ],
+  "T1622": [
+    {
+      "subject": "Adversaries",
+      "verb": "employ",
+      "object": "various means to detect and avoid debuggers"
+    }
+  ],
+  "T1647": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "property list files (plist files) to enable other malicious activity"
+    }
+  ],
+  "T1648": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "serverless computing, integration, and automation services to execute arbitrary code in cloud environments"
+    }
+  ],
+  "T1649": [
+    {
+      "subject": "Adversaries",
+      "verb": "steal or forge",
+      "object": "certificates used for authentication to access remote systems or resources"
+    }
+  ],
+  "T1650": [
+    {
+      "subject": "Adversaries",
+      "verb": "purchase or otherwise acquire",
+      "object": "an existing access to a target system or network"
+    }
+  ],
+  "T1651": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "cloud management services to execute commands within virtual machines"
+    }
+  ],
+  "T1652": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to enumerate",
+      "object": "local device drivers on a victim host"
+    }
+  ],
+  "T1653": [
+    {
+      "subject": "Adversaries",
+      "verb": "impair",
+      "object": "a system's ability to hibernate, reboot, or shut down in order to extend access to infected machines"
+    }
+  ],
+  "T1654": [
+    {
+      "subject": "Adversaries",
+      "verb": "enumerate",
+      "object": "system and service logs to find useful data"
+    }
+  ],
+  "T1656": [
+    {
+      "subject": "Adversaries",
+      "verb": "impersonate",
+      "object": "a trusted person or organization in order to persuade and trick a target into performing some action on their behalf"
+    }
+  ],
+  "T1657": [
+    {
+      "subject": "Adversaries",
+      "verb": "steal",
+      "object": "monetary resources from targets through extortion, social engineering, technical theft, or other methods"
+    }
+  ],
+  "T1659": [
+    {
+      "subject": "Adversaries",
+      "verb": "gain access and continuously communicate with victims by injecting",
+      "object": "malicious content into systems through online network traffic"
+    }
+  ],
+  "T1665": [
+    {
+      "subject": "Adversaries",
+      "verb": "manipulate",
+      "object": "network traffic in order to hide and evade detection of their C2 infrastructure"
+    }
+  ],
+  "T1666": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to modify",
+      "object": "hierarchical structures in infrastructure-as-a-service (IaaS) environments in order to evade defenses"
+    }
+  ],
+  "T1667": [
+    {
+      "subject": "Adversaries",
+      "verb": "flood",
+      "object": "targeted email addresses with an overwhelming volume of messages"
+    }
+  ],
+  "T1668": [
+    {
+      "subject": "Adversaries who successfully compromise a system",
+      "verb": "attempt to maintain persistence by",
+      "object": "closing the door behind them - preventing other threat actors from using the same vulnerability or access"
+    }
+  ],
+  "T1669": [
+    {
+      "subject": "Adversaries",
+      "verb": "gain initial access to target systems by connecting to",
+      "object": "wireless networks"
+    }
+  ],
+  "T1671": [
+    {
+      "subject": "Adversaries",
+      "verb": "achieve persistence by leveraging",
+      "object": "OAuth application integrations in a software-as-a-service environment"
+    }
+  ],
+  "T1672": [
+    {
+      "subject": "Adversaries",
+      "verb": "fake, or spoof",
+      "object": "a sender's identity by modifying the value of relevant email headers in order to establish contact with victims under false pretenses"
+    }
+  ],
+  "T1673": [
+    {
+      "subject": "An adversary",
+      "verb": "attempt to enumerate",
+      "object": "running virtual machines (VMs) after gaining access to a host or hypervisor"
+    }
+  ],
+  "T1674": [
+    {
+      "subject": "Adversaries",
+      "verb": "simulate",
+      "object": "keystrokes on a victim's computer by various means to perform any type of action on behalf of the user"
+    }
+  ],
+  "T1675": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "ESXi administration services to execute commands on guest machines hosted within an ESXi virtual environment"
+    }
+  ],
+  "T1677": [
+    {
+      "subject": "Adversaries",
+      "verb": "manipulate",
+      "object": "continuous integration / continuous development (CI/CD) processes by injecting malicious code into the build process"
+    }
+  ],
+  "T1678": [
+    {
+      "subject": "Adversaries",
+      "verb": "employ",
+      "object": "various time-based methods to evade detection and analysis"
+    }
+  ],
+  "T1679": [
+    {
+      "subject": "Adversaries",
+      "verb": "intentionally exclude",
+      "object": "certain files, folders, directories, file types, or system components from encryption or tampering during a ransomware attack"
+    }
+  ],
+  "T1680": [
+    {
+      "subject": "Adversaries",
+      "verb": "enumerate",
+      "object": "local drives, disks, and/or volumes and their attributes like total or free space and volume serial number"
+    }
+  ],
+  "T1681": [
+    {
+      "subject": "Adversaries",
+      "verb": "seek",
+      "object": "information/indicators from closed or open threat intelligence sources gathered about their own campaigns"
+    }
   ]
 }
