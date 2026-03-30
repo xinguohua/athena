@@ -183,7 +183,7 @@
     {
       "subject": "Adversaries",
       "verb": "attempt to access",
-      "object": "credentials and other sensitive information by abusing a Windows Domain Controller's application programming interface (API) to simulate the replication process from a remote domain controller using a technique called DCSync"
+      "object": "credentials and other sensitive information by abusing a Windows Domain Controller's API to simulate the replication process (DCSync)"
     },
     {
       "subject": "Members of the Administrators, Domain Admins, and Enterprise Admin groups",
@@ -478,7 +478,7 @@
     {
       "subject": "Adversaries",
       "verb": "may use",
-      "object": "this technique in conjunction with administrator-level Valid Accounts to remotely access a networked system over SMB, to interact with systems using remote procedure calls (RPCs), transfer files, and run transferred binaries through remote Execution"
+      "object": "this technique with administrator-level Valid Accounts to remotely access a networked system over SMB, transfer files, and run transferred binaries"
     }
   ],
   "T1021.003": [
@@ -1526,7 +1526,7 @@
     {
       "subject": "More sophisticated malware samples",
       "verb": "may also potentially bypass",
-      "object": "protection mechanisms such as data execution prevention (DEP) by triggering a combination of windows procedures and other system functions that will rewrite the malicious payload inside an executable portion of the target process"
+      "object": "protection mechanisms such as data execution prevention (DEP) by triggering a combination of windows procedures and other system functions"
     }
   ],
   "T1055.012": [
@@ -1564,8 +1564,8 @@
     },
     {
       "subject": "Process Doppelgänging",
-      "verb": "is implemented in 4 steps",
-      "object": "Transact - Create a TxF transaction using a legitimate executable then overwrite the file with malicious code; Load - Create a shared section of memory and load the malicious executable; Rollback - Undo changes to original executable; Animate - Create a process from the tainted section of memory and initiate execution"
+      "verb": "is implemented by",
+      "object": "creating a TxF transaction, loading a shared section of memory, rolling back changes to original executable, and creating a process from the tainted section"
     }
   ],
   "T1055.014": [
@@ -2235,7 +2235,7 @@
     {
       "subject": "Default accounts",
       "verb": "include",
-      "object": "default factory/provider set accounts on other types of systems, software, or devices, including the root user account in AWS, the root user account in ESXi, and the default service account in Kubernetes"
+      "object": "default factory/provider set accounts on systems, software, or devices, including the root user account in AWS and ESXi"
     }
   ],
   "T1078.002": [
@@ -3228,8 +3228,9 @@
       "object": "that information depending on how they intend to use it"
     },
     {
-      "subject": "One example is the use of certutil to decode",
-      "object": "a remote access tool portable executable file that has been hidden inside a certificate file"
+      "subject": "adversaries",
+      "verb": "may use",
+      "object": "certutil to decode a remote access tool portable executable file that has been hidden inside a certificate file"
     }
   ],
   "T1176": [
@@ -4391,7 +4392,7 @@
     {
       "subject": "adversaries",
       "verb": "may leverage",
-      "object": "email and messaging services, such as AWS Simple Email Service (SES), AWS Simple Notification Service (SNS), SendGrid, and Twilio, in order to send large quantities of spam / Phishing emails and SMS messages"
+      "object": "email and messaging services such as AWS SES, AWS SNS, SendGrid, and Twilio to send large quantities of spam/phishing"
     },
     {
       "subject": "they",
@@ -4799,8 +4800,9 @@
       "object": "system firmware to persist on systems"
     },
     {
-      "subject": "Capabilities exist to overwrite",
-      "object": "the system firmware, which may give sophisticated adversaries a means to install malicious firmware updates"
+      "subject": "Capabilities exist",
+      "verb": "to overwrite",
+      "object": "the system firmware to install malicious firmware updates"
     }
   ],
   "T1542.002": [
@@ -5099,7 +5101,7 @@
     {
       "subject": "shims",
       "verb": "can be used to",
-      "object": "Bypass User Account Control (UAC and RedirectEXE), inject DLLs into processes (InjectDLL), disable Data Execution Prevention (DisableNX) and Structure Exception Handling (DisableSEH), and intercept memory addresses (GetProcAddress)"
+      "object": "Bypass User Account Control, inject DLLs into processes, disable Data Execution Prevention, and intercept memory addresses"
     }
   ],
   "T1546.012": [
