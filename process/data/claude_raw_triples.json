@@ -1,0 +1,2704 @@
+{
+  "T1001": [
+    {
+      "subject": "Adversaries",
+      "verb": "obfuscate",
+      "object": "command and control traffic"
+    },
+    {
+      "subject": "C2 communications",
+      "verb": "hidden",
+      "object": "in an attempt to make the content more difficult to discover or decipher"
+    },
+    {
+      "subject": "This",
+      "verb": "encompasses",
+      "object": "many methods, such as adding junk data to protocol traffic, using steganography, or impersonating legitimate protocols"
+    }
+  ],
+  "T1001.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "add",
+      "object": "junk data to protocols used for command and control"
+    },
+    {
+      "subject": "Examples",
+      "verb": "include",
+      "object": "appending/prepending data with junk characters or writing junk characters between significant characters"
+    }
+  ],
+  "T1001.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "steganographic techniques to hide command and control traffic"
+    },
+    {
+      "subject": "This hidden information",
+      "verb": "can be used for",
+      "object": "command and control of compromised systems"
+    },
+    {
+      "subject": "the passing of files embedded using steganography",
+      "verb": "can be used for",
+      "object": "command and control"
+    }
+  ],
+  "T1001.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "impersonate",
+      "object": "legitimate protocols or web service traffic to disguise command and control activity"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "impersonate",
+      "object": "a fake SSL/TLS handshake to make it look like subsequent traffic is SSL/TLS encrypted"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "manipulate",
+      "object": "HTTP headers, URI endpoints, SSL certificates, and transmitted data to disguise C2 communications or mimic legitimate services such as Gmail, Google Drive, and Yahoo Messenger"
+    }
+  ],
+  "T1003": [
+    {
+      "subject": "Adversaries",
+      "verb": "dump",
+      "object": "credentials to obtain account login and credential material, normally in the form of a hash or a clear text password"
+    },
+    {
+      "subject": "Credentials",
+      "verb": "can be obtained from",
+      "object": "OS caches, memory, or structures"
+    }
+  ],
+  "T1003.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to access",
+      "object": "credential material stored in the process memory of the Local Security Authority Subsystem Service (LSASS)"
+    },
+    {
+      "subject": "the system",
+      "verb": "generates and stores",
+      "object": "a variety of credential materials in LSASS process memory"
+    },
+    {
+      "subject": "These credential materials",
+      "verb": "can be harvested by",
+      "object": "an administrative user or SYSTEM"
+    },
+    {
+      "subject": "the LSASS process memory",
+      "verb": "can be dumped from",
+      "object": "the target host and analyzed on a local system"
+    },
+    {
+      "subject": "the silent process exit mechanism",
+      "verb": "can be abused to create",
+      "object": "a memory dump of lsass.exe through Windows Error Reporting (WerFault.exe)"
+    },
+    {
+      "subject": "SSP DLLs",
+      "verb": "are loaded into",
+      "object": "LSASS process at system start"
+    },
+    {
+      "subject": "SSP DLLs",
+      "verb": "have access to",
+      "object": "encrypted and plaintext passwords that are stored in Windows"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may modify",
+      "object": "these Registry keys to add new SSPs, which will be loaded the next time the system boots"
+    }
+  ],
+  "T1003.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to extract",
+      "object": "credential material from the Security Account Manager (SAM) database either through in-memory techniques or through the Windows Registry"
+    },
+    {
+      "subject": "the SAM",
+      "verb": "can be extracted from",
+      "object": "the Registry with Reg"
+    }
+  ],
+  "T1003.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to access or create",
+      "object": "a copy of the Active Directory domain database in order to steal credential information"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may search for",
+      "object": "backups that contain the same or similar information"
+    }
+  ],
+  "T1003.004": [
+    {
+      "subject": "Adversaries with SYSTEM access",
+      "verb": "attempt to access",
+      "object": "Local Security Authority (LSA) secrets"
+    },
+    {
+      "subject": "LSA secrets",
+      "verb": "are stored in",
+      "object": "the registry at HKEY_LOCAL_MACHINE\\SECURITY\\Policy\\Secrets"
+    },
+    {
+      "subject": "LSA secrets",
+      "verb": "can also be dumped from",
+      "object": "memory"
+    }
+  ],
+  "T1003.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to access",
+      "object": "cached domain credentials used to allow authentication to occur in the event a domain controller is unavailable"
+    },
+    {
+      "subject": "Active Directory credentials",
+      "verb": "can be accessed through",
+      "object": "caches maintained by software like System Security Services Daemon (SSSD) or Quest Authentication Services"
+    },
+    {
+      "subject": "Cached credential hashes",
+      "verb": "are typically located at",
+      "object": "/var/lib/sss/db/cache.[domain].ldb for SSSD or /var/opt/quest/vas/authcache/vas_auth.vdb for Quest"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can use utilities such as tdbdump on these database files to dump",
+      "object": "the cached hashes"
+    }
+  ],
+  "T1003.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to access",
+      "object": "credentials and other sensitive information by abusing a Windows Domain Controller's application programming interface (API) to simulate the replication process from a remote domain controller using a technique called DCSync"
+    },
+    {
+      "subject": "Members of the Administrators, Domain Admins, and Enterprise Admin groups",
+      "verb": "are able to run DCSync to pull",
+      "object": "password data from Active Directory"
+    },
+    {
+      "subject": "The hashes",
+      "verb": "can then be used to create",
+      "object": "a Golden Ticket for use in Pass the Ticket or change an account's password"
+    }
+  ],
+  "T1003.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "credentials from the proc filesystem or /proc"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "can search",
+      "object": "these memory locations for all processes on a system that contain patterns indicative of credentials"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may use",
+      "object": "regex patterns to look for fixed strings in memory structures or cached hashes"
+    },
+    {
+      "subject": "a process",
+      "verb": "can search",
+      "object": "the /maps & /mem locations for common website credential patterns"
+    }
+  ],
+  "T1003.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to dump",
+      "object": "the contents of /etc/passwd and /etc/shadow to enable offline password cracking"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may attempt to read or dump",
+      "object": "the /etc/passwd and /etc/shadow files on Linux systems via command line utilities such as the cat command"
+    },
+    {
+      "subject": "the Linux utility unshadow",
+      "verb": "can be used to combine",
+      "object": "the two files in a format suited for password cracking utilities such as John the Ripper"
+    }
+  ],
+  "T1005": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "local system sources, such as file systems, configuration files, local databases, virtual machine files, or process memory, to find files of interest and sensitive data"
+    }
+  ],
+  "T1006": [
+    {
+      "subject": "Adversaries",
+      "verb": "directly access",
+      "object": "a volume to bypass file access controls and file system monitoring"
+    },
+    {
+      "subject": "Programs with direct access",
+      "verb": "read and write",
+      "object": "files directly from the drive by analyzing file system data structures"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also use",
+      "object": "built-in or third-party utilities (such as vssadmin, wbadmin, and esentutl) to create shadow copies or backups of data from system volumes"
+    }
+  ],
+  "T1007": [
+    {
+      "subject": "Adversaries",
+      "verb": "try to gather",
+      "object": "information about registered local system services"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may obtain",
+      "object": "information about services using tools as well as OS utility commands such as sc query, tasklist /svc, systemctl --type=service, and net start"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also gather",
+      "object": "information about schedule tasks via commands such as schtasks on Windows or crontab -l on Linux and macOS"
+    }
+  ],
+  "T1008": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "fallback or alternate communication channels if the primary channel is compromised or inaccessible"
+    }
+  ],
+  "T1010": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to get",
+      "object": "a listing of open application windows"
+    },
+    {
+      "subject": "they",
+      "verb": "may gather information through",
+      "object": "native system features such as Command and Scripting Interpreter commands and Native API functions"
+    }
+  ],
+  "T1011": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to exfiltrate",
+      "object": "data over a different network medium than the command and control channel"
+    },
+    {
+      "subject": "the exfiltration",
+      "verb": "may occur over",
+      "object": "a WiFi connection, modem, cellular data connection, Bluetooth, or another radio frequency (RF) channel"
+    }
+  ],
+  "T1011.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to exfiltrate",
+      "object": "data over Bluetooth rather than the command and control channel"
+    }
+  ],
+  "T1012": [
+    {
+      "subject": "Adversaries",
+      "verb": "interact with",
+      "object": "the Windows Registry to gather information about the system, configuration, and installed software"
+    },
+    {
+      "subject": "Information",
+      "verb": "can easily be queried using",
+      "object": "the Reg utility"
+    }
+  ],
+  "T1014": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "rootkits to hide the presence of programs, files, network connections, services, drivers, and other system components"
+    },
+    {
+      "subject": "Rootkits",
+      "verb": "hide the existence of malware by",
+      "object": "intercepting/hooking and modifying operating system API calls that supply system information"
+    }
+  ],
+  "T1016": [
+    {
+      "subject": "Adversaries",
+      "verb": "look for",
+      "object": "details about the network configuration and settings, such as IP and/or MAC addresses, of systems they access"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also leverage",
+      "object": "a Network Device CLI on network devices to gather information about configurations and settings"
+    }
+  ],
+  "T1016.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "check for",
+      "object": "Internet connectivity on compromised systems"
+    },
+    {
+      "subject": "This",
+      "verb": "can be accomplished in",
+      "object": "numerous ways such as using Ping, tracert, and GET requests to websites"
+    }
+  ],
+  "T1016.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "search for",
+      "object": "information about Wi-Fi networks, such as network names and passwords, on compromised systems"
+    },
+    {
+      "subject": "names and passwords of all Wi-Fi networks",
+      "verb": "may be available through",
+      "object": "netsh wlan show profiles"
+    },
+    {
+      "subject": "names and passwords",
+      "verb": "may be available in",
+      "object": "files under /etc/NetworkManager/system-connections/"
+    }
+  ],
+  "T1018": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to get",
+      "object": "a listing of other systems by IP address, hostname, or other logical identifier on a network"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also analyze",
+      "object": "data from local host files (ex: C:\\Windows\\System32\\Drivers\\etc\\hosts or /etc/hosts)"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also leverage",
+      "object": "Network Device CLI commands on network devices to gather detailed information about systems within a network"
+    }
+  ],
+  "T1020": [
+    {
+      "subject": "Adversaries",
+      "verb": "exfiltrate",
+      "object": "data, such as sensitive documents, through the use of automated processing after being gathered during Collection"
+    }
+  ],
+  "T1020.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "traffic mirroring in order to automate data exfiltration over compromised infrastructure"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse",
+      "object": "traffic mirroring to mirror or redirect network traffic through other infrastructure they control"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "define",
+      "object": "specified instances to collect traffic from and specified targets to send collected traffic to"
+    }
+  ],
+  "T1021": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "Valid Accounts to log into a service that accepts remote connections, such as telnet, SSH, and VNC"
+    },
+    {
+      "subject": "they",
+      "verb": "could login to",
+      "object": "many different machines using remote access protocols such as secure shell (SSH) or remote desktop protocol (RDP)"
+    },
+    {
+      "subject": "ARD",
+      "verb": "leverages",
+      "object": "a blend of protocols, including VNC to send the screen and control buffers and SSH for secure file transfer"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can abuse",
+      "object": "applications such as ARD to gain remote code execution and perform lateral movement"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "can escalate",
+      "object": "an SSH session to an ARD session which enables an adversary to accept TCC prompts without user interaction"
+    }
+  ],
+  "T1021.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "Valid Accounts to log into a computer using the Remote Desktop Protocol (RDP)"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may connect to",
+      "object": "a remote system over RDP/RDS to expand access if the service is enabled and allows access to accounts with known credentials"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also use",
+      "object": "RDP in conjunction with the Accessibility Features or Terminal Services DLL for Persistence"
+    }
+  ],
+  "T1021.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "Valid Accounts to interact with a remote network share using Server Message Block (SMB)"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may use",
+      "object": "SMB to interact with file shares, allowing them to move laterally throughout a network"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may use",
+      "object": "this technique in conjunction with administrator-level Valid Accounts to remotely access a networked system over SMB, to interact with systems using remote procedure calls (RPCs), transfer files, and run transferred binaries through remote Execution"
+    }
+  ],
+  "T1021.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "Valid Accounts to interact with remote machines by taking advantage of Distributed Component Object Model (DCOM)"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "can remotely obtain",
+      "object": "arbitrary and even direct shellcode execution through Office applications as well as other Windows objects that contain insecure methods"
+    },
+    {
+      "subject": "DCOM",
+      "verb": "can also execute",
+      "object": "macros in existing documents"
+    },
+    {
+      "subject": "DCOM",
+      "verb": "may also invoke",
+      "object": "Dynamic Data Exchange (DDE) execution directly through a COM created instance of a Microsoft Office application"
+    }
+  ],
+  "T1021.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "Valid Accounts to log into remote machines using Secure Shell (SSH)"
+    }
+  ],
+  "T1021.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "Valid Accounts to remotely control machines using Virtual Network Computing (VNC)"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "could use VNC to",
+      "object": "remotely control and monitor a system to collect data and information to pivot to other systems within the network"
+    }
+  ],
+  "T1021.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "Valid Accounts to interact with remote systems using Windows Remote Management (WinRM)"
+    },
+    {
+      "subject": "WinRM",
+      "verb": "can be used as",
+      "object": "a method of remotely interacting with Windows Management Instrumentation"
+    }
+  ],
+  "T1021.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "log into",
+      "object": "accessible cloud services within a compromised environment using Valid Accounts"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may connect to",
+      "object": "available cloud services through the web console or through the cloud command line interface (CLI)"
+    }
+  ],
+  "T1021.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "Valid Accounts to log directly into accessible cloud hosted compute infrastructure through cloud native methods"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may utilize",
+      "object": "these cloud native methods to directly access virtual infrastructure and pivot through an environment"
+    }
+  ],
+  "T1025": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "connected removable media on computers they have compromised to find files of interest"
+    },
+    {
+      "subject": "Sensitive data",
+      "verb": "can be collected from",
+      "object": "any removable media (optical disk drive, USB memory, etc.) connected to the compromised system"
+    }
+  ],
+  "T1027": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to make",
+      "object": "an executable or file difficult to discover or analyze by encrypting, encoding, or otherwise obfuscating its contents"
+    },
+    {
+      "subject": "Payloads",
+      "verb": "may be",
+      "object": "compressed, archived, or encrypted in order to avoid detection"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also abuse",
+      "object": "Command Obfuscation to obscure commands executed from payloads or directly via Command and Scripting Interpreter"
+    }
+  ],
+  "T1027.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "binary padding to add junk data and change the on-disk representation of malware"
+    },
+    {
+      "subject": "The padding",
+      "verb": "is commonly generated by",
+      "object": "a function to create junk data and then appended to the end or applied to sections of malware"
+    }
+  ],
+  "T1027.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "perform",
+      "object": "software packing or virtual machine software protection to conceal their code"
+    },
+    {
+      "subject": "Software packing",
+      "verb": "is",
+      "object": "a method of compressing or encrypting an executable"
+    },
+    {
+      "subject": "A virtual machine",
+      "verb": "is then called to run",
+      "object": "this code"
+    }
+  ],
+  "T1027.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "steganography techniques in order to prevent the detection of hidden information"
+    },
+    {
+      "subject": "Steganographic techniques",
+      "verb": "can be used to hide",
+      "object": "data in digital media such as images, audio tracks, video clips, or text files"
+    },
+    {
+      "subject": "Duqu",
+      "verb": "encrypted",
+      "object": "the gathered information from a victim's system and hid it within an image before exfiltrating the image to a C2 server"
+    },
+    {
+      "subject": "a threat group",
+      "verb": "used",
+      "object": "Invoke-PSImage to hide PowerShell commands in an image file (.png) and execute the code on a victim's system"
+    }
+  ],
+  "T1027.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to make",
+      "object": "payloads difficult to discover and analyze by delivering files to victims as uncompiled code"
+    },
+    {
+      "subject": "These payloads",
+      "verb": "will need to be compiled",
+      "object": "before execution; typically via native utilities such as ilasm.exe, csc.exe, or GCC/MinGW"
+    },
+    {
+      "subject": "Source code payloads",
+      "verb": "may also be",
+      "object": "encrypted, encoded, and/or embedded within other files"
+    }
+  ],
+  "T1027.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "remove",
+      "object": "indicators from tools if they believe their malicious tool was detected, quarantined, or otherwise curtailed"
+    },
+    {
+      "subject": "They",
+      "verb": "can modify",
+      "object": "the tool by removing the indicator and using the updated version"
+    }
+  ],
+  "T1027.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "smuggle",
+      "object": "data and files past content filters by hiding malicious payloads inside of seemingly benign HTML files"
+    },
+    {
+      "subject": "HTML documents",
+      "verb": "can store",
+      "object": "large binary objects known as JavaScript Blobs (immutable data that represents raw bytes)"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "deliver",
+      "object": "payloads to victims that bypass security controls through HTML Smuggling by abusing JavaScript Blobs and/or HTML5 download attributes"
+    },
+    {
+      "subject": "JavaScript Blobs",
+      "verb": "can be abused to dynamically generate",
+      "object": "malicious files in the victim machine and may be dropped to disk"
+    }
+  ],
+  "T1027.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "obfuscate then dynamically resolve",
+      "object": "API functions called by their malware"
+    },
+    {
+      "subject": "Malware",
+      "verb": "commonly uses",
+      "object": "various Native API functions provided by the OS to perform various tasks such as those involving processes, files, and other system artifacts"
+    },
+    {
+      "subject": "hashes of function names",
+      "verb": "are commonly stored in",
+      "object": "malware in lieu of literal strings"
+    },
+    {
+      "subject": "Malware",
+      "verb": "can use these hashes to manually reproduce",
+      "object": "the linking and loading process using functions such as GetProcAddress() and LoadLibrary()"
+    }
+  ],
+  "T1027.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to make",
+      "object": "a payload difficult to analyze by removing symbols, strings, and other human readable information"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "have also used",
+      "object": "stripped payload formats, such as run-only AppleScripts, a compiled and stripped version of AppleScript"
+    }
+  ],
+  "T1027.009": [
+    {
+      "subject": "Adversaries",
+      "verb": "embed",
+      "object": "payloads within other files to conceal malicious content from defenses"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "have been observed embedding",
+      "object": "payloads within or as an overlay of an otherwise benign binary"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "have also been observed nesting",
+      "object": "payloads (such as executables and run-only scripts) inside a file of the same format"
+    },
+    {
+      "subject": "an embedded module",
+      "verb": "may be injected into",
+      "object": "default browsers, allowing adversaries to then communicate via the network"
+    }
+  ],
+  "T1027.010": [
+    {
+      "subject": "Adversaries",
+      "verb": "obfuscate",
+      "object": "content during command execution to impede detection"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may abuse",
+      "object": "syntax that utilizes various symbols and escape characters (such as spacing, ^, +, $, and %) to make commands difficult to analyze"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also manually implement",
+      "object": "command obfuscation via string splitting, order and casing of characters, globing, as well as various tricks involving passing strings through tokens/environment variables/input streams"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also use",
+      "object": "tricks such as directory traversals to obfuscate references to the binary being invoked by a command"
+    }
+  ],
+  "T1027.011": [
+    {
+      "subject": "Adversaries",
+      "verb": "store",
+      "object": "data in \"fileless\" formats to conceal malicious activity from defenses"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may use",
+      "object": "fileless storage to conceal various types of stored data, including payloads/shellcode and collected data not yet exfiltrated"
+    }
+  ],
+  "T1027.012": [
+    {
+      "subject": "Adversaries",
+      "verb": "smuggle",
+      "object": "commands to download malicious payloads past content filters by hiding them within otherwise seemingly benign windows shortcut files"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "have been observed using",
+      "object": "LNK files as phishing payloads to deliver malware"
+    },
+    {
+      "subject": "payloads referenced via external URLs within the LNK icon location field",
+      "verb": "may be downloaded",
+      "object": ""
+    }
+  ],
+  "T1027.013": [
+    {
+      "subject": "Adversaries",
+      "verb": "encrypt or encode",
+      "object": "files to obfuscate strings, bytes, and other specific patterns to impede detection"
+    },
+    {
+      "subject": "Files",
+      "verb": "can be encrypted with",
+      "object": "a hardcoded or user-supplied key, as well as otherwise obfuscated using standard encoding schemes such as Base64"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may abuse",
+      "object": "password-protected Word documents or self-extracting (SFX) archives as a method of encrypting/encoding a file such as a Phishing payload"
+    }
+  ],
+  "T1027.014": [
+    {
+      "subject": "Adversaries",
+      "verb": "utilize",
+      "object": "polymorphic code to evade detection"
+    },
+    {
+      "subject": "the code",
+      "verb": "is mutated into",
+      "object": "a different version of itself that achieves the same purpose or objective as the original"
+    }
+  ],
+  "T1027.015": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "compression to obfuscate their payloads or files"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may also compress",
+      "object": "shellcode directly - for example, in order to store it in a Windows Registry key"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may combine",
+      "object": "multiple ZIP files into one archive"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "have sent",
+      "object": "malicious payloads as archived files to encourage the user to interact with and extract the malicious payload"
+    }
+  ],
+  "T1027.016": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "junk code / dead code to obfuscate a malware's functionality"
+    },
+    {
+      "subject": "NOPs",
+      "verb": "are added to",
+      "object": "malware"
+    }
+  ],
+  "T1027.017": [
+    {
+      "subject": "Adversaries",
+      "verb": "smuggle",
+      "object": "data and files past content filters by hiding malicious payloads inside of seemingly benign SVG files"
+    },
+    {
+      "subject": "SVGs",
+      "verb": "can legitimately include",
+      "object": "<script> tags that enable adversaries to include malicious JavaScript payloads"
+    },
+    {
+      "subject": "threat actors",
+      "verb": "may include content that",
+      "object": "assembles malicious payloads, downloads malicious payloads, redirects users to malicious websites, displays interactive content to users such as fake login forms and download buttons"
+    }
+  ],
+  "T1029": [
+    {
+      "subject": "Adversaries",
+      "verb": "schedule",
+      "object": "data exfiltration to be performed only at certain times of day or at certain intervals"
+    }
+  ],
+  "T1030": [
+    {
+      "subject": "An adversary",
+      "verb": "exfiltrate",
+      "object": "data in fixed size chunks instead of whole files or limit packet sizes below certain thresholds"
+    }
+  ],
+  "T1033": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to identify",
+      "object": "the primary user, currently logged in user, set of users that commonly uses a system, or whether a user is actively using the system"
+    },
+    {
+      "subject": "They",
+      "verb": "may do this by",
+      "object": "retrieving account usernames or by using OS Credential Dumping"
+    }
+  ],
+  "T1036": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to manipulate",
+      "object": "features of their artifacts to make them appear legitimate or benign to users and/or security tools"
+    },
+    {
+      "subject": "This",
+      "verb": "may include",
+      "object": "manipulating file metadata, tricking users into misidentifying the file type, and giving legitimate task or service names"
+    }
+  ],
+  "T1036.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to mimic",
+      "object": "features of valid code signatures to increase the chance of deceiving a user, analyst, or tool"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can copy",
+      "object": "the metadata and signature information from a signed program, then use it as a template for an unsigned program"
+    }
+  ],
+  "T1036.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "the right-to-left override (RTLO or RLO) character (U+202E) to disguise a string and/or file name to make it appear benign"
+    }
+  ],
+  "T1036.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "rename",
+      "object": "legitimate / system utilities to try to evade security mechanisms concerning the usage of those utilities"
+    },
+    {
+      "subject": "a legitimate utility",
+      "verb": "is copied or moved to",
+      "object": "a different directory and renamed to avoid detections based on these utilities executing from non-standard paths"
+    }
+  ],
+  "T1036.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to manipulate",
+      "object": "the name of a task or service to make it appear legitimate or benign"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "give",
+      "object": "tasks or services names that are similar or identical to those of legitimate ones"
+    }
+  ],
+  "T1036.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "match or approximate",
+      "object": "the name or location of legitimate files, Registry keys, or other resources when naming/placing them"
+    },
+    {
+      "subject": "This",
+      "verb": "may be done by placing",
+      "object": "an executable in a commonly trusted directory (ex: under System32) or giving it the name of a legitimate, trusted program (ex: svchost.exe)"
+    }
+  ],
+  "T1036.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "hide",
+      "object": "a program's true filetype by changing the extension of a file"
+    },
+    {
+      "subject": "appending a space to the end of a filename",
+      "verb": "will change",
+      "object": "how the file is processed by the operating system"
+    }
+  ],
+  "T1036.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "a double extension in the filename as a means of masquerading the true file type"
+    },
+    {
+      "subject": "an executable file attachment named Evil.txt.exe",
+      "verb": "may display as",
+      "object": "Evil.txt to a user"
+    }
+  ],
+  "T1036.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "masquerade",
+      "object": "malicious payloads as legitimate files through changes to the payload's formatting, including the file's signature, extension, icon, and contents"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may edit",
+      "object": "the header's hex code and/or the file extension of a malicious payload in order to bypass file validation checks and/or input sanitization"
+    }
+  ],
+  "T1036.009": [
+    {
+      "subject": "An adversary",
+      "verb": "attempt to evade",
+      "object": "process tree-based analysis by modifying executed malware's parent process ID (PPID)"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "can execute",
+      "object": "their payload without any arguments, call the fork() API call twice, then have the parent process exit"
+    },
+    {
+      "subject": "This",
+      "verb": "creates",
+      "object": "a grandchild process with no parent process that is immediately adopted by the init system process (PID 1)"
+    }
+  ],
+  "T1036.010": [
+    {
+      "subject": "Adversaries",
+      "verb": "match or approximate",
+      "object": "the names of legitimate accounts to make newly created ones appear benign"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "will attempt to masquerade as",
+      "object": "service accounts, such as those associated with legitimate software, data backups, or container cluster management"
+    }
+  ],
+  "T1036.011": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "a process's in-memory arguments to change its name"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "can erase",
+      "object": "the memory used by all command-line arguments for a process, overwriting each argument string with null bytes"
+    },
+    {
+      "subject": "They",
+      "verb": "can then write",
+      "object": "a spoofed string into the memory region previously occupied by argv[0] to mimic a benign command"
+    }
+  ],
+  "T1036.012": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to blend in with",
+      "object": "legitimate traffic by spoofing browser and system attributes like operating system, system language, platform, user-agent string, resolution, time zone"
+    }
+  ],
+  "T1037": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "scripts automatically executed at boot or logon initialization to establish persistence"
+    }
+  ],
+  "T1037.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "Windows logon scripts automatically executed at logon initialization to establish persistence"
+    },
+    {
+      "subject": "This",
+      "verb": "is done via adding",
+      "object": "a path to a script to the HKCU\\Environment\\UserInitMprLogonScript Registry key"
+    }
+  ],
+  "T1037.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "a Login Hook to establish persistence executed upon user logon"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can add or insert",
+      "object": "a path to a malicious script in the com.apple.loginwindow.plist file, using the LoginHook or LogoutHook key-value pair"
+    }
+  ],
+  "T1037.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "network logon scripts automatically executed at logon initialization to establish persistence"
+    },
+    {
+      "subject": "Network logon scripts",
+      "verb": "can be assigned using",
+      "object": "Active Directory or Group Policy Objects"
+    }
+  ],
+  "T1037.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence by modifying",
+      "object": "RC scripts, which are executed during a Unix-like system's startup"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may establish persistence by adding",
+      "object": "a malicious binary path or shell commands to rc.local, rc.common, and other RC scripts"
+    },
+    {
+      "subject": "the system",
+      "verb": "executes",
+      "object": "the script's contents as root, resulting in persistence"
+    }
+  ],
+  "T1037.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "startup items automatically executed at boot initialization to establish persistence"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "can create",
+      "object": "the appropriate folders/files in the StartupItems directory to register their own persistence mechanism"
+    }
+  ],
+  "T1039": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "network shares on computers they have compromised to find files of interest"
+    },
+    {
+      "subject": "Sensitive data",
+      "verb": "can be collected from",
+      "object": "remote systems via shared network drives"
+    }
+  ],
+  "T1040": [
+    {
+      "subject": "Adversaries",
+      "verb": "passively sniff",
+      "object": "network traffic to capture information about an environment, including authentication material passed over the network"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may place",
+      "object": "a network interface into promiscuous mode to passively access data in transit over the network, or use span ports to capture a larger amount of data"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may still be able to use",
+      "object": "traffic mirroring services to sniff network traffic from virtual machines"
+    }
+  ],
+  "T1041": [
+    {
+      "subject": "Adversaries",
+      "verb": "steal",
+      "object": "data by exfiltrating it over an existing command and control channel"
+    },
+    {
+      "subject": "Stolen data",
+      "verb": "is encoded into",
+      "object": "the normal communications channel using the same protocol as command and control communications"
+    }
+  ],
+  "T1046": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to get",
+      "object": "a listing of services running on remote hosts and local network infrastructure devices"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may use",
+      "object": "a mDNS query (such as dns-sd -B _ssh._tcp .) to find other systems broadcasting the ssh service"
+    }
+  ],
+  "T1047": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Windows Management Instrumentation (WMI) to execute malicious commands and payloads"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "can use WMI to interact with",
+      "object": "local and remote systems and use it as a means to execute various behaviors"
+    },
+    {
+      "subject": "wmic.exe",
+      "verb": "can be abused by an adversary to delete",
+      "object": "shadow copies with the command wmic.exe Shadowcopy Delete"
+    }
+  ],
+  "T1048": [
+    {
+      "subject": "Adversaries",
+      "verb": "steal",
+      "object": "data by exfiltrating it over a different protocol than that of the existing command and control channel"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also opt to encrypt and/or obfuscate",
+      "object": "these alternate channels"
+    }
+  ],
+  "T1048.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "steal",
+      "object": "data by exfiltrating it over a symmetrically encrypted network protocol other than that of the existing command and control channel"
+    }
+  ],
+  "T1048.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "steal",
+      "object": "data by exfiltrating it over an asymmetrically encrypted network protocol other than that of the existing command and control channel"
+    }
+  ],
+  "T1048.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "steal",
+      "object": "data by exfiltrating it over an un-encrypted network protocol other than that of the existing command and control channel"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may opt to obfuscate",
+      "object": "this data, without the use of encryption, within network protocols that are natively unencrypted (such as HTTP, FTP, or DNS)"
+    }
+  ],
+  "T1049": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to get",
+      "object": "a listing of network connections to or from the compromised system"
+    }
+  ],
+  "T1052": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to exfiltrate",
+      "object": "data via a physical medium, such as a removable drive"
+    }
+  ],
+  "T1052.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to exfiltrate",
+      "object": "data over a USB connected physical device"
+    }
+  ],
+  "T1053": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "task scheduling functionality to facilitate initial or recurring execution of malicious code"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may use",
+      "object": "task scheduling to execute programs at system startup or on a scheduled basis for persistence"
+    }
+  ],
+  "T1053.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "the at utility to perform task scheduling for initial or recurring execution of malicious code"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may use",
+      "object": "at to execute programs at system startup or on a scheduled basis for Persistence"
+    },
+    {
+      "subject": "at",
+      "verb": "can also be abused to conduct",
+      "object": "remote Execution as part of Lateral Movement and/or to run a process under the context of a specified account (such as SYSTEM)"
+    }
+  ],
+  "T1053.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "the cron utility to perform task scheduling for initial or recurring execution of malicious code"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may use cron in Linux or Unix environments to execute",
+      "object": "programs at system startup or on a scheduled basis for Persistence"
+    }
+  ],
+  "T1053.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "the Windows Task Scheduler to perform task scheduling for initial or recurring execution of malicious code"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may use",
+      "object": "Windows Task Scheduler to execute programs at system startup or on a scheduled basis for persistence"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also create",
+      "object": "\"hidden\" scheduled tasks that may not be visible to defender tools and manual queries"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may hide a task from schtasks /query by deleting",
+      "object": "the associated Security Descriptor (SD) registry value"
+    }
+  ],
+  "T1053.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "systemd timers to perform task scheduling for initial or recurring execution of malicious code"
+    },
+    {
+      "subject": "Systemd timers",
+      "verb": "may be activated remotely via",
+      "object": "the systemctl command line utility, which operates over SSH"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may use",
+      "object": "systemd timers to execute malicious code at system startup or on a scheduled basis for persistence"
+    }
+  ],
+  "T1053.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "task scheduling functionality provided by container orchestration tools such as Kubernetes to schedule deployment of containers configured to execute malicious code"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may utilize",
+      "object": "a CronJob to schedule deployment of a Job that executes malicious code in various nodes within a cluster"
+    }
+  ],
+  "T1055": [
+    {
+      "subject": "Adversaries",
+      "verb": "inject",
+      "object": "code into processes"
+    },
+    {
+      "subject": "More sophisticated samples",
+      "verb": "may perform",
+      "object": "multiple process injections to segment modules and further evade detection, utilizing named pipes or other inter-process communication (IPC) mechanisms as a communication channel"
+    }
+  ],
+  "T1055.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "inject",
+      "object": "dynamic-link libraries (DLLs) into processes"
+    },
+    {
+      "subject": "DLL injection",
+      "verb": "is commonly performed by writing",
+      "object": "the path to a DLL in the virtual address space of the target process before loading the DLL by invoking a new thread"
+    },
+    {
+      "subject": "The write",
+      "verb": "can be performed with",
+      "object": "native Windows API calls such as VirtualAllocEx and WriteProcessMemory, then invoked with CreateRemoteThread"
+    },
+    {
+      "subject": "This method",
+      "verb": "involves loading",
+      "object": "a legitimate DLL into a remote process then manually overwriting the module's AddressOfEntryPoint before starting a new thread in the target process"
+    }
+  ],
+  "T1055.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "inject",
+      "object": "portable executables (PE) into processes"
+    },
+    {
+      "subject": "PE injection",
+      "verb": "is commonly performed by copying",
+      "object": "code into the virtual address space of the target process before invoking it via a new thread"
+    },
+    {
+      "subject": "The write",
+      "verb": "can be performed with",
+      "object": "native Windows API calls such as VirtualAllocEx and WriteProcessMemory, then invoked with CreateRemoteThread or additional code (ex: shellcode)"
+    }
+  ],
+  "T1055.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "inject",
+      "object": "malicious code into hijacked processes"
+    },
+    {
+      "subject": "Thread Execution Hijacking",
+      "verb": "is commonly performed by suspending",
+      "object": "an existing process then unmapping/hollowing its memory, which can then be replaced with malicious code or the path to a DLL"
+    },
+    {
+      "subject": "A handle to an existing victim process",
+      "verb": "is first created with",
+      "object": "native Windows API calls such as OpenThread"
+    }
+  ],
+  "T1055.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "inject",
+      "object": "malicious code into processes via the asynchronous procedure call (APC) queue"
+    },
+    {
+      "subject": "APC injection",
+      "verb": "is commonly performed by attaching",
+      "object": "malicious code to the APC Queue of a process's thread"
+    },
+    {
+      "subject": "A variation of APC injection, dubbed \"Early Bird injection\"",
+      "verb": "involves creating",
+      "object": "a suspended process in which malicious code can be written and executed before the process' entry point via an APC"
+    },
+    {
+      "subject": "AtomBombing",
+      "verb": "is another variation that utilizes",
+      "object": "APCs to invoke malicious code previously written to the global atom table"
+    }
+  ],
+  "T1055.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "inject",
+      "object": "malicious code into processes via thread local storage (TLS) callbacks"
+    },
+    {
+      "subject": "TLS callback injection",
+      "verb": "involves manipulating",
+      "object": "pointers inside a portable executable (PE) to redirect a process to malicious code before reaching the code's legitimate entry point"
+    }
+  ],
+  "T1055.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "inject",
+      "object": "malicious code into processes via ptrace (process trace) system calls"
+    },
+    {
+      "subject": "Ptrace system call injection",
+      "verb": "involves attaching to and modifying",
+      "object": "a running process"
+    },
+    {
+      "subject": "Ptrace system call injection",
+      "verb": "is commonly performed by writing",
+      "object": "arbitrary code into a running process (ex: malloc) then invoking that memory with PTRACE_SETREGS"
+    },
+    {
+      "subject": "Ptrace system call injection",
+      "verb": "can also be done with",
+      "object": "PTRACE_POKETEXT/PTRACE_POKEDATA, which copy data to a specific address in the target processes' memory"
+    }
+  ],
+  "T1055.009": [
+    {
+      "subject": "Adversaries",
+      "verb": "inject",
+      "object": "malicious code into processes via the /proc filesystem"
+    },
+    {
+      "subject": "Proc memory injection",
+      "verb": "involves enumerating",
+      "object": "the memory of a process via the /proc filesystem (/proc/[pid]) then crafting a return-oriented programming (ROP) payload with available gadgets/instructions"
+    },
+    {
+      "subject": "Proc memory injection",
+      "verb": "is commonly performed by overwriting",
+      "object": "the target processes' stack using memory mappings provided by the /proc filesystem"
+    },
+    {
+      "subject": "the target processes' memory map within /proc/[pid]/maps",
+      "verb": "can be overwritten using",
+      "object": "dd"
+    }
+  ],
+  "T1055.011": [
+    {
+      "subject": "Adversaries",
+      "verb": "inject",
+      "object": "malicious code into process via Extra Window Memory (EWM)"
+    },
+    {
+      "subject": "Malware",
+      "verb": "writing",
+      "object": "code to shared sections of the process's memory"
+    },
+    {
+      "subject": "Malware",
+      "verb": "placing",
+      "object": "a pointer to the code in EWM"
+    },
+    {
+      "subject": "Malware",
+      "verb": "invoking",
+      "object": "execution by returning execution control to the address in the process's EWM"
+    },
+    {
+      "subject": "Writing payloads to shared sections",
+      "verb": "avoids",
+      "object": "the use of highly monitored API calls such as WriteProcessMemory and CreateRemoteThread"
+    },
+    {
+      "subject": "More sophisticated malware samples",
+      "verb": "may also potentially bypass",
+      "object": "protection mechanisms such as data execution prevention (DEP) by triggering a combination of windows procedures and other system functions that will rewrite the malicious payload inside an executable portion of the target process"
+    }
+  ],
+  "T1055.012": [
+    {
+      "subject": "Adversaries",
+      "verb": "inject",
+      "object": "malicious code into suspended and hollowed processes"
+    },
+    {
+      "subject": "Process hollowing",
+      "verb": "is commonly performed by creating",
+      "object": "a process in a suspended state then unmapping/hollowing its memory, which can then be replaced with malicious code"
+    },
+    {
+      "subject": "A victim process",
+      "verb": "can be created with",
+      "object": "native Windows API calls such as CreateProcess, which includes a flag to suspend the processes primary thread"
+    },
+    {
+      "subject": "the process",
+      "verb": "can be unmapped using",
+      "object": "APIs calls such as ZwUnmapViewOfSection or NtUnmapViewOfSection before being written to, realigned to the injected code, and resumed"
+    }
+  ],
+  "T1055.013": [
+    {
+      "subject": "Adversaries",
+      "verb": "inject",
+      "object": "malicious code into process via process doppelgänging"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse TxF to perform",
+      "object": "a file-less variation of Process Injection"
+    },
+    {
+      "subject": "Process Doppelgänging",
+      "verb": "is implemented in 4 steps",
+      "object": "Transact - Create a TxF transaction using a legitimate executable then overwrite the file with malicious code; Load - Create a shared section of memory and load the malicious executable; Rollback - Undo changes to original executable; Animate - Create a process from the tainted section of memory and initiate execution"
+    }
+  ],
+  "T1055.014": [
+    {
+      "subject": "Adversaries",
+      "verb": "inject",
+      "object": "malicious code into processes via VDSO hijacking"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may hijack",
+      "object": "the syscall interface code stubs mapped into a process from the vdso shared object to execute syscalls to open and map a malicious shared object"
+    },
+    {
+      "subject": "This code",
+      "verb": "can then be invoked by redirecting",
+      "object": "the execution flow of the process via patched memory address references stored in a process' global offset table"
+    }
+  ],
+  "T1055.015": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "list-view controls to inject malicious code into hijacked processes"
+    },
+    {
+      "subject": "ListPlanting",
+      "verb": "may be performed by copying",
+      "object": "code into the virtual address space of a process that uses a list-view control then using that code as a custom callback for sorting the listed items"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "can use",
+      "object": "the PostMessage and/or SendMessage API functions to send LVM_SETITEMPOSITION and LVM_GETITEMPOSITION messages, effectively copying a payload 2 bytes at a time to the allocated memory"
+    },
+    {
+      "subject": "the payload",
+      "verb": "is triggered by sending",
+      "object": "the LVM_SORTITEMS message to the SysListView32 child of the process window"
+    }
+  ],
+  "T1056": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "methods of capturing user input to obtain credentials or collect information"
+    }
+  ],
+  "T1056.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "log",
+      "object": "user keystrokes to intercept credentials as the user types them"
+    },
+    {
+      "subject": "Some methods",
+      "verb": "include",
+      "object": "Hooking API callbacks used for processing keystrokes; Reading raw keystroke data from the hardware buffer; Windows Registry modifications; Custom drivers"
+    }
+  ],
+  "T1056.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "mimic",
+      "object": "common operating system GUI components to prompt users for credentials with a seemingly legitimate prompt"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may mimic",
+      "object": "common software authentication requests, such as those from browsers or email clients"
+    }
+  ],
+  "T1056.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "install",
+      "object": "code on externally facing portals, such as a VPN login page, to capture and transmit credentials of users who attempt to log into the service"
+    },
+    {
+      "subject": "a compromised login page",
+      "verb": "may log",
+      "object": "provided user credentials before logging the user in to the service"
+    }
+  ],
+  "T1056.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "hook into",
+      "object": "Windows application programming interface (API) functions and Linux system functions to collect user credentials"
+    },
+    {
+      "subject": "Hooks procedures",
+      "verb": "intercept and execute",
+      "object": "designated code in response to events such as messages, keystrokes, and mouse inputs"
+    },
+    {
+      "subject": "Import address table (IAT) hooking",
+      "verb": "use modifications to",
+      "object": "a process's IAT, where pointers to imported API functions are stored"
+    },
+    {
+      "subject": "Inline hooking",
+      "verb": "overwrites",
+      "object": "the first bytes in an API function to redirect code flow"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may hook into system functions via",
+      "object": "the LD_PRELOAD (Linux) or DYLD_INSERT_LIBRARIES (macOS) environment variables"
+    }
+  ],
+  "T1057": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to get",
+      "object": "information about running processes on a system"
+    }
+  ],
+  "T1059": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "command and script interpreters to execute commands, scripts, or binaries"
+    },
+    {
+      "subject": "Commands and scripts",
+      "verb": "can be embedded in",
+      "object": "Initial Access payloads delivered to victims as lure documents or as secondary payloads downloaded from an existing C2"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also execute",
+      "object": "commands through interactive terminals/shells, as well as utilize various Remote Services in order to achieve remote Execution"
+    }
+  ],
+  "T1059.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "PowerShell commands and scripts for execution"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can use PowerShell to perform",
+      "object": "a number of actions, including discovery of information and execution of code"
+    },
+    {
+      "subject": "PowerShell",
+      "verb": "may also be used to download and run",
+      "object": "executables from the Internet, which can be executed from disk or in memory without touching disk"
+    },
+    {
+      "subject": "PowerShell commands/scripts",
+      "verb": "can also be executed without directly invoking",
+      "object": "the powershell.exe binary through interfaces to PowerShell's underlying System.Management.Automation assembly DLL"
+    }
+  ],
+  "T1059.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "AppleScript for execution"
+    },
+    {
+      "subject": "AppleEvent messages",
+      "verb": "can be sent independently or easily scripted with",
+      "object": "AppleScript"
+    },
+    {
+      "subject": "These events",
+      "verb": "can locate",
+      "object": "open windows, send keystrokes, and interact with almost any open application locally or remotely"
+    },
+    {
+      "subject": "AppleScripts",
+      "verb": "can also be executed as",
+      "object": "plain text shell scripts by adding #!/usr/bin/osascript to the start of the script file"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse AppleScript to execute various behaviors such as",
+      "object": "interacting with an open SSH connection, moving to remote machines, and even presenting users with fake dialog boxes"
+    }
+  ],
+  "T1059.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "the Windows command shell for execution"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may leverage cmd to execute",
+      "object": "various commands and payloads"
+    }
+  ],
+  "T1059.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Unix shell commands and scripts for execution"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse Unix shells to execute",
+      "object": "various commands or payloads"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also leverage",
+      "object": "shell scripts to deliver and execute multiple commands on victims or as part of payloads used for persistence"
+    }
+  ],
+  "T1059.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Visual Basic (VB) for execution"
+    },
+    {
+      "subject": "VBA",
+      "verb": "enables",
+      "object": "documents to contain macros used to automate the execution of tasks and other functionality on the host"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may use",
+      "object": "VB payloads to execute malicious commands"
+    }
+  ],
+  "T1059.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Python commands and scripts for execution"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can use these libraries to",
+      "object": "download and execute commands or other scripts as well as perform various malicious behaviors"
+    }
+  ],
+  "T1059.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "various implementations of JavaScript for execution"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse various implementations of JavaScript to execute",
+      "object": "various behaviors including hosting malicious scripts on websites as part of a Drive-by Compromise or downloading and executing these script files as secondary payloads"
+    }
+  ],
+  "T1059.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "scripting or built-in command line interpreters (CLI) on network devices to execute malicious command and payloads"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can use the network CLI to change",
+      "object": "how network devices behave and operate"
+    },
+    {
+      "subject": "The CLI",
+      "verb": "may be used to",
+      "object": "manipulate traffic flows to intercept or manipulate data, modify startup configuration parameters to load malicious system software, or to disable security features or logging"
+    }
+  ],
+  "T1059.009": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "cloud APIs to execute malicious commands"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may abuse",
+      "object": "cloud APIs to invoke various functions that execute malicious actions"
+    }
+  ],
+  "T1059.010": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute",
+      "object": "commands and perform malicious tasks using AutoIT and AutoHotKey automation scripts"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "have used AHK to execute",
+      "object": "payloads and other modular malware such as keyloggers"
+    },
+    {
+      "subject": "These scripts",
+      "verb": "may also be compiled into",
+      "object": "self-contained executable payloads (.exe)"
+    }
+  ],
+  "T1059.011": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Lua commands and scripts for execution"
+    },
+    {
+      "subject": "Lua scripts",
+      "verb": "may be executed by adversaries for",
+      "object": "malicious purposes"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may incorporate, abuse, or replace",
+      "object": "existing Lua interpreters to allow for malicious Lua command execution at runtime"
+    }
+  ],
+  "T1059.012": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "hypervisor command line interpreters (CLIs) to execute malicious commands"
+    },
+    {
+      "subject": "tools such as esxcli and vim-cmd",
+      "verb": "allow administrators to",
+      "object": "configure firewall rules and log forwarding on the hypervisor, list virtual machines, start and stop virtual machines"
+    }
+  ],
+  "T1059.013": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "built-in CLI tools or API calls to execute malicious commands in containerized environments"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may leverage the Docker CLI, API, or SDK to",
+      "object": "pull or build Docker images, run containers, or execute commands inside running containers"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "call the API server via curl or other tools, allowing them to obtain",
+      "object": "further information about the environment such as pods, deployments, daemonsets, namespaces, or sysvars"
+    }
+  ],
+  "T1068": [
+    {
+      "subject": "Adversaries",
+      "verb": "exploit",
+      "object": "software vulnerabilities in an attempt to elevate privileges"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may bring",
+      "object": "a signed vulnerable driver onto a compromised machine so that they can exploit the vulnerability to execute code in kernel mode"
+    }
+  ],
+  "T1069": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to discover",
+      "object": "group and permission settings"
+    }
+  ],
+  "T1069.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to find",
+      "object": "local system groups and permission settings"
+    }
+  ],
+  "T1069.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to find",
+      "object": "domain-level groups and permission settings"
+    }
+  ],
+  "T1069.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to find",
+      "object": "cloud groups and permission settings"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may attempt to list",
+      "object": "ACLs for objects to determine the owner and other accounts with access to the object"
+    }
+  ],
+  "T1070": [
+    {
+      "subject": "Adversaries",
+      "verb": "delete or modify",
+      "object": "artifacts generated within systems to remove evidence of their presence or hinder defenses"
+    }
+  ],
+  "T1070.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "clear",
+      "object": "Windows Event Logs to hide the activity of an intrusion"
+    },
+    {
+      "subject": "the event logs",
+      "verb": "can be cleared with",
+      "object": "the following utility commands: wevtutil cl system, wevtutil cl application, wevtutil cl security"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may use",
+      "object": "the PowerShell command Remove-EventLog -LogName Security to delete the Security EventLog"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also attempt to clear logs by directly deleting",
+      "object": "the stored log files within C:\\Windows\\System32\\winevt\\logs\\"
+    }
+  ],
+  "T1070.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "clear",
+      "object": "system logs to hide evidence of an intrusion"
+    },
+    {
+      "subject": "native system logging",
+      "verb": "is stored under",
+      "object": "the /var/log/ directory"
+    }
+  ],
+  "T1070.003": [
+    {
+      "subject": "an adversary",
+      "verb": "may clear",
+      "object": "the command history of a compromised account to conceal the actions undertaken during an intrusion"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may delete their commands from these logs by manually clearing",
+      "object": "the history (history -c) or deleting the bash history file rm ~/.bash_history"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also leverage a Network Device CLI to clear",
+      "object": "command history data (clear logging and/or clear history)"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may run the PowerShell command Clear-History to flush",
+      "object": "the entire command history from a current PowerShell session"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also delete",
+      "object": "the ConsoleHost_history.txt file or edit its contents to hide PowerShell commands they have run"
+    }
+  ],
+  "T1070.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "delete",
+      "object": "files left behind by the actions of their intrusion activity"
+    }
+  ],
+  "T1070.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "remove",
+      "object": "share connections that are no longer useful in order to clean up traces of their operation"
+    }
+  ],
+  "T1070.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "file time attributes to hide new files or changes to existing files"
+    },
+    {
+      "subject": "Modifying the $SI attribute",
+      "verb": "is the most common method of timestomping because it can be modified at",
+      "object": "the user level using API calls"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "timestamps on files so that they do not appear conspicuous to forensic investigators"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may also engage in double timestomping by modifying",
+      "object": "times on both attributes simultaneously"
+    }
+  ],
+  "T1070.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "clear or remove",
+      "object": "evidence of malicious network connections in order to clean up traces of their operations"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may delete or modify",
+      "object": "this data to conceal indicators and/or impede defensive analysis"
+    }
+  ],
+  "T1070.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "mail and mail application data to remove evidence of their activity"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may manipulate",
+      "object": "emails and mailbox data to remove logs, artifacts, and metadata"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also remove",
+      "object": "emails and metadata/headers indicative of spam or suspicious activity"
+    }
+  ],
+  "T1070.009": [
+    {
+      "subject": "Adversaries",
+      "verb": "clear",
+      "object": "artifacts associated with previously established persistence on a host system to remove evidence of their activity"
+    },
+    {
+      "subject": "This",
+      "verb": "may involve",
+      "object": "removing services, deleting executables, Modify Registry, Plist File Modification, or other methods of cleanup"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also delete",
+      "object": "accounts previously created to maintain persistence"
+    }
+  ],
+  "T1070.010": [
+    {
+      "subject": "adversaries",
+      "verb": "reproduce",
+      "object": "copies of the same malware on the victim system to remove evidence of their presence and/or avoid defenses"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may copy and rename",
+      "object": "payloads to better blend into the local environment"
+    }
+  ],
+  "T1071": [
+    {
+      "subject": "Adversaries",
+      "verb": "communicate using",
+      "object": "OSI application layer protocols to avoid detection/network filtering by blending in with existing traffic"
+    }
+  ],
+  "T1071.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "communicate using",
+      "object": "application layer protocols associated with web traffic to avoid detection/network filtering"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may abuse",
+      "object": "these protocols to communicate with systems under their control within a victim network while also mimicking normal, expected traffic"
+    }
+  ],
+  "T1071.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "communicate using",
+      "object": "application layer protocols associated with transferring files to avoid detection/network filtering"
+    }
+  ],
+  "T1071.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "communicate using",
+      "object": "application layer protocols associated with electronic mail delivery to avoid detection/network filtering"
+    }
+  ],
+  "T1071.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "communicate using",
+      "object": "the Domain Name System (DNS) application layer protocol to avoid detection/network filtering"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may abuse DNS to communicate with",
+      "object": "systems under their control within a victim network while also mimicking normal, expected traffic"
+    },
+    {
+      "subject": "A DNS beacon",
+      "verb": "is created by tunneling",
+      "object": "DNS traffic"
+    }
+  ],
+  "T1071.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "communicate using",
+      "object": "publish/subscribe (pub/sub) application layer protocols to avoid detection/network filtering"
+    }
+  ],
+  "T1072": [
+    {
+      "subject": "Adversaries",
+      "verb": "gain access to and use",
+      "object": "centralized software suites installed within an enterprise to execute commands and move laterally through the network"
+    },
+    {
+      "subject": "Access to network-wide or enterprise-wide endpoint management software",
+      "verb": "may enable an adversary to achieve",
+      "object": "remote code execution on all connected systems"
+    }
+  ],
+  "T1074": [
+    {
+      "subject": "Adversaries",
+      "verb": "stage",
+      "object": "collected data in a central location or directory prior to Exfiltration"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may Create Cloud Instance and stage",
+      "object": "data in that instance"
+    }
+  ],
+  "T1074.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "stage",
+      "object": "collected data in a central location or directory on the local system prior to Exfiltration"
+    }
+  ],
+  "T1074.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "stage",
+      "object": "data collected from multiple systems in a central location or directory on one system prior to Exfiltration"
+    }
+  ],
+  "T1078": [
+    {
+      "subject": "Adversaries",
+      "verb": "obtain and abuse",
+      "object": "credentials of existing accounts as a means of gaining Initial Access, Persistence, Privilege Escalation, or Defense Evasion"
+    },
+    {
+      "subject": "Compromised credentials",
+      "verb": "may be used to bypass",
+      "object": "access controls placed on various resources on systems within the network"
+    }
+  ],
+  "T1078.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "obtain and abuse",
+      "object": "credentials of a default account"
+    },
+    {
+      "subject": "Default accounts",
+      "verb": "include",
+      "object": "default factory/provider set accounts on other types of systems, software, or devices, including the root user account in AWS, the root user account in ESXi, and the default service account in Kubernetes"
+    }
+  ],
+  "T1078.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "obtain and abuse",
+      "object": "credentials of a domain account"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may compromise",
+      "object": "domain accounts, some with a high level of privileges, through various means such as OS Credential Dumping or password reuse"
+    }
+  ],
+  "T1078.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "obtain and abuse",
+      "object": "credentials of a local account"
+    }
+  ],
+  "T1078.004": [
+    {
+      "subject": "adversaries",
+      "verb": "may perform actions to achieve",
+      "object": "Initial Access, Persistence, Privilege Escalation, or Defense Evasion using cloud accounts"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may create",
+      "object": "long lasting Additional Cloud Credentials on a compromised cloud account to maintain persistence"
+    },
+    {
+      "subject": "Cloud accounts",
+      "verb": "may also be able to assume",
+      "object": "Temporary Elevated Cloud Access or other privileges through various means within the environment"
+    }
+  ],
+  "T1080": [
+    {
+      "subject": "Adversaries",
+      "verb": "deliver",
+      "object": "payloads to remote systems by adding content to shared storage locations, such as network drives or internal code repositories"
+    },
+    {
+      "subject": "A directory share pivot",
+      "verb": "uses Shortcut Modification of directory .LNK files that use Masquerading to look like",
+      "object": "the real directories, which are hidden through Hidden Files and Directories"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also compromise shared network directories through",
+      "object": "binary infections by appending or prepending its code to the healthy binary on the shared network directory"
+    }
+  ],
+  "T1082": [
+    {
+      "subject": "An adversary",
+      "verb": "attempt to get",
+      "object": "detailed information about the operating system and hardware, including version, patches, hotfixes, service packs, and architecture"
+    }
+  ],
+  "T1083": [
+    {
+      "subject": "Adversaries",
+      "verb": "enumerate",
+      "object": "files and directories or may search in specific locations of a host or network share for certain information within a file system"
+    }
+  ],
+  "T1087": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to get",
+      "object": "a listing of valid accounts, usernames, or email addresses on a system or within a compromised environment"
+    }
+  ],
+  "T1087.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to get",
+      "object": "a listing of local system accounts"
+    }
+  ],
+  "T1087.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to get",
+      "object": "a listing of domain accounts"
+    }
+  ],
+  "T1087.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to get",
+      "object": "a listing of email addresses and accounts"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may try to dump",
+      "object": "Exchange address lists such as global address lists (GALs)"
+    }
+  ],
+  "T1087.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to get",
+      "object": "a listing of cloud accounts"
+    }
+  ],
+  "T1090": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "a connection proxy to direct network traffic between systems or act as an intermediary for network communications to a command and control server"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may chain together",
+      "object": "multiple proxies to further disguise the source of malicious traffic"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can also take advantage of",
+      "object": "routing schemes in Content Delivery Networks (CDNs) to proxy command and control traffic"
+    }
+  ],
+  "T1090.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "an internal proxy to direct command and control traffic between two or more systems in a compromised environment"
+    }
+  ],
+  "T1090.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "an external proxy to act as an intermediary for network communications to a command and control server"
+    }
+  ],
+  "T1090.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "chain together",
+      "object": "multiple proxies to disguise the source of malicious traffic"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may construct or use",
+      "object": "onion routing networks - such as the publicly available Tor network - to transport encrypted C2 traffic through a compromised population"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may leverage multiple compromised devices to create",
+      "object": "a multi-hop proxy chain"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may add custom code to",
+      "object": "the affected network devices that will implement onion routing between those nodes"
+    }
+  ],
+  "T1090.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "take advantage of",
+      "object": "routing schemes in Content Delivery Networks (CDNs) and other services which host multiple domains to obfuscate the intended destination of HTTPS traffic"
+    },
+    {
+      "subject": "Domain fronting",
+      "verb": "involves using",
+      "object": "different domain names in the SNI field of the TLS header and the Host field of the HTTP header"
+    }
+  ],
+  "T1091": [
+    {
+      "subject": "Adversaries",
+      "verb": "move onto systems by copying",
+      "object": "malware to removable media and taking advantage of Autorun features when the media is inserted into a system and executes"
+    },
+    {
+      "subject": "Mobile devices",
+      "verb": "may also be used to infect",
+      "object": "PCs with malware if connected via USB"
+    }
+  ],
+  "T1092": [
+    {
+      "subject": "Adversaries",
+      "verb": "perform",
+      "object": "command and control between compromised hosts on potentially disconnected networks using removable media to transfer commands from system to system"
+    }
+  ],
+  "T1095": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "an OSI non-application layer protocol for communication between host and C2 server or among infected hosts within a network"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may leverage",
+      "object": "the Virtual Machine Communication Interface (VMCI) for communication between guest virtual machines and the ESXi host"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may persistently regain access from any guest VM to",
+      "object": "the compromised ESXi host's backdoor by adding a VMCI backdoor"
+    }
+  ],
+  "T1098": [
+    {
+      "subject": "Adversaries",
+      "verb": "manipulate",
+      "object": "accounts to maintain and/or elevate access to victim systems"
+    },
+    {
+      "subject": "Account manipulation",
+      "verb": "may consist of",
+      "object": "any action that preserves or modifies adversary access to a compromised account, such as modifying credentials or permission groups"
+    }
+  ],
+  "T1098.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "add",
+      "object": "adversary-controlled credentials to a cloud account to maintain persistent access to victim accounts and instances within the environment"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may generate or import",
+      "object": "their own SSH keys using either the CreateKeyPair or ImportKeyPair API in AWS or the gcloud compute os-login ssh-keys add command in GCP"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also use",
+      "object": "the CreateAccessKey API in AWS or the gcloud iam service-accounts keys create command in GCP to add access keys to an account"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also use",
+      "object": "the CreateLoginProfile API in AWS to add a password that can be used to log into the AWS Management Console"
+    }
+  ],
+  "T1098.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "grant",
+      "object": "additional permission levels to maintain persistent access to an adversary-controlled email account"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also assign",
+      "object": "mailbox folder permissions through individual folder permissions or roles"
+    }
+  ],
+  "T1098.003": [
+    {
+      "subject": "An adversary",
+      "verb": "may add",
+      "object": "additional roles or permissions to an adversary-controlled cloud account to maintain persistent access to a tenant"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may update",
+      "object": "IAM policies in cloud-based environments or add a new global administrator in Office 365 environments"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may be able to use",
+      "object": "the CreatePolicyVersion API to define a new version of an IAM policy or the AttachUserPolicy API to attach an IAM policy with additional or distinct permissions to a compromised user account"
+    }
+  ],
+  "T1098.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "the SSH authorized_keys file to maintain persistence on a victim host"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may modify",
+      "object": "SSH authorized_keys files directly with scripts or shell commands to add their own adversary-supplied public keys"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may add SSH keys to",
+      "object": "a user account via the Google Cloud CLI's add-metadata command or update the authorized_keys file of a virtual machine via a PATCH request to the API in Azure"
+    }
+  ],
+  "T1098.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "register",
+      "object": "a device to an adversary-controlled account"
+    },
+    {
+      "subject": "An adversary that compromises a user's credentials",
+      "verb": "may enroll",
+      "object": "a new device in order to bypass initial MFA requirements and gain persistent access to a network"
+    }
+  ],
+  "T1098.006": [
+    {
+      "subject": "An adversary",
+      "verb": "may add",
+      "object": "additional roles or permissions to an adversary-controlled user or service account to maintain persistent access to a container orchestration system"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may create",
+      "object": "a RoleBinding or a ClusterRoleBinding to bind a Role or ClusterRole to a Kubernetes account"
+    }
+  ],
+  "T1098.007": [
+    {
+      "subject": "An adversary",
+      "verb": "may add",
+      "object": "additional local or domain groups to an adversary-controlled account to maintain persistent access to a system or domain"
+    },
+    {
+      "subject": "accounts",
+      "verb": "may be added to",
+      "object": "the local administrators group on Windows devices to maintain elevated privileges"
+    },
+    {
+      "subject": "accounts",
+      "verb": "may also be added to",
+      "object": "the Remote Desktop Users group"
+    },
+    {
+      "subject": "accounts",
+      "verb": "may be added to",
+      "object": "the sudoers group on Linux, allowing them to persistently leverage Sudo and Sudo Caching for elevated privileges"
+    }
+  ],
+  "T1102": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "an existing, legitimate external Web service as a means for relaying data to/from a compromised system"
+    }
+  ],
+  "T1102.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "an existing, legitimate external Web service to host information that points to additional command and control (C2) infrastructure"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "post",
+      "object": "content, known as a dead drop resolver, on Web services with embedded (and often obfuscated/encoded) domains or IP addresses"
+    }
+  ],
+  "T1102.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "an existing, legitimate external Web service as a means for sending commands to and receiving output from a compromised system over the Web service channel"
+    }
+  ],
+  "T1102.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "an existing, legitimate external Web service as a means for sending commands to a compromised system without receiving return output over the Web service channel"
+    }
+  ],
+  "T1104": [
+    {
+      "subject": "Adversaries",
+      "verb": "create",
+      "object": "multiple stages for command and control that are employed under different conditions or for certain functions"
+    },
+    {
+      "subject": "A second remote access tool (RAT)",
+      "verb": "could be uploaded to redirect",
+      "object": "the host to the second-stage command and control server"
+    }
+  ],
+  "T1105": [
+    {
+      "subject": "Adversaries",
+      "verb": "transfer",
+      "object": "tools or other files from an external system into a compromised environment"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may also transfer/spread",
+      "object": "tools between victim devices within a compromised environment"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may use",
+      "object": "various utilities to download tools, such as copy, finger, certutil, and PowerShell commands"
+    }
+  ],
+  "T1106": [
+    {
+      "subject": "Adversaries",
+      "verb": "interact with",
+      "object": "the native OS application programming interface (API) to execute behaviors"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may use",
+      "object": "assembly to directly or in-directly invoke syscalls in an attempt to subvert defensive sensors and detection signatures"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also attempt to tamper with",
+      "object": "sensors and defensive tools associated with API monitoring, such as unhooking monitored functions"
+    }
+  ],
+  "T1110": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "brute force techniques to gain access to accounts when passwords are unknown or when password hashes are obtained"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may systematically guess",
+      "object": "the password using a repetitive or iterative mechanism"
+    }
+  ],
+  "T1110.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "guess",
+      "object": "passwords to attempt access to accounts"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may guess",
+      "object": "login credentials without prior knowledge of system or environment passwords during an operation by using a list of common passwords"
+    }
+  ],
+  "T1110.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "password cracking to attempt to recover usable credentials, such as plaintext passwords, when credential material such as password hashes are obtained"
+    },
+    {
+      "subject": "the adversary",
+      "verb": "may use",
+      "object": "a pre-computed rainbow table to crack hashes"
+    }
+  ],
+  "T1110.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "a single or small list of commonly used passwords against many different accounts to attempt to acquire valid account credentials"
+    }
+  ],
+  "T1110.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "credentials obtained from breach dumps of unrelated accounts to gain access to target accounts through credential overlap"
+    }
+  ]
+}
