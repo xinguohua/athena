@@ -4312,5 +4312,717 @@
       "verb": "modify",
       "object": "visual content available internally or externally to an enterprise network, thus affecting the integrity of the original content"
     }
+  ],
+  "T1491.001": [
+    {
+      "subject": "An adversary",
+      "verb": "deface",
+      "object": "systems internal to an organization in an attempt to intimidate or mislead users"
+    }
+  ],
+  "T1491.002": [
+    {
+      "subject": "An adversary",
+      "verb": "deface",
+      "object": "systems external to an organization in an attempt to deliver messaging, intimidate, or otherwise mislead an organization or users"
+    }
+  ],
+  "T1495": [
+    {
+      "subject": "Adversaries",
+      "verb": "overwrite or corrupt",
+      "object": "the flash memory contents of system BIOS or other firmware in devices attached to a system in order to render them inoperable or unable to boot"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may manipulate, overwrite, or corrupt",
+      "object": "firmware in order to deny the use of the system or devices"
+    }
+  ],
+  "T1496": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "the resources of co-opted systems to complete resource-intensive tasks"
+    }
+  ],
+  "T1496.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "the compute resources of co-opted systems to complete resource-intensive tasks"
+    },
+    {
+      "subject": "some cryptocurrency mining malware",
+      "verb": "identify then kill off",
+      "object": "processes for competing malware"
+    }
+  ],
+  "T1496.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "the network bandwidth resources of co-opted systems"
+    },
+    {
+      "subject": "they",
+      "verb": "may engage in proxyjacking by selling use of",
+      "object": "the victims' network bandwidth and IP address to proxyware services"
+    }
+  ],
+  "T1496.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "messaging services for SMS pumping"
+    },
+    {
+      "subject": "a threat actor",
+      "verb": "first obtains",
+      "object": "a set of phone numbers from a telecommunications provider then leverages a victim's messaging infrastructure to send large amounts of SMS messages"
+    }
+  ],
+  "T1496.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "compromised software-as-a-service (SaaS) applications to complete resource-intensive tasks"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may leverage",
+      "object": "email and messaging services, such as AWS Simple Email Service (SES), AWS Simple Notification Service (SNS), SendGrid, and Twilio, in order to send large quantities of spam / Phishing emails and SMS messages"
+    },
+    {
+      "subject": "they",
+      "verb": "may engage in LLMJacking by leveraging",
+      "object": "reverse proxies to hijack the power of cloud-hosted AI models"
+    }
+  ],
+  "T1497": [
+    {
+      "subject": "Adversaries",
+      "verb": "employ",
+      "object": "various means to detect and avoid virtualization and analysis environments"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also check for",
+      "object": "legitimate user activity to help determine if it is in an analysis environment"
+    }
+  ],
+  "T1497.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "employ",
+      "object": "various system checks to detect and avoid virtualization and analysis environments"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may search for",
+      "object": "VME artifacts in memory, processes, file system, hardware, and/or the Registry"
+    }
+  ],
+  "T1497.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "employ",
+      "object": "various user activity checks to detect and avoid virtualization and analysis environments"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may search for",
+      "object": "user activity on the host based on variables such as the speed/frequency of mouse movements and clicks, browser history, cache, bookmarks, or number of files in common directories"
+    }
+  ],
+  "T1497.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "employ",
+      "object": "various time-based methods to detect virtualization and analysis environments"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may use calls like",
+      "object": "GetTickCount and GetSystemTimeAsFileTime to discover if they are operating within a virtual machine or sandbox"
+    }
+  ],
+  "T1498": [
+    {
+      "subject": "Adversaries",
+      "verb": "perform",
+      "object": "Network Denial of Service (DoS) attacks to degrade or block the availability of targeted resources to users"
+    }
+  ],
+  "T1498.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to cause",
+      "object": "a denial of service (DoS) by directly sending a high-volume of network traffic to a target"
+    }
+  ],
+  "T1498.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to cause",
+      "object": "a denial of service (DoS) by reflecting a high-volume of network traffic to a target"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "accomplishes a reflection attack by sending",
+      "object": "packets to reflectors with the spoofed address of the victim"
+    }
+  ],
+  "T1499": [
+    {
+      "subject": "Adversaries",
+      "verb": "perform",
+      "object": "Endpoint Denial of Service (DoS) attacks to degrade or block the availability of services to users"
+    }
+  ],
+  "T1499.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "launch",
+      "object": "a denial of service (DoS) attack targeting an endpoint's operating system (OS)"
+    },
+    {
+      "subject": "excessive amounts of SYN packets",
+      "verb": "are sent but",
+      "object": "the 3-way TCP handshake is never completed"
+    },
+    {
+      "subject": "A flood of ACK packets",
+      "verb": "are sent to",
+      "object": "the target, forcing the OS to search its state table for a related TCP connection"
+    }
+  ],
+  "T1499.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "target",
+      "object": "the different network services provided by systems to conduct a denial of service (DoS)"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "sends",
+      "object": "a large number of HTTP requests to a web server to overwhelm it"
+    },
+    {
+      "subject": "a SSL renegotiation attack",
+      "verb": "takes advantage of",
+      "object": "a protocol feature in SSL/TLS"
+    }
+  ],
+  "T1499.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "target",
+      "object": "resource intensive features of applications to cause a denial of service (DoS)"
+    }
+  ],
+  "T1499.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "exploit",
+      "object": "software vulnerabilities that can cause an application or system to crash and deny availability to users"
+    }
+  ],
+  "T1505": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "legitimate extensible development features of servers to establish persistent access to systems"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may install",
+      "object": "malicious components to extend and abuse server applications"
+    }
+  ],
+  "T1505.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "SQL stored procedures to establish persistent access to systems"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may craft",
+      "object": "malicious stored procedures that can provide a persistence mechanism in SQL database servers"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may craft or modify",
+      "object": "CLR assemblies that are linked to stored procedures since these CLR assemblies can be made to execute arbitrary commands"
+    }
+  ],
+  "T1505.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Microsoft transport agents to establish persistent access to systems"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may register",
+      "object": "a malicious transport agent to provide a persistence mechanism in Exchange Server that can be triggered by adversary-specified email events"
+    }
+  ],
+  "T1505.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "backdoor",
+      "object": "web servers with web shells to establish persistent access to systems"
+    },
+    {
+      "subject": "A Web shell",
+      "verb": "is a Web script that is placed on",
+      "object": "an openly accessible Web server to allow an adversary to access the Web server as a gateway into a network"
+    }
+  ],
+  "T1505.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "install",
+      "object": "malicious components that run on Internet Information Services (IIS) web servers to establish persistence"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may install malicious ISAPI extensions and filters to",
+      "object": "observe and/or modify traffic, execute commands on compromised machines, or proxy command and control traffic"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also install malicious IIS modules to",
+      "object": "observe and/or modify traffic"
+    }
+  ],
+  "T1505.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "components of Terminal Services to enable persistent access to systems"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may modify and/or replace",
+      "object": "the Terminal Services DLL to enable persistent access to victimized hosts"
+    }
+  ],
+  "T1505.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "vSphere Installation Bundles (VIBs) to establish persistent access to ESXi hypervisors"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may leverage malicious VIB packages to maintain",
+      "object": "persistent access to ESXi hypervisors, allowing system changes to be executed upon each bootup of ESXi"
+    }
+  ],
+  "T1518": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to get",
+      "object": "a listing of software and software versions that are installed on a system or in a cloud environment"
+    }
+  ],
+  "T1518.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to get",
+      "object": "a listing of security software, configurations, defensive tools, and sensors that are installed on a system or in a cloud environment"
+    }
+  ],
+  "T1518.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to get",
+      "object": "a listing of backup software or configurations that are installed on a system"
+    }
+  ],
+  "T1525": [
+    {
+      "subject": "Adversaries",
+      "verb": "implant",
+      "object": "cloud or container images with malicious code to establish persistence after gaining access to an environment"
+    }
+  ],
+  "T1526": [
+    {
+      "subject": "An adversary",
+      "verb": "attempt to enumerate",
+      "object": "the cloud services running on a system after gaining access"
+    }
+  ],
+  "T1528": [
+    {
+      "subject": "Adversaries",
+      "verb": "steal",
+      "object": "application access tokens as a means of acquiring credentials to access remote systems and resources"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may be able to steal",
+      "object": "the container's token and thereby gain access to Kubernetes API commands"
+    },
+    {
+      "subject": "an adversary who compromises a resource with an attached Managed Identity",
+      "verb": "can request",
+      "object": "short-lived tokens through the Azure Instance Metadata Service (IMDS)"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "will need to complete registration of their application with",
+      "object": "the authorization server, for example Microsoft Identity Platform using Azure Portal"
+    },
+    {
+      "subject": "they",
+      "verb": "can send a Spearphishing Link to the target user to entice them to grant",
+      "object": "access to the application"
+    }
+  ],
+  "T1529": [
+    {
+      "subject": "Adversaries",
+      "verb": "shutdown/reboot",
+      "object": "systems to interrupt access to, or aid in the destruction of, those systems"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also use",
+      "object": "Windows API functions, such as InitializeSystemShutdownExW or ExitWindowsEx, to force a system to shut down or reboot"
+    }
+  ],
+  "T1530": [
+    {
+      "subject": "Adversaries",
+      "verb": "access",
+      "object": "data from cloud storage"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may collect",
+      "object": "sensitive data from these cloud storage solutions"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also obtain then abuse",
+      "object": "leaked credentials from source repositories, logs, or other means as a way to gain access to cloud storage objects"
+    }
+  ],
+  "T1531": [
+    {
+      "subject": "Adversaries",
+      "verb": "interrupt",
+      "object": "availability of system and network resources by inhibiting access to accounts utilized by legitimate users"
+    },
+    {
+      "subject": "Accounts",
+      "verb": "may be deleted, locked, or manipulated",
+      "object": "to remove access to accounts"
+    }
+  ],
+  "T1534": [
+    {
+      "subject": "adversaries",
+      "verb": "use",
+      "object": "internal spearphishing to gain access to additional information or compromise other users within the same organization"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may leverage",
+      "object": "Spearphishing Attachment or Spearphishing Link as part of internal spearphishing to deliver a payload or redirect to an external site to capture credentials"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also leverage",
+      "object": "internal chat apps, such as Microsoft Teams, to spread malicious content"
+    }
+  ],
+  "T1535": [
+    {
+      "subject": "Adversaries",
+      "verb": "create",
+      "object": "cloud instances in unused geographic service regions in order to evade detection"
+    }
+  ],
+  "T1537": [
+    {
+      "subject": "Adversaries",
+      "verb": "exfiltrate",
+      "object": "data by transferring the data, including through sharing/syncing and creating backups of cloud environments, to another cloud account they control"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also use cloud-native mechanisms to share",
+      "object": "victim data with adversary-controlled cloud accounts, such as creating anonymous file sharing links or a shared access signature (SAS) URI"
+    }
+  ],
+  "T1538": [
+    {
+      "subject": "An adversary",
+      "verb": "use",
+      "object": "a cloud service dashboard GUI with stolen credentials to gain useful information from an operational cloud environment"
+    }
+  ],
+  "T1539": [
+    {
+      "subject": "An adversary",
+      "verb": "steal",
+      "object": "web application or service session cookies and use them to gain access to web applications or Internet services as an authenticated user without needing credentials"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also steal cookies by injecting",
+      "object": "malicious JavaScript content into websites or relying on User Execution by tricking victims into running malicious JavaScript in their browser"
+    }
+  ],
+  "T1542": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Pre-OS Boot mechanisms as a way to establish persistence on a system"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may overwrite",
+      "object": "data in boot drivers or firmware such as BIOS and The Unified Extensible Firmware Interface (UEFI) to persist on systems at a layer below the operating system"
+    }
+  ],
+  "T1542.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "system firmware to persist on systems"
+    },
+    {
+      "subject": "Capabilities exist to overwrite",
+      "object": "the system firmware, which may give sophisticated adversaries a means to install malicious firmware updates"
+    }
+  ],
+  "T1542.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "component firmware to persist on systems"
+    },
+    {
+      "subject": "Malicious component firmware",
+      "verb": "could provide",
+      "object": "both a persistent level of access to systems despite potential typical failures to maintain access and hard disk re-images"
+    }
+  ],
+  "T1542.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "bootkits to persist on systems"
+    },
+    {
+      "subject": "An adversary who has raw access to the boot drive",
+      "verb": "may overwrite",
+      "object": "the MBR, diverting execution during startup from the normal boot loader to adversary code"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may create or modify",
+      "object": "files in the EFI system partition (ESP)"
+    }
+  ],
+  "T1542.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "the ROM Monitor (ROMMON) by loading an unauthorized firmware with adversary code"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may upgrade",
+      "object": "the ROMMON image locally or remotely (for example, through TFTP) with adversary code and restart the device in order to overwrite the existing ROMMON image"
+    }
+  ],
+  "T1542.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "netbooting to load an unauthorized network device operating system from a Trivial File Transfer Protocol (TFTP) server"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may manipulate the configuration on the network device specifying use of",
+      "object": "a malicious TFTP server"
+    }
+  ],
+  "T1543": [
+    {
+      "subject": "Adversaries",
+      "verb": "create or modify",
+      "object": "system-level processes to repeatedly execute malicious payloads as part of persistence"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may install",
+      "object": "new services, daemons, or agents that can be configured to execute at startup or a repeatable interval"
+    }
+  ],
+  "T1543.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "create or modify",
+      "object": "launch agents to repeatedly execute malicious payloads as part of persistence"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may install a new Launch Agent that executes at login by placing",
+      "object": "a .plist file into the appropriate folders with the RunAtLoad or KeepAlive keys set to true"
+    }
+  ],
+  "T1543.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "create or modify",
+      "object": "systemd services to repeatedly execute malicious payloads as part of persistence"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "have created new service files, altered the commands a .service file's directive executes, and modified",
+      "object": "the user directive a .service file executes as, which could result in privilege escalation"
+    }
+  ],
+  "T1543.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "create or modify",
+      "object": "Windows services to repeatedly execute malicious payloads as part of persistence"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may install a new service or modify",
+      "object": "an existing service to execute at startup in order to persist on a system"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also use services to install and execute",
+      "object": "malicious drivers"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also create",
+      "object": "'hidden' services, for example by using the sc sdset command to set service permissions via the Service Descriptor Definition Language (SDDL)"
+    }
+  ],
+  "T1543.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "create or modify",
+      "object": "Launch Daemons to execute malicious payloads as part of persistence"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may install a Launch Daemon configured to execute at startup by using",
+      "object": "the RunAtLoad parameter set to true and the Program parameter set to the malicious executable path"
+    }
+  ],
+  "T1543.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "create or modify",
+      "object": "container or container cluster management tools that run as daemons, agents, or services on individual hosts"
+    },
+    {
+      "subject": "a container",
+      "verb": "can be configured to",
+      "object": "persistently restart on the host by using the docker run or podman run command with the restart=always directive"
+    },
+    {
+      "subject": "DaemonSets",
+      "verb": "allow an adversary to persistently",
+      "object": "Deploy Containers on all nodes, including ones added later to the cluster"
+    }
+  ],
+  "T1546": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence and/or elevate privileges using",
+      "object": "system mechanisms that trigger execution based on specific events"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may create/modify",
+      "object": "event triggers to point to malicious content that will be executed whenever the event trigger is invoked"
+    }
+  ],
+  "T1546.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence by executing malicious content triggered by",
+      "object": "a file type association"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can modify these values to continually execute",
+      "object": "arbitrary commands"
+    }
+  ],
+  "T1546.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence by executing malicious content triggered by",
+      "object": "user inactivity"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can use screensaver settings to maintain persistence by setting the screensaver to run",
+      "object": "malware after a certain timeframe of user inactivity"
+    }
+  ],
+  "T1546.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence and elevate privileges by executing malicious content triggered by",
+      "object": "a Windows Management Instrumentation (WMI) event subscription"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may use the capabilities of WMI to subscribe to an event and execute",
+      "object": "arbitrary code when that event occurs"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also compile WMI scripts using mofcomp.exe into",
+      "object": "Windows Management Object (MOF) files (.mof extension) that can be used to create a malicious subscription"
+    }
+  ],
+  "T1546.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence through executing malicious commands triggered by",
+      "object": "a user's shell"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may attempt to establish persistence by inserting commands into",
+      "object": "scripts automatically executed by shells"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may add commands that launch malicious binaries into",
+      "object": "the /etc/profile and /etc/profile.d files"
+    }
+  ],
+  "T1546.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence by executing malicious content triggered by",
+      "object": "an interrupt signal"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can use this to register code to be executed when the shell encounters",
+      "object": "specific interrupts as a persistence mechanism"
+    }
   ]
 }
