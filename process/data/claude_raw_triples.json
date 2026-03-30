@@ -1563,9 +1563,24 @@
       "object": "a file-less variation of Process Injection"
     },
     {
-      "subject": "Process Doppelgänging",
-      "verb": "is implemented by",
-      "object": "creating a TxF transaction, loading a shared section of memory, rolling back changes to original executable, and creating a process from the tainted section"
+      "subject": "Process Doppelgänging step 1 Transact",
+      "verb": "Create",
+      "object": "a TxF transaction using a legitimate executable then overwrite the file with malicious code"
+    },
+    {
+      "subject": "Process Doppelgänging step 2 Load",
+      "verb": "Create",
+      "object": "a shared section of memory and load the malicious executable"
+    },
+    {
+      "subject": "Process Doppelgänging step 3 Rollback",
+      "verb": "Undo",
+      "object": "changes to original executable, effectively removing malicious code from the file system"
+    },
+    {
+      "subject": "Process Doppelgänging step 4 Animate",
+      "verb": "Create",
+      "object": "a process from the tainted section of memory and initiate execution"
     }
   ],
   "T1055.014": [
