@@ -3892,5 +3892,425 @@
       "verb": "may also be elevated to",
       "object": "SYSTEM privileges if the AlwaysInstallElevated policy is enabled"
     }
+  ],
+  "T1218.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "odbcconf.exe to proxy execution of malicious payloads"
+    },
+    {
+      "subject": "odbcconf.exe",
+      "verb": "has a REGSVR flag that can be misused to execute",
+      "object": "DLLs"
+    }
+  ],
+  "T1218.009": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Regsvcs and Regasm to proxy execution of code through a trusted Windows utility"
+    }
+  ],
+  "T1218.010": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Regsvr32.exe to proxy execution of malicious code"
+    },
+    {
+      "subject": "Regsvr32.exe",
+      "verb": "can also be used to specifically bypass application control using functionality to load",
+      "object": "COM scriptlets to execute DLLs under user permissions"
+    },
+    {
+      "subject": "Regsvr32.exe",
+      "verb": "can also be leveraged to register",
+      "object": "a COM Object used to establish persistence via Component Object Model Hijacking"
+    }
+  ],
+  "T1218.011": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "rundll32.exe to proxy execution of malicious code"
+    },
+    {
+      "subject": "Rundll32.exe",
+      "verb": "can also be used to execute",
+      "object": "Control Panel Item files (.cpl) through the undocumented shell32.dll functions"
+    },
+    {
+      "subject": "Rundll32",
+      "verb": "can also be used to execute",
+      "object": "scripts such as JavaScript"
+    },
+    {
+      "subject": "Threat actors",
+      "verb": "may also abuse",
+      "object": "legitimate, signed system DLLs (e.g., zipfldr.dll, ieframe.dll) with rundll32.exe to execute malicious programs or scripts indirectly"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also attempt to obscure malicious code by abusing",
+      "object": "the manner in which rundll32.exe loads DLL function names"
+    }
+  ],
+  "T1218.012": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "verclsid.exe to proxy execution of malicious code"
+    },
+    {
+      "subject": "COM payloads executed by verclsid.exe",
+      "verb": "may be able to perform",
+      "object": "various malicious actions, such as loading and executing COM scriptlets (SCT) from remote servers"
+    }
+  ],
+  "T1218.013": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "mavinject.exe to proxy execution of malicious code"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse mavinject.exe to inject",
+      "object": "malicious DLLs into running processes"
+    },
+    {
+      "subject": "Mavinject.exe",
+      "verb": "can also be abused to perform",
+      "object": "import descriptor injection via its /HMODULE command-line parameter"
+    }
+  ],
+  "T1218.014": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "mmc.exe to proxy execution of malicious .msc files"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also abuse MMC to execute",
+      "object": "malicious .msc files"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may first create",
+      "object": "a malicious registry Class Identifier (CLSID) subkey then create custom consoles with the Link to Web Address snap-in linked to the malicious CLSID subkey"
+    }
+  ],
+  "T1218.015": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "components of the Electron framework to execute malicious code"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may also be able to perform",
+      "object": "malicious functions in the background potentially disguised as legitimate tools within the framework"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also execute",
+      "object": "malicious content by planting malicious JavaScript within Electron applications"
+    }
+  ],
+  "T1219": [
+    {
+      "subject": "An adversary",
+      "verb": "use",
+      "object": "legitimate remote access tools to establish an interactive command and control channel within a network"
+    },
+    {
+      "subject": "Remote access tools",
+      "verb": "may be installed and used post-compromise as",
+      "object": "an alternate communications channel for redundant access or to establish an interactive remote desktop session with the target system"
+    }
+  ],
+  "T1219.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Integrated Development Environment (IDE) software with remote development features to establish an interactive command and control channel on target systems"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may use IDE tunneling for persistence with",
+      "object": "automatic reconnection and auto-launch at startup, re-establishing the tunnel upon execution"
+    }
+  ],
+  "T1219.002": [
+    {
+      "subject": "An adversary",
+      "verb": "use",
+      "object": "legitimate desktop support software to establish an interactive command and control channel to target systems within networks"
+    }
+  ],
+  "T1219.003": [
+    {
+      "subject": "An adversary",
+      "verb": "use",
+      "object": "legitimate remote access hardware to establish an interactive command and control channel to target systems within networks"
+    },
+    {
+      "subject": "Remote access hardware",
+      "verb": "may be physically installed and used post-compromise as",
+      "object": "an alternate communications channel for redundant access or as a way to establish an interactive remote session with the target system"
+    }
+  ],
+  "T1220": [
+    {
+      "subject": "Adversaries",
+      "verb": "bypass application control and obscure execution of code by embedding",
+      "object": "scripts inside XSL files"
+    },
+    {
+      "subject": "the Microsoft common line transformation utility binary (msxsl.exe)",
+      "verb": "can be installed and used to execute",
+      "object": "malicious JavaScript embedded within local or remote (URL referenced) XSL files"
+    }
+  ],
+  "T1221": [
+    {
+      "subject": "Adversaries",
+      "verb": "create or modify",
+      "object": "references in user document templates to conceal malicious code or force authentication attempts"
+    },
+    {
+      "subject": "Template references injected into a document",
+      "verb": "may enable",
+      "object": "malicious payloads to be fetched and executed when the document is loaded"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may alter",
+      "object": "the bytes of an existing .rtf file to insert a template control word field to include a URL resource of a malicious payload"
+    }
+  ],
+  "T1222": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "file or directory permissions/attributes to evade access control lists (ACLs) and access protected files"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also change",
+      "object": "permissions of symbolic links"
+    }
+  ],
+  "T1222.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "file or directory permissions/attributes to evade access control lists (ACLs) and access protected files"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can interact with the DACLs using",
+      "object": "built-in Windows commands, such as icacls, cacls, takeown, and attrib"
+    }
+  ],
+  "T1222.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "file or directory permissions/attributes to evade access control lists (ACLs) and access protected files"
+    },
+    {
+      "subject": "Adversarial",
+      "verb": "may use these commands to make themselves",
+      "object": "the owner of files and directories or change the mode if current permissions allow it"
+    }
+  ],
+  "T1480": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "execution guardrails to constrain execution or actions based on adversary supplied and environment specific conditions"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also identify and block",
+      "object": "certain user-agents to evade defenses and narrow the scope of their attack"
+    }
+  ],
+  "T1480.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "environmentally key",
+      "object": "payloads or other features of malware to evade defenses and constraint execution to a specific target environment"
+    },
+    {
+      "subject": "Environmental keying",
+      "verb": "uses cryptography to constrain",
+      "object": "execution or actions based on adversary supplied environment specific conditions"
+    }
+  ],
+  "T1480.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "constrain",
+      "object": "execution or actions based on the presence of a mutex associated with malware"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "can verify",
+      "object": "whether or not a system has already been compromised by creating a unique system mutex"
+    }
+  ],
+  "T1482": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to gather",
+      "object": "information on domain trust relationships that may be used to identify lateral movement opportunities"
+    },
+    {
+      "subject": "Domain trusts",
+      "verb": "can be enumerated using",
+      "object": "the DSEnumerateDomainTrusts() Win32 API call, .NET methods, and LDAP"
+    }
+  ],
+  "T1484": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "the configuration settings of a domain or identity tenant to evade defenses and/or escalate privileges"
+    },
+    {
+      "subject": "Modifications to domain or tenant settings",
+      "verb": "may include",
+      "object": "altering domain Group Policy Objects (GPOs) in Microsoft Active Directory (AD) or changing trust settings for domains"
+    }
+  ],
+  "T1484.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "Group Policy Objects (GPOs) to subvert the intended discretionary access controls for a domain"
+    },
+    {
+      "subject": "Malicious GPO modifications",
+      "verb": "can be used to implement",
+      "object": "many other malicious behaviors such as Scheduled Task/Job, Disable or Modify Tools, Ingress Tool Transfer, Create Account, Service Execution"
+    }
+  ],
+  "T1484.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "add",
+      "object": "new domain trusts, modify the properties of existing domain trusts, or otherwise change the configuration of trust relationships between domains and tenants"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "can manipulate domain trusts to add",
+      "object": "their own signing certificate"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may also convert",
+      "object": "an AD domain to a federated domain using Active Directory Federation Services (AD FS)"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may also add",
+      "object": "a new federated identity provider to an identity tenant such as Okta or AWS IAM Identity Center"
+    }
+  ],
+  "T1485": [
+    {
+      "subject": "Adversaries",
+      "verb": "destroy",
+      "object": "data and files on specific systems or in large numbers on a network to interrupt availability to systems, services, and network resources"
+    },
+    {
+      "subject": "malware designed for destroying data",
+      "verb": "may have worm-like features to propagate across",
+      "object": "a network by leveraging additional techniques like Valid Accounts, OS Credential Dumping, and SMB/Windows Admin Shares"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may leverage access to delete",
+      "object": "cloud storage objects, machine images, database instances, and other infrastructure crucial to operations"
+    }
+  ],
+  "T1485.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "the lifecycle policies of a cloud storage bucket to destroy all objects stored within"
+    },
+    {
+      "subject": "an adversary with the PutLifecycleConfiguration permission",
+      "verb": "may use the PutBucketLifecycle API call to apply",
+      "object": "a lifecycle policy to an S3 bucket that deletes all objects in the bucket after one day"
+    }
+  ],
+  "T1486": [
+    {
+      "subject": "Adversaries",
+      "verb": "encrypt",
+      "object": "data on target systems or on large numbers of systems in a network to interrupt availability to system and network resources"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also encrypt",
+      "object": "virtual machines hosted on ESXi or other hypervisors"
+    },
+    {
+      "subject": "malware designed for encrypting data",
+      "verb": "may have worm-like features to propagate across",
+      "object": "a network by leveraging other attack techniques like Valid Accounts, OS Credential Dumping, and SMB/Windows Admin Shares"
+    }
+  ],
+  "T1489": [
+    {
+      "subject": "Adversaries",
+      "verb": "stop or disable",
+      "object": "services on a system to render those services unavailable to legitimate users"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may stop services or processes in order to conduct",
+      "object": "Data Destruction or Data Encrypted for Impact on the data stores of services like Exchange and SQL Server"
+    }
+  ],
+  "T1490": [
+    {
+      "subject": "Adversaries",
+      "verb": "delete or remove",
+      "object": "built-in data and turn off services designed to aid in the recovery of a corrupted system to prevent recovery"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may disable recovery notifications, then corrupt",
+      "object": "backups"
+    },
+    {
+      "subject": "vssadmin.exe",
+      "verb": "can be used to delete",
+      "object": "all volume shadow copies on a system"
+    },
+    {
+      "subject": "wbadmin.exe",
+      "verb": "can be used to delete",
+      "object": "the Windows Backup Catalog"
+    },
+    {
+      "subject": "bcdedit.exe",
+      "verb": "can be used to disable",
+      "object": "automatic Windows recovery features by modifying boot configuration data"
+    }
+  ],
+  "T1491": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "visual content available internally or externally to an enterprise network, thus affecting the integrity of the original content"
+    }
   ]
 }
