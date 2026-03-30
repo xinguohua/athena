@@ -2700,5 +2700,1197 @@
       "verb": "use",
       "object": "credentials obtained from breach dumps of unrelated accounts to gain access to target accounts through credential overlap"
     }
+  ],
+  "T1111": [
+    {
+      "subject": "Adversaries",
+      "verb": "target",
+      "object": "multi-factor authentication (MFA) mechanisms, (i.e., smart cards, token generators, etc.) to gain access to credentials"
+    },
+    {
+      "subject": "a keylogger",
+      "verb": "will need to be used to obtain",
+      "object": "the password associated with a smart card during normal use"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "can connect to",
+      "object": "a network resource using the infected system to proxy the authentication with the inserted hardware token"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also employ",
+      "object": "a keylogger to similarly target other hardware tokens, such as RSA SecurID"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may compromise",
+      "object": "an SMS messaging service in order to steal MFA codes sent to users' phones"
+    }
+  ],
+  "T1112": [
+    {
+      "subject": "Adversaries",
+      "verb": "interact with",
+      "object": "the Windows Registry as part of a variety of other techniques to aid in defense evasion, persistence, and execution"
+    },
+    {
+      "subject": "The Registry",
+      "verb": "may be modified to",
+      "object": "hide configuration information or malicious payloads via Obfuscated Files or Information"
+    },
+    {
+      "subject": "The Registry",
+      "verb": "may also be modified to",
+      "object": "Impair Defenses, such as by enabling macros for all Microsoft Office products"
+    },
+    {
+      "subject": "The Registry of a remote system",
+      "verb": "may be modified to",
+      "object": "aid in execution of files as part of lateral movement"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may abuse these pseudo-hidden keys to conceal",
+      "object": "payloads/commands used to maintain persistence"
+    }
+  ],
+  "T1113": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to take",
+      "object": "screen captures of the desktop to gather information over the course of an operation"
+    }
+  ],
+  "T1114": [
+    {
+      "subject": "Adversaries",
+      "verb": "target",
+      "object": "user email to collect sensitive information"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can collect or forward",
+      "object": "email from mail servers or clients"
+    }
+  ],
+  "T1114.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "target",
+      "object": "user email on local systems to collect sensitive information"
+    },
+    {
+      "subject": "Files containing email data",
+      "verb": "can be acquired from",
+      "object": "a user's local system, such as Outlook storage or cache files"
+    }
+  ],
+  "T1114.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "target",
+      "object": "an Exchange server, Office 365, or Google Workspace to collect sensitive information"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may leverage",
+      "object": "a user's credentials and interact directly with the Exchange server to acquire information from within a network"
+    }
+  ],
+  "T1114.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "setup",
+      "object": "email forwarding rules to collect sensitive information"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse",
+      "object": "email forwarding rules to monitor the activities of a victim, steal information"
+    },
+    {
+      "subject": "Any user or administrator",
+      "verb": "can create rules to automatically forward",
+      "object": "all received messages to another recipient"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also hide the rule by making use of",
+      "object": "the Microsoft Messaging API (MAPI) to modify the rule properties"
+    }
+  ],
+  "T1115": [
+    {
+      "subject": "Adversaries",
+      "verb": "collect",
+      "object": "data stored in the clipboard from users copying information within or between applications"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may monitor then replace",
+      "object": "users' clipboard with their data"
+    }
+  ],
+  "T1119": [
+    {
+      "subject": "an adversary",
+      "verb": "may use",
+      "object": "automated techniques for collecting internal data"
+    },
+    {
+      "subject": "Methods",
+      "verb": "could include use of",
+      "object": "a Command and Scripting Interpreter to search for and copy information fitting set criteria such as file type, location, or name at specific time intervals"
+    }
+  ],
+  "T1120": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to gather",
+      "object": "information about attached peripheral devices and components connected to a computer system"
+    }
+  ],
+  "T1123": [
+    {
+      "subject": "An adversary",
+      "verb": "can leverage",
+      "object": "a computer's peripheral devices (e.g., microphones and webcams) or applications (e.g., voice and video call services) to capture audio recordings"
+    },
+    {
+      "subject": "Malware or scripts",
+      "verb": "may be used to interact with",
+      "object": "the devices through an available API provided by the operating system or an application to capture audio"
+    }
+  ],
+  "T1124": [
+    {
+      "subject": "An adversary",
+      "verb": "may gather",
+      "object": "the system time and/or time zone settings from a local or remote system"
+    }
+  ],
+  "T1125": [
+    {
+      "subject": "An adversary",
+      "verb": "can leverage",
+      "object": "a computer's peripheral devices (e.g., integrated cameras or webcams) or applications (e.g., video call services) to capture video recordings"
+    },
+    {
+      "subject": "Malware or scripts",
+      "verb": "may be used to interact with",
+      "object": "the devices through an available API provided by the operating system or an application to capture video or images"
+    }
+  ],
+  "T1127": [
+    {
+      "subject": "Adversaries",
+      "verb": "take advantage of",
+      "object": "trusted developer utilities to proxy execution of malicious payloads"
+    }
+  ],
+  "T1127.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "MSBuild to proxy execution of code through a trusted Windows utility"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can abuse MSBuild to proxy execution of",
+      "object": "malicious code"
+    },
+    {
+      "subject": "The inline task capability of MSBuild",
+      "verb": "allows for",
+      "object": "C# or Visual Basic code to be inserted into an XML project file"
+    }
+  ],
+  "T1127.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "ClickOnce applications (.appref-ms and .application files) to proxy execution of code through a trusted Windows utility"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also abuse ClickOnce to execute malware via",
+      "object": "a Rundll32 script using the command rundll32.exe dfshim.dll,ShOpenVerbApplication1"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "can move",
+      "object": "the ClickOnce application file to a remote user's startup folder for continued malicious code deployment"
+    }
+  ],
+  "T1127.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "may use",
+      "object": "JamPlus to proxy the execution of a malicious script"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse",
+      "object": "the JamPlus build utility to execute malicious scripts via a .jam file"
+    }
+  ],
+  "T1129": [
+    {
+      "subject": "Adversaries",
+      "verb": "execute",
+      "object": "malicious payloads via loading shared modules"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "can modularize",
+      "object": "functionality of their malware into shared objects that perform various functions such as managing C2 network communications or execution of specific actions on objective"
+    },
+    {
+      "subject": "The Linux & macOS module loader",
+      "verb": "can load and execute",
+      "object": "shared objects from arbitrary local paths"
+    },
+    {
+      "subject": "The Windows module loader",
+      "verb": "can be instructed to load",
+      "object": "DLLs from arbitrary local paths and arbitrary Universal Naming Convention (UNC) network paths"
+    }
+  ],
+  "T1132": [
+    {
+      "subject": "Adversaries",
+      "verb": "encode",
+      "object": "data to make the content of command and control traffic more difficult to detect"
+    }
+  ],
+  "T1132.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "encode",
+      "object": "data with a standard data encoding system to make the content of command and control traffic more difficult to detect"
+    }
+  ],
+  "T1132.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "encode",
+      "object": "data with a non-standard data encoding system to make the content of command and control traffic more difficult to detect"
+    }
+  ],
+  "T1133": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "external-facing remote services to initially access and/or persist within a network"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also establish persistence by configuring",
+      "object": "a Tor hidden service on a compromised system"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may utilize the tool ShadowLink to facilitate",
+      "object": "the installation and configuration of the Tor hidden service"
+    }
+  ],
+  "T1134": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "access tokens to operate under a different user or system security context to perform actions and bypass access controls"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "can use built-in Windows API functions to copy",
+      "object": "access tokens from existing processes; this is known as token stealing"
+    },
+    {
+      "subject": "These token",
+      "verb": "can then be applied to",
+      "object": "an existing process (i.e. Token Impersonation/Theft) or used to spawn a new process (i.e. Create Process with Token)"
+    }
+  ],
+  "T1134.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "duplicate then impersonate",
+      "object": "another user's existing token to escalate privileges and bypass access controls"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "can duplicate",
+      "object": "an existing token using DuplicateToken or DuplicateTokenEx"
+    },
+    {
+      "subject": "The token",
+      "verb": "can then be used with",
+      "object": "ImpersonateLoggedOnUser to allow the calling thread to impersonate a logged on user's security context, or with SetThreadToken to assign the impersonated token to a thread"
+    }
+  ],
+  "T1134.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "create",
+      "object": "a new process with an existing token to escalate privileges and bypass access controls"
+    },
+    {
+      "subject": "Processes",
+      "verb": "can be created with",
+      "object": "the token and resulting security context of another user using features such as CreateProcessWithTokenW and runas"
+    }
+  ],
+  "T1134.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "make new tokens and impersonate",
+      "object": "users to escalate privileges and bypass access controls"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "can then create",
+      "object": "a logon session for the user using the LogonUser function"
+    }
+  ],
+  "T1134.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "spoof",
+      "object": "the parent process identifier (PPID) of a new process to evade process-monitoring defenses or to elevate privileges"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse these mechanisms to evade defenses such as",
+      "object": "those blocking processes spawning directly from Office documents"
+    },
+    {
+      "subject": "This spoofing",
+      "verb": "could be executed via",
+      "object": "Visual Basic within a malicious Office document or any code that can perform Native API"
+    }
+  ],
+  "T1134.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "SID-History Injection to escalate privileges and bypass access controls"
+    },
+    {
+      "subject": "harvested or well-known SID values",
+      "verb": "may be inserted into",
+      "object": "SID-History to enable impersonation of arbitrary users/groups such as Enterprise Administrators"
+    }
+  ],
+  "T1135": [
+    {
+      "subject": "Adversaries",
+      "verb": "look for",
+      "object": "folders and drives shared on remote systems as a means of identifying sources of information to gather"
+    }
+  ],
+  "T1136": [
+    {
+      "subject": "Adversaries",
+      "verb": "create",
+      "object": "an account to maintain access to victim systems"
+    }
+  ],
+  "T1136.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "create",
+      "object": "a local account to maintain access to victim systems"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also create",
+      "object": "new local accounts on network firewall management consoles"
+    }
+  ],
+  "T1136.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "create",
+      "object": "a domain account to maintain access to victim systems"
+    }
+  ],
+  "T1136.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "create",
+      "object": "a cloud account to maintain access to victim systems"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "can then manipulate",
+      "object": "that account to ensure persistence and allow access to additional resources"
+    }
+  ],
+  "T1137": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "Microsoft Office-based applications for persistence between startups"
+    },
+    {
+      "subject": "This",
+      "verb": "can include the use of",
+      "object": "Office Template Macros and add-ins"
+    }
+  ],
+  "T1137.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Microsoft Office templates to obtain persistence on a compromised system"
+    },
+    {
+      "subject": "VBA macros",
+      "verb": "can be inserted into",
+      "object": "the base template and used to execute code when the respective Office application starts"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also change",
+      "object": "the location of the base template to point to their own by hijacking the application's search order or by modifying the GlobalDotName registry key"
+    }
+  ],
+  "T1137.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "the Microsoft Office \"Office Test\" Registry key to obtain persistence on a compromised system"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may add this Registry key and specify",
+      "object": "a malicious DLL that will be executed whenever an Office application, such as Word or Excel, is started"
+    }
+  ],
+  "T1137.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Microsoft Outlook forms to obtain persistence on a compromised system"
+    },
+    {
+      "subject": "Custom Outlook forms",
+      "verb": "can be created that will execute",
+      "object": "code when a specifically crafted email is sent by an adversary utilizing the same custom Outlook form"
+    }
+  ],
+  "T1137.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Microsoft Outlook's Home Page feature to obtain persistence on a compromised system"
+    },
+    {
+      "subject": "A malicious HTML page",
+      "verb": "can be crafted that will execute",
+      "object": "code when loaded by Outlook Home Page"
+    }
+  ],
+  "T1137.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Microsoft Outlook rules to obtain persistence on a compromised system"
+    },
+    {
+      "subject": "Malicious Outlook rules",
+      "verb": "can be created that can trigger",
+      "object": "code execution when an adversary sends a specifically crafted email to that user"
+    }
+  ],
+  "T1137.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Microsoft Office add-ins to obtain persistence on a compromised system"
+    },
+    {
+      "subject": "Add-ins",
+      "verb": "can be set to execute",
+      "object": "code when an Office application starts"
+    }
+  ],
+  "T1140": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "Obfuscated Files or Information to hide artifacts of an intrusion from analysis"
+    },
+    {
+      "subject": "They",
+      "verb": "may require separate mechanisms to decode or deobfuscate",
+      "object": "that information depending on how they intend to use it"
+    },
+    {
+      "subject": "One example is the use of certutil to decode",
+      "object": "a remote access tool portable executable file that has been hidden inside a certificate file"
+    }
+  ],
+  "T1176": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "software extensions to establish persistent access to victim systems"
+    },
+    {
+      "subject": "Malicious extensions",
+      "verb": "can be introduced through",
+      "object": "various methods, including social engineering, compromised marketplaces, or direct installation"
+    }
+  ],
+  "T1176.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "internet browser extensions to establish persistent access to victim systems"
+    },
+    {
+      "subject": "Malicious extensions",
+      "verb": "can be installed into a browser through",
+      "object": "malicious app store downloads masquerading as legitimate extensions, through social engineering, or by an adversary that has already compromised a system"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may also manipulate",
+      "object": "an extension's update url to install updates from an adversary-controlled server"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse how chromium-based browsers load extensions by modifying or replacing",
+      "object": "the Preferences and/or Secure Preferences files to silently install malicious extensions"
+    },
+    {
+      "subject": "the extension",
+      "verb": "can browse to websites in the background, steal",
+      "object": "all information that a user enters into a browser (including credentials), and be used as an installer for a RAT for persistence"
+    }
+  ],
+  "T1176.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "an integrated development environment (IDE) extension to establish persistent access to victim systems"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may also leverage benign ones to establish",
+      "object": "persistent SSH tunnels via the use of the VSCode Remote SSH extension"
+    },
+    {
+      "subject": "the malicious extension",
+      "verb": "is run every time that",
+      "object": "the IDE is launched"
+    },
+    {
+      "subject": "The extension",
+      "verb": "can then be used to",
+      "object": "execute arbitrary code, establish a backdoor, mine cryptocurrency, or exfiltrate data"
+    }
+  ],
+  "T1185": [
+    {
+      "subject": "Adversaries",
+      "verb": "take advantage of",
+      "object": "security vulnerabilities and inherent functionality in browser software to change content, modify user-behaviors, and intercept information"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "injects software into a browser that allows them to inherit",
+      "object": "cookies, HTTP sessions, and SSL client certificates of a user then use the browser as a way to pivot into an authenticated intranet"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may set up",
+      "object": "a proxy which will redirect web traffic from the adversary's browser through the user's browser"
+    }
+  ],
+  "T1187": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "credential material by invoking or forcing a user to automatically provide authentication information through a mechanism in which they can intercept"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "can send",
+      "object": "an attachment to a user through spearphishing that contains a resource link to an external server controlled by the adversary"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may also",
+      "object": "place a specially crafted file on navigation path for privileged accounts or on a publicly accessible share"
+    },
+    {
+      "subject": "the user's system",
+      "verb": "will attempt authentication and send",
+      "object": "information, including the user's hashed credentials, over SMB to the adversary-controlled server"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "can send SMB requests to a remote system's MS-EFSRPC interface and force",
+      "object": "the victim computer to initiate an authentication procedure and share its authentication details"
+    }
+  ],
+  "T1189": [
+    {
+      "subject": "Adversaries",
+      "verb": "gain access to",
+      "object": "a system through a user visiting a website over the normal course of browsing"
+    },
+    {
+      "subject": "A legitimate website",
+      "verb": "is compromised, allowing adversaries to inject",
+      "object": "malicious code"
+    },
+    {
+      "subject": "Malicious ads",
+      "verb": "are paid for and served through",
+      "object": "legitimate ad providers"
+    },
+    {
+      "subject": "Scripts",
+      "verb": "automatically execute, typically searching",
+      "object": "versions of the browser and plugins for a potentially vulnerable version"
+    },
+    {
+      "subject": "exploit code",
+      "verb": "is delivered to",
+      "object": "the browser"
+    }
+  ],
+  "T1190": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to exploit",
+      "object": "a weakness in an Internet-facing host or system to initially access a network"
+    },
+    {
+      "subject": "exploiting it",
+      "verb": "may lead to compromise of",
+      "object": "the underlying instance or container"
+    }
+  ],
+  "T1195": [
+    {
+      "subject": "Adversaries",
+      "verb": "manipulate",
+      "object": "products or product delivery mechanisms prior to receipt by a final consumer"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "have often focused on",
+      "object": "malicious additions to legitimate software in software distribution or update channels"
+    }
+  ],
+  "T1195.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "manipulate",
+      "object": "software dependencies and development tools prior to receipt by a final consumer"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also employ typosquatting or name-confusion by choosing",
+      "object": "names similar to existing popular libraries or packages"
+    },
+    {
+      "subject": "by adding malicious code into a GitHub action, a threat actor",
+      "verb": "may be able to collect",
+      "object": "runtime credentials or insert further malicious components into the build pipelines"
+    }
+  ],
+  "T1195.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "manipulate",
+      "object": "application software prior to receipt by a final consumer"
+    },
+    {
+      "subject": "Supply chain compromise of software",
+      "verb": "can take place in a number of ways, including",
+      "object": "manipulation of the application source code, manipulation of the update/distribution mechanism for that software, or replacing compiled releases with a modified version"
+    }
+  ],
+  "T1195.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "manipulate",
+      "object": "hardware components in products prior to receipt by a final consumer"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "can insert",
+      "object": "a backdoor into consumer networks that may be difficult to detect"
+    }
+  ],
+  "T1197": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "BITS jobs to persistently execute code and perform various background tasks"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse BITS to download, execute, and even clean up after running",
+      "object": "malicious code"
+    },
+    {
+      "subject": "BITS",
+      "verb": "enabled execution may also enable",
+      "object": "persistence by creating long-standing jobs or invoking an arbitrary program when a job completes or errors"
+    }
+  ],
+  "T1199": [
+    {
+      "subject": "Adversaries",
+      "verb": "breach or otherwise leverage",
+      "object": "organizations who have access to intended victims"
+    },
+    {
+      "subject": "Valid Accounts used by the other party",
+      "verb": "may be compromised and used for",
+      "object": "access to internal network systems"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may be able to leverage",
+      "object": "existing delegated administrator relationships or send new delegated administrator offers to clients in order to gain administrative control over the victim tenant"
+    }
+  ],
+  "T1200": [
+    {
+      "subject": "Adversaries",
+      "verb": "physically introduce",
+      "object": "computer accessories, networking hardware, or other computing devices into a system or network"
+    },
+    {
+      "subject": "hardware additions",
+      "verb": "can be used to introduce",
+      "object": "new functionalities and/or features into a system that can then be abused"
+    }
+  ],
+  "T1201": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to access",
+      "object": "detailed information about the password policy used within an enterprise network or cloud environment"
+    }
+  ],
+  "T1202": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "utilities that allow for command execution to bypass security restrictions that limit the use of command-line interpreters"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also abuse",
+      "object": "the ssh.exe binary to execute malicious commands via the ProxyCommand and LocalCommand options"
+    }
+  ],
+  "T1203": [
+    {
+      "subject": "Adversaries",
+      "verb": "exploit",
+      "object": "software vulnerabilities in client applications to execute code"
+    }
+  ],
+  "T1204": [
+    {
+      "subject": "An adversary",
+      "verb": "rely upon",
+      "object": "specific actions by a user in order to gain execution"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also deceive users into performing actions such as",
+      "object": "Enabling Remote Access Tools, Running malicious JavaScript in their browser, Downloading and executing malware, Coerceing users to copy paste and execute malicious code manually"
+    }
+  ],
+  "T1204.001": [
+    {
+      "subject": "An adversary",
+      "verb": "rely upon",
+      "object": "a user clicking a malicious link in order to gain execution"
+    }
+  ],
+  "T1204.002": [
+    {
+      "subject": "An adversary",
+      "verb": "rely upon",
+      "object": "a user opening a malicious file in order to gain execution"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may employ",
+      "object": "various forms of Masquerading and Obfuscated Files or Information to increase the likelihood that a user will open and successfully execute a malicious file"
+    }
+  ],
+  "T1204.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "rely on",
+      "object": "a user running a malicious image to facilitate execution"
+    },
+    {
+      "subject": "Backdoored images",
+      "verb": "may be uploaded to",
+      "object": "a public repository via Upload Malware"
+    },
+    {
+      "subject": "users",
+      "verb": "may then download and deploy",
+      "object": "an instance or container from the image without realizing the image is malicious"
+    }
+  ],
+  "T1204.004": [
+    {
+      "subject": "An adversary",
+      "verb": "rely upon",
+      "object": "a user copying and pasting code in order to gain execution"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "present users with",
+      "object": "seemingly helpful solutions that instead instruct the user to copy and paste malicious code"
+    },
+    {
+      "subject": "Malicious websites",
+      "verb": "may present",
+      "object": "fake error messages or CAPTCHA prompts that instruct users to open a terminal or the Windows Run Dialog box and execute an arbitrary command"
+    }
+  ],
+  "T1204.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "rely on",
+      "object": "a user installing a malicious library to facilitate execution"
+    },
+    {
+      "subject": "Threat actors",
+      "verb": "may Upload Malware to",
+      "object": "package managers such as NPM and PyPi, as well as to public code repositories such as GitHub"
+    },
+    {
+      "subject": "threat actors",
+      "verb": "may compromise and backdoor",
+      "object": "existing popular libraries"
+    }
+  ],
+  "T1205": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "traffic signaling to hide open ports or other malicious functionality used for persistence or command and control"
+    },
+    {
+      "subject": "This",
+      "verb": "may take the form of sending",
+      "object": "a series of packets with certain characteristics before a port will be opened that the adversary can use for command and control"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may use",
+      "object": "crafted packets to enable Network Device Authentication for standard services offered by the device such as telnet"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also use",
+      "object": "the Wake-on-LAN feature to turn on powered off systems"
+    }
+  ],
+  "T1205.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "port knocking to hide open ports used for persistence or command and control"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "sends",
+      "object": "a series of attempted connections to a predefined sequence of closed ports"
+    }
+  ],
+  "T1205.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "attach",
+      "object": "filters to a network socket to monitor then activate backdoors used for persistence or command and control"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "sends",
+      "object": "a crafted packet to the targeted host that matches the installed filter criteria"
+    }
+  ],
+  "T1207": [
+    {
+      "subject": "Adversaries",
+      "verb": "register",
+      "object": "a rogue Domain Controller to enable manipulation of Active Directory data"
+    },
+    {
+      "subject": "a rogue DC",
+      "verb": "may be able to inject and replicate",
+      "object": "changes into AD infrastructure for any domain object, including credentials and keys"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also utilize this technique to perform",
+      "object": "SID-History Injection and/or manipulate AD objects to establish backdoors for Persistence"
+    }
+  ],
+  "T1210": [
+    {
+      "subject": "Adversaries",
+      "verb": "exploit",
+      "object": "remote services to gain unauthorized access to internal systems once inside of a network"
+    }
+  ],
+  "T1211": [
+    {
+      "subject": "Adversaries",
+      "verb": "exploit",
+      "object": "a system or application vulnerability to bypass security features"
+    }
+  ],
+  "T1212": [
+    {
+      "subject": "Adversaries",
+      "verb": "exploit",
+      "object": "software vulnerabilities in an attempt to collect credentials"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "intercepts",
+      "object": "data packets sent between parties and then later replays these packets"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "have exploited",
+      "object": "vulnerabilities in public cloud infrastructure that allowed for unintended authentication token creation and renewal"
+    }
+  ],
+  "T1213": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "information repositories to mine valuable information"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also abuse",
+      "object": "external sharing features to share sensitive documents with recipients outside of the organization"
+    }
+  ],
+  "T1213.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "Confluence repositories to mine valuable information"
+    }
+  ],
+  "T1213.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "the SharePoint repository as a source to mine valuable information"
+    }
+  ],
+  "T1213.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "code repositories to collect valuable information"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may collect",
+      "object": "sensitive information such as proprietary source code or Unsecured Credentials contained within software's source code"
+    }
+  ],
+  "T1213.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "Customer Relationship Management (CRM) software to mine valuable information"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may mine CRM software for",
+      "object": "customer data including personally identifiable information (PII) such as full names, emails, phone numbers, and addresses"
+    }
+  ],
+  "T1213.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "chat and messaging applications, such as Microsoft Teams, Google Chat, and Slack, to mine valuable information"
+    }
+  ],
+  "T1213.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "databases to mine valuable information"
+    },
+    {
+      "subject": "Data collected from databases",
+      "verb": "may be used for",
+      "object": "Lateral Movement, Command and Control, or Exfiltration"
+    }
+  ],
+  "T1216": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "trusted scripts, often signed with certificates, to proxy the execution of malicious files"
+    }
+  ],
+  "T1216.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "PubPrn to proxy execution of malicious remote files"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse PubPrn to execute",
+      "object": "malicious payloads hosted on remote sites"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may set the second script: parameter to reference",
+      "object": "a scriptlet file (.sct) hosted on a remote site"
+    }
+  ],
+  "T1216.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "SyncAppvPublishingServer.vbs to proxy execution of malicious PowerShell commands"
+    }
+  ],
+  "T1217": [
+    {
+      "subject": "Adversaries",
+      "verb": "enumerate",
+      "object": "information about browsers to learn more about compromised environments"
+    },
+    {
+      "subject": "Data saved by browsers",
+      "verb": "may reveal",
+      "object": "a variety of personal information about users as well as details about internal network resources such as servers, tools/dashboards, or other related infrastructure"
+    }
+  ],
+  "T1218": [
+    {
+      "subject": "Adversaries",
+      "verb": "bypass",
+      "object": "process and/or signature-based defenses by proxying execution of malicious content with signed, or otherwise trusted, binaries"
+    }
+  ],
+  "T1218.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "Compiled HTML files (.chm) to conceal malicious code"
+    },
+    {
+      "subject": "A custom CHM file containing embedded payloads",
+      "verb": "could be delivered to a victim then triggered by",
+      "object": "User Execution"
+    }
+  ],
+  "T1218.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "control.exe to proxy execution of malicious payloads"
+    },
+    {
+      "subject": "Malicious Control Panel items",
+      "verb": "can be delivered via",
+      "object": "Phishing campaigns or executed as part of multi-stage malware"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also rename",
+      "object": "malicious DLL files (.dll) with Control Panel file extensions (.cpl) and register them to HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Control Panel\\Cpls"
+    }
+  ],
+  "T1218.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "CMSTP to proxy execution of malicious code"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may supply CMSTP.exe with",
+      "object": "INF files infected with malicious commands"
+    },
+    {
+      "subject": "CMSTP.exe",
+      "verb": "may be abused to load and execute",
+      "object": "DLLs and/or COM scriptlets (SCT) from remote servers"
+    },
+    {
+      "subject": "CMSTP.exe",
+      "verb": "can also be abused to",
+      "object": "Bypass User Account Control and execute arbitrary commands from a malicious INF through an auto-elevated COM interface"
+    }
+  ],
+  "T1218.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "InstallUtil to proxy execution of code through a trusted Windows utility"
+    },
+    {
+      "subject": "InstallUtil",
+      "verb": "may also be used to bypass",
+      "object": "application control through use of attributes within the binary"
+    }
+  ],
+  "T1218.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "mshta.exe to proxy execution of malicious .hta files and Javascript or VBScript through a trusted Windows utility"
+    },
+    {
+      "subject": "Files",
+      "verb": "may be executed by mshta.exe through",
+      "object": "an inline script"
+    },
+    {
+      "subject": "They",
+      "verb": "may also be executed directly from",
+      "object": "URLs"
+    }
+  ],
+  "T1218.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "msiexec.exe to proxy execution of malicious payloads"
+    },
+    {
+      "subject": "Msiexec.exe",
+      "verb": "can also execute",
+      "object": "DLLs"
+    },
+    {
+      "subject": "Msiexec.exe execution",
+      "verb": "may also be elevated to",
+      "object": "SYSTEM privileges if the AlwaysInstallElevated policy is enabled"
+    }
   ]
 }
