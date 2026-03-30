@@ -5024,5 +5024,1068 @@
       "verb": "can use this to register code to be executed when the shell encounters",
       "object": "specific interrupts as a persistence mechanism"
     }
+  ],
+  "T1546.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence by executing malicious content triggered by",
+      "object": "the execution of tainted binaries"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may modify",
+      "object": "Mach-O binary headers to load and execute malicious dylibs every time the binary is executed"
+    }
+  ],
+  "T1546.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence by executing malicious content triggered by",
+      "object": "Netsh Helper DLLs"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can use",
+      "object": "netsh.exe helper DLLs to trigger execution of arbitrary code in a persistent manner"
+    }
+  ],
+  "T1546.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence and/or elevate privileges by executing malicious content triggered by",
+      "object": "accessibility features"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "can modify",
+      "object": "the way these programs are launched to get a command prompt or backdoor without logging in to the system"
+    },
+    {
+      "subject": "the program",
+      "verb": "may be replaced with",
+      "object": "cmd.exe (or another program that provides backdoor access)"
+    }
+  ],
+  "T1546.009": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence and/or elevate privileges by executing malicious content triggered by",
+      "object": "AppCert DLLs loaded into processes"
+    },
+    {
+      "subject": "DLLs specified in the AppCertDLLs Registry key",
+      "verb": "are loaded into",
+      "object": "every process that calls the ubiquitously used API functions CreateProcess, CreateProcessAsUser, CreateProcessWithLoginW, CreateProcessWithTokenW, or WinExec"
+    }
+  ],
+  "T1546.010": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence and/or elevate privileges by executing malicious content triggered by",
+      "object": "AppInit DLLs loaded into processes"
+    },
+    {
+      "subject": "DLLs specified in the AppInit_DLLs value in the Registry keys",
+      "verb": "are loaded by user32.dll into",
+      "object": "every process that loads user32.dll"
+    }
+  ],
+  "T1546.011": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence and/or elevate privileges by executing malicious content triggered by",
+      "object": "application shims"
+    },
+    {
+      "subject": "shims",
+      "verb": "can be used to",
+      "object": "Bypass User Account Control (UAC and RedirectEXE), inject DLLs into processes (InjectDLL), disable Data Execution Prevention (DisableNX) and Structure Exception Handling (DisableSEH), and intercept memory addresses (GetProcAddress)"
+    }
+  ],
+  "T1546.012": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence and/or elevate privileges by executing malicious content triggered by",
+      "object": "Image File Execution Options (IFEO) debuggers"
+    },
+    {
+      "subject": "a Registry key",
+      "verb": "may be modified that configures",
+      "object": "cmd.exe, or another program that provides backdoor access, as a debugger for an accessibility program"
+    },
+    {
+      "subject": "Malware",
+      "verb": "may also use IFEO to Impair Defenses by registering",
+      "object": "invalid debuggers that redirect and effectively disable various system and security applications"
+    }
+  ],
+  "T1546.013": [
+    {
+      "subject": "Adversaries",
+      "verb": "gain persistence and elevate privileges by executing malicious content triggered by",
+      "object": "PowerShell profiles"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may modify these profiles to include",
+      "object": "arbitrary commands, functions, modules, and/or PowerShell drives to gain persistence"
+    }
+  ],
+  "T1546.014": [
+    {
+      "subject": "Adversaries",
+      "verb": "gain persistence and elevate privileges by executing malicious content triggered by",
+      "object": "the Event Monitor Daemon (emond)"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse this service by writing",
+      "object": "a rule to execute commands when a defined event occurs, such as system start up or user authentication"
+    }
+  ],
+  "T1546.015": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence by executing malicious content triggered by",
+      "object": "hijacked references to Component Object Model (COM) objects"
+    },
+    {
+      "subject": "Hijacking a COM object",
+      "verb": "requires",
+      "object": "a change in the Registry to replace a reference to a legitimate system component"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may modify Registry keys associated with TypeLibs to redirect",
+      "object": "legitimate COM object functionality to malicious scripts or payloads"
+    }
+  ],
+  "T1546.016": [
+    {
+      "subject": "Adversaries",
+      "verb": "establish persistence and elevate privileges by using",
+      "object": "an installer to trigger the execution of malicious content"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "have distributed",
+      "object": "applications with modified installer scripts to execute malicious content"
+    }
+  ],
+  "T1546.017": [
+    {
+      "subject": "Adversaries",
+      "verb": "maintain persistence through executing malicious content triggered using",
+      "object": "udev rules"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may configure a rule to execute",
+      "object": "their binary each time the pseudo-device file, such as /dev/random, is accessed by an application"
+    }
+  ],
+  "T1546.018": [
+    {
+      "subject": "Adversaries",
+      "verb": "achieve persistence by leveraging",
+      "object": "Python's startup mechanisms, including path configuration (.pth) files and the sitecustomize.py or usercustomize.py modules"
+    },
+    {
+      "subject": "If a .pth file is placed in Python's site-packages or dist-packages directories",
+      "verb": "any lines beginning with import will be executed automatically on",
+      "object": "Python invocation"
+    }
+  ],
+  "T1547": [
+    {
+      "subject": "Adversaries",
+      "verb": "configure",
+      "object": "system settings to automatically execute a program during system boot or logon to maintain persistence or gain higher-level privileges"
+    }
+  ],
+  "T1547.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "achieve persistence by adding",
+      "object": "a program to a startup folder or referencing it with a Registry run key"
+    },
+    {
+      "subject": "Adding an entry to the run keys in the Registry or startup folder",
+      "verb": "will cause the program referenced to be executed when",
+      "object": "a user logs in"
+    }
+  ],
+  "T1547.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "authentication packages to execute DLLs when the system boots"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can use the autostart mechanism provided by LSA authentication packages for persistence by placing",
+      "object": "a reference to a binary in the Windows Registry location HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa\\"
+    }
+  ],
+  "T1547.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "time providers to execute DLLs when the system boots"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse this architecture to establish persistence by creating",
+      "object": "a new arbitrarily named subkey pointing to a malicious DLL in the DllName value"
+    }
+  ],
+  "T1547.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "features of Winlogon to execute DLLs and/or executables when a user logs in"
+    },
+    {
+      "subject": "Malicious modifications to these Registry keys",
+      "verb": "may cause Winlogon to load and execute",
+      "object": "malicious DLLs and/or executables"
+    }
+  ],
+  "T1547.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "security support providers (SSPs) to execute DLLs when the system boots"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may modify these Registry keys to add",
+      "object": "new SSPs, which will be loaded the next time the system boots"
+    }
+  ],
+  "T1547.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "the kernel to automatically execute programs on system boot"
+    },
+    {
+      "subject": "LKMs",
+      "verb": "can be a type of kernel-mode Rootkit that run with",
+      "object": "the highest operating system privilege (Ring 0)"
+    },
+    {
+      "subject": "Common features of LKM based rootkits",
+      "verb": "include",
+      "object": "hiding itself, selective hiding of files, processes and network activity, as well as log tampering, providing authenticated backdoors, and enabling root access to non-privileged users"
+    }
+  ],
+  "T1547.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "plist files to automatically run an application when a user logs in"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can establish Persistence by adding",
+      "object": "a malicious application path to the com.apple.loginwindow.[UUID].plist file"
+    }
+  ],
+  "T1547.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify or add",
+      "object": "LSASS drivers to obtain persistence on compromised systems"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "can use LSA operations to continuously execute",
+      "object": "malicious payloads by either replacing or adding illegitimate drivers"
+    }
+  ],
+  "T1547.009": [
+    {
+      "subject": "Adversaries",
+      "verb": "create or modify",
+      "object": "shortcuts that can execute a program during system boot or user login"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse",
+      "object": "shortcuts in the startup folder to execute their tools and achieve persistence"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also edit the target path or entirely replace",
+      "object": "an existing shortcut so their malware will be executed instead of the intended legitimate program"
+    }
+  ],
+  "T1547.010": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "port monitors to run an adversary supplied DLL during system boot for persistence or privilege escalation"
+    },
+    {
+      "subject": "A port monitor",
+      "verb": "can be set through",
+      "object": "the AddMonitor API call to set a DLL to be loaded at startup"
+    }
+  ],
+  "T1547.012": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "print processors to run malicious DLLs during system boot for persistence and/or privilege escalation"
+    },
+    {
+      "subject": "a print processor",
+      "verb": "can be installed through",
+      "object": "the AddPrintProcessor API call with an account that has SeLoadDriverPrivilege enabled"
+    }
+  ],
+  "T1547.013": [
+    {
+      "subject": "Adversaries",
+      "verb": "add or modify",
+      "object": "XDG Autostart Entries to execute malicious programs or commands when a user's desktop environment is loaded at login"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse this feature to establish persistence by adding",
+      "object": "a path to a malicious binary or command to the Exec directive in the .desktop configuration file"
+    }
+  ],
+  "T1547.014": [
+    {
+      "subject": "Adversaries",
+      "verb": "achieve persistence by adding",
+      "object": "a Registry key to the Active Setup of the local machine"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse Active Setup by creating a key under HKLM\\SOFTWARE\\Microsoft\\Active Setup\\Installed Components\\ and setting",
+      "object": "a malicious value for StubPath"
+    }
+  ],
+  "T1547.015": [
+    {
+      "subject": "Adversaries",
+      "verb": "add",
+      "object": "login items to execute upon user login to gain persistence or escalate privileges"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can utilize AppleScript and Native API calls to create",
+      "object": "a login item to spawn malicious executables"
+    }
+  ],
+  "T1548": [
+    {
+      "subject": "Adversaries",
+      "verb": "circumvent",
+      "object": "mechanisms designed to control elevate privileges to gain higher-level permissions"
+    }
+  ],
+  "T1548.001": [
+    {
+      "subject": "An adversary",
+      "verb": "may abuse",
+      "object": "configurations where an application has the setuid or setgid bits set in order to get code running in a different (and possibly more privileged) user's context"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can use this mechanism on their own malware to make sure they're able to execute in",
+      "object": "elevated contexts in the future"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may choose to find and target",
+      "object": "vulnerable binaries with the setuid or setgid bits already enabled"
+    }
+  ],
+  "T1548.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "bypass",
+      "object": "UAC mechanisms to elevate process privileges on system"
+    },
+    {
+      "subject": "certain Windows programs",
+      "verb": "can elevate privileges or execute",
+      "object": "some elevated Component Object Model objects without prompting the user through the UAC notification box"
+    },
+    {
+      "subject": "Malicious software",
+      "verb": "may also be injected into",
+      "object": "a trusted process to gain elevated privileges without prompting a user"
+    }
+  ],
+  "T1548.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "perform",
+      "object": "sudo caching and/or use the sudoers file to elevate privileges"
+    },
+    {
+      "subject": "malware",
+      "verb": "can execute",
+      "object": "sudo commands without needing to supply the user's password"
+    },
+    {
+      "subject": "malware",
+      "verb": "has disabled",
+      "object": "tty_tickets to potentially make scripting easier by issuing echo 'Defaults !tty_tickets' >> /etc/sudoers"
+    }
+  ],
+  "T1548.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "leverage",
+      "object": "the AuthorizationExecuteWithPrivileges API to escalate privileges by prompting the user for credentials"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse AuthorizationExecuteWithPrivileges to obtain",
+      "object": "root privileges in order to install malicious software on victims and install persistence mechanisms"
+    }
+  ],
+  "T1548.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "permission configurations that allow them to gain temporarily elevated access to cloud resources"
+    },
+    {
+      "subject": "users with the iam.serviceAccountTokenCreator role",
+      "verb": "can create",
+      "object": "temporary access tokens or sign arbitrary payloads with the permissions of a service account"
+    }
+  ],
+  "T1548.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "manipulate or abuse",
+      "object": "the Transparency, Consent, & Control (TCC) service or database to grant malicious executables elevated permissions"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may access restricted data or services protected by TCC through",
+      "object": "abusing applications previously granted permissions through Process Injection or executing a malicious binary using another application"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "can manipulate",
+      "object": "the TCC database to add permissions to their malicious executable"
+    }
+  ],
+  "T1550": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "alternate authentication material, such as password hashes, Kerberos tickets, and application access tokens, in order to move laterally within an environment and bypass normal system access controls"
+    }
+  ],
+  "T1550.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "stolen application access tokens to bypass the typical authentication process and access restricted accounts, information, or services on remote systems"
+    },
+    {
+      "subject": "compromise of the token",
+      "verb": "can grant the adversary",
+      "object": "access to resources of other sites through a malicious application"
+    }
+  ],
+  "T1550.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "pass the hash using",
+      "object": "stolen password hashes to move laterally within an environment, bypassing normal system access controls"
+    },
+    {
+      "subject": "valid password hashes for the account being used",
+      "verb": "are captured using",
+      "object": "a Credential Access technique"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also use stolen password hashes to",
+      "object": "overpass the hash by using a password hash to authenticate as a user but also using the password hash to create a valid Kerberos ticket"
+    }
+  ],
+  "T1550.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "pass the ticket using",
+      "object": "stolen Kerberos tickets to move laterally within an environment, bypassing normal system access controls"
+    },
+    {
+      "subject": "A Silver Ticket",
+      "verb": "can be obtained for",
+      "object": "services that use Kerberos as an authentication mechanism"
+    },
+    {
+      "subject": "A Golden Ticket",
+      "verb": "can be obtained for",
+      "object": "the domain using the Key Distribution Service account KRBTGT account NTLM hash, which enables generation of TGTs for any account in Active Directory"
+    }
+  ],
+  "T1550.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "use",
+      "object": "stolen session cookies to authenticate to web applications and services"
+    },
+    {
+      "subject": "the adversary",
+      "verb": "may then import the cookie into a browser they control and is then able to use",
+      "object": "the site or application as the user for as long as the session cookie is active"
+    }
+  ],
+  "T1552": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "compromised systems to find and obtain insecurely stored credentials"
+    }
+  ],
+  "T1552.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "local file systems and remote file shares for files containing insecurely stored credentials"
+    }
+  ],
+  "T1552.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "the Registry on compromised systems for insecurely stored credentials"
+    }
+  ],
+  "T1552.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "search",
+      "object": "the command history on compromised systems for insecurely stored credentials"
+    },
+    {
+      "subject": "Users",
+      "verb": "often type",
+      "object": "usernames and passwords on the command-line as parameters to programs, which then get saved to this file when they log out"
+    }
+  ],
+  "T1552.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "search for",
+      "object": "private key certificate files on compromised systems for insecurely stored credentials"
+    },
+    {
+      "subject": "Adversary tools",
+      "verb": "may also search compromised systems for",
+      "object": "file extensions relating to cryptographic keys and certificates"
+    }
+  ],
+  "T1552.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to access",
+      "object": "the Cloud Instance Metadata API to collect credentials and other sensitive data"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may query",
+      "object": "the Instance Metadata API directly to identify credentials that grant access to additional resources"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may exploit",
+      "object": "a Server-Side Request Forgery (SSRF) vulnerability in a public facing web proxy to gain access to the sensitive information via a request to the Instance Metadata API"
+    }
+  ],
+  "T1552.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to find",
+      "object": "unsecured credentials in Group Policy Preferences (GPP)"
+    },
+    {
+      "subject": "any domain user",
+      "verb": "can view the SYSVOL share and decrypt",
+      "object": "the password (using the AES key that has been made public)"
+    }
+  ],
+  "T1552.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "gather",
+      "object": "credentials via APIs within a containers environment"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may access the Docker API to collect",
+      "object": "logs that contain credentials to cloud, container, and various other resources in the environment"
+    }
+  ],
+  "T1552.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "directly collect",
+      "object": "unsecured credentials stored or passed through user communication services"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also compromise",
+      "object": "integration tools like Slack Workflows to automatically search through messages to extract user credentials"
+    }
+  ],
+  "T1553": [
+    {
+      "subject": "Adversaries",
+      "verb": "undermine",
+      "object": "security controls that will either warn users of untrusted activity or prevent execution of untrusted programs"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also create or steal",
+      "object": "code signing certificates to acquire trust on target systems"
+    }
+  ],
+  "T1553.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "file attributes and subvert Gatekeeper functionality to evade user prompts and execute untrusted programs"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "can subvert one or multiple security controls within Gatekeeper checks through",
+      "object": "logic errors, unchecked file types, and external libraries"
+    }
+  ],
+  "T1553.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "create, acquire, or steal",
+      "object": "code signing materials to sign their malware or tools"
+    },
+    {
+      "subject": "Code signing certificates",
+      "verb": "may be used to bypass",
+      "object": "security policies that require signed code to execute on a system"
+    }
+  ],
+  "T1553.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "tamper with",
+      "object": "SIP and trust provider components to mislead the operating system and application control tools when conducting signature validation checks"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may hijack SIP and trust provider components to mislead operating system and application control tools to classify",
+      "object": "malicious (or any) code as signed"
+    }
+  ],
+  "T1553.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "install",
+      "object": "a root certificate on a compromised system to avoid warnings when connecting to adversary controlled web servers"
+    },
+    {
+      "subject": "Root certificates (and their associated chains)",
+      "verb": "can also be cloned and reinstalled to sign",
+      "object": "malicious code that may then bypass signature validation tools"
+    }
+  ],
+  "T1553.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "specific file formats to subvert Mark-of-the-Web (MOTW) controls"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may abuse container files such as",
+      "object": "compressed/archive (.arj, .gzip) and/or disk image (.iso, .vhd) file formats to deliver malicious payloads that may not be tagged with MOTW"
+    }
+  ],
+  "T1553.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "code signing policies to enable execution of unsigned or self-signed code"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may modify code signing policies in a number of ways, including through",
+      "object": "use of command-line or GUI utilities, Modify Registry, rebooting the computer in a debug/recovery mode, or by altering the value of variables in kernel memory"
+    }
+  ],
+  "T1554": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "host software binaries to establish persistent access to systems"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may replace or otherwise infect",
+      "object": "a legitimate application binary (or support files) with a backdoor"
+    },
+    {
+      "subject": "An adversary",
+      "verb": "may also modify an existing binary by patching in",
+      "object": "malicious functionality (e.g., IAT Hooking/Entry point patching) prior to the binary's legitimate execution"
+    }
+  ],
+  "T1555": [
+    {
+      "subject": "Adversaries",
+      "verb": "search for",
+      "object": "common password storage locations to obtain user credentials"
+    }
+  ],
+  "T1555.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "acquire",
+      "object": "credentials from Keychain"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may gather",
+      "object": "user credentials from Keychain storage/memory"
+    }
+  ],
+  "T1555.002": [
+    {
+      "subject": "An adversary with root access",
+      "verb": "may gather credentials by reading",
+      "object": "securityd's memory"
+    },
+    {
+      "subject": "Apple's securityd utility",
+      "verb": "takes the user's logon password, encrypts it with PBKDF2, and stores",
+      "object": "this master key in memory"
+    }
+  ],
+  "T1555.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "acquire",
+      "object": "credentials from web browsers by reading files specific to the target browser"
+    },
+    {
+      "subject": "encrypted credentials",
+      "verb": "may be obtained from Google Chrome by reading",
+      "object": "a database file, AppData\\Local\\Google\\Chrome\\User Data\\Default\\Login Data"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also acquire credentials by searching",
+      "object": "web browser process memory for patterns that commonly match credentials"
+    }
+  ],
+  "T1555.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "acquire",
+      "object": "credentials from the Windows Credential Manager"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may list credentials managed by the Windows Credential Manager through",
+      "object": "several mechanisms including vaultcmd.exe, directly reading files inside Credential Lockers, and Windows APIs such as CredEnumerateA"
+    }
+  ],
+  "T1555.005": [
+    {
+      "subject": "Adversaries",
+      "verb": "acquire",
+      "object": "user credentials from third-party password managers"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may acquire user credentials from password managers by extracting",
+      "object": "the master password and/or plain-text credentials from memory"
+    }
+  ],
+  "T1555.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "acquire",
+      "object": "credentials from cloud-native secret management solutions such as AWS Secrets Manager, GCP Secret Manager, Azure Key Vault, and Terraform Vault"
+    },
+    {
+      "subject": "they",
+      "verb": "may be able to request",
+      "object": "secrets from the secrets manager via commands such as get-secret-value in AWS, gcloud secrets describe in GCP, and az key vault secret show in Azure"
+    }
+  ],
+  "T1556": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "authentication mechanisms and processes to access user credentials or enable otherwise unwarranted access to accounts"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may be able to authenticate to a service or system without using",
+      "object": "Valid Accounts"
+    }
+  ],
+  "T1556.001": [
+    {
+      "subject": "Adversaries",
+      "verb": "patch",
+      "object": "the authentication process on a domain controller to bypass the typical authentication mechanisms and enable access to accounts"
+    },
+    {
+      "subject": "Malware",
+      "verb": "may be used to inject",
+      "object": "false credentials into the authentication process on a domain controller with the intent of creating a backdoor"
+    }
+  ],
+  "T1556.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "register",
+      "object": "malicious password filter dynamic link libraries (DLLs) into the authentication process to acquire user credentials as they are validated"
+    },
+    {
+      "subject": "A malicious password filter",
+      "verb": "would receive",
+      "object": "plain-text credentials every time a password request is made"
+    }
+  ],
+  "T1556.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "modify",
+      "object": "pluggable authentication modules (PAM) to access user credentials or enable otherwise unwarranted access to accounts"
+    },
+    {
+      "subject": "PAM components, such as pam_unix.so",
+      "verb": "can be patched to accept",
+      "object": "arbitrary adversary supplied values as legitimate credentials"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may infect PAM resources with code to harvest",
+      "object": "user credentials"
+    }
+  ],
+  "T1556.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "use Patch System Image to hard code",
+      "object": "a password in the operating system, thus bypassing of native authentication mechanisms for local accounts on network devices"
+    }
+  ],
+  "T1556.005": [
+    {
+      "subject": "An adversary",
+      "verb": "may abuse",
+      "object": "Active Directory authentication encryption properties to gain access to credentials on Windows systems"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may be able to obtain",
+      "object": "the plaintext of passwords created/changed after the property was enabled"
+    }
+  ],
+  "T1556.006": [
+    {
+      "subject": "Adversaries",
+      "verb": "disable or modify",
+      "object": "multi-factor authentication (MFA) mechanisms to enable persistent access to compromised accounts"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may modify",
+      "object": "the Windows hosts file to redirect MFA calls to localhost instead of an MFA server"
+    }
+  ],
+  "T1556.007": [
+    {
+      "subject": "Adversaries",
+      "verb": "patch, modify, or otherwise backdoor",
+      "object": "cloud authentication processes that are tied to on-premises user identities"
+    },
+    {
+      "subject": "adversaries who compromise an on-premises server running a PTA agent",
+      "verb": "may inject",
+      "object": "a malicious DLL into the AzureADConnectAuthenticationAgentService process that authorizes all attempts to authenticate to Entra ID"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may edit",
+      "object": "the Microsoft.IdentityServer.Servicehost configuration file to load a malicious DLL that generates authentication tokens for any user with any set of claims"
+    }
+  ],
+  "T1556.008": [
+    {
+      "subject": "Adversaries",
+      "verb": "register",
+      "object": "malicious network provider dynamic link libraries (DLLs) to capture cleartext user credentials during the authentication process"
+    },
+    {
+      "subject": "a malicious DLL",
+      "verb": "can receive and save",
+      "object": "credentials each time a user logs onto a Windows workstation or domain via the NPLogonNotify() function"
+    }
+  ],
+  "T1556.009": [
+    {
+      "subject": "Adversaries",
+      "verb": "disable or modify",
+      "object": "conditional access policies to enable persistent access to compromised accounts"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may be able to ensure persistent access to accounts by",
+      "object": "adding additional trusted IP ranges, removing Multi-Factor Authentication requirements, or allowing additional Unused/Unsupported Cloud Regions"
+    }
+  ],
+  "T1557": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to position themselves between",
+      "object": "two or more networked devices using an adversary-in-the-middle (AiTM) technique"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may force",
+      "object": "a device to communicate through an adversary controlled system so they can collect information or perform additional actions"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may manipulate victim DNS settings to enable",
+      "object": "other malicious activities such as preventing/redirecting users from accessing legitimate sites and/or pushing additional malware"
+    }
+  ],
+  "T1557.001": [
+    {
+      "subject": "adversaries",
+      "verb": "spoof",
+      "object": "an authoritative source for name resolution on a victim network by responding to LLMNR (UDP 5355)/NBT-NS (UDP 137) traffic"
+    },
+    {
+      "subject": "the username and NTLMv2 hash",
+      "verb": "will then be sent to",
+      "object": "the adversary controlled system"
+    },
+    {
+      "subject": "the NTLMv1/v2 hashes",
+      "verb": "can be intercepted and relayed to",
+      "object": "access and execute code against a target system"
+    }
+  ],
+  "T1557.002": [
+    {
+      "subject": "Adversaries",
+      "verb": "poison",
+      "object": "Address Resolution Protocol (ARP) caches to position themselves between the communication of two or more networked devices"
+    },
+    {
+      "subject": "The adversary",
+      "verb": "may reply with their MAC address, thus deceiving the victim by making them believe that they are communicating with",
+      "object": "the intended networked device"
+    },
+    {
+      "subject": "Adversaries",
+      "verb": "may also send",
+      "object": "a gratuitous ARP reply that maliciously announces the ownership of a particular IP address to all the devices in the local network segment"
+    }
+  ],
+  "T1557.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "redirect",
+      "object": "network traffic to adversary-owned systems by spoofing Dynamic Host Configuration Protocol (DHCP) traffic and acting as a malicious DHCP server"
+    },
+    {
+      "subject": "malware",
+      "verb": "can act as a DHCP server and provide",
+      "object": "adversary-owned DNS servers to the victimized computers"
+    }
+  ],
+  "T1557.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "host",
+      "object": "seemingly genuine Wi-Fi access points to deceive users into connecting to malicious networks"
+    },
+    {
+      "subject": "adversaries",
+      "verb": "may also listen for client devices sending",
+      "object": "probe requests for known or previously connected networks"
+    },
+    {
+      "subject": "a user",
+      "verb": "may be directed to",
+      "object": "a fake login page or captive portal webpage to capture the victim's credentials"
+    }
+  ],
+  "T1558": [
+    {
+      "subject": "Adversaries",
+      "verb": "attempt to subvert",
+      "object": "Kerberos authentication by stealing or forging Kerberos tickets to enable Pass the Ticket"
+    }
+  ],
+  "T1558.001": [
+    {
+      "subject": "Adversaries who have the KRBTGT account password hash",
+      "verb": "may forge",
+      "object": "Kerberos ticket-granting tickets (TGT), also known as a golden ticket"
+    },
+    {
+      "subject": "Golden tickets",
+      "verb": "enable adversaries to generate",
+      "object": "authentication material for any account in Active Directory"
+    }
+  ],
+  "T1558.002": [
+    {
+      "subject": "Adversaries who have the password hash of a target service account",
+      "verb": "may forge",
+      "object": "Kerberos ticket granting service (TGS) tickets, also known as silver tickets"
+    },
+    {
+      "subject": "adversaries with the ability to forge silver tickets",
+      "verb": "are able to create",
+      "object": "TGS tickets without interacting with the Key Distribution Center (KDC)"
+    }
+  ],
+  "T1558.003": [
+    {
+      "subject": "Adversaries",
+      "verb": "abuse",
+      "object": "a valid Kerberos ticket-granting ticket (TGT) or sniff network traffic to obtain a ticket-granting service (TGS) ticket that may be vulnerable to Brute Force"
+    },
+    {
+      "subject": "Adversaries possessing a valid TGT",
+      "verb": "may request",
+      "object": "one or more Kerberos TGS service tickets for any SPN from a domain controller"
+    }
+  ],
+  "T1558.004": [
+    {
+      "subject": "Adversaries",
+      "verb": "reveal",
+      "object": "credentials of accounts that have disabled Kerberos preauthentication by Password Cracking Kerberos messages"
+    },
+    {
+      "subject": "an adversary",
+      "verb": "may send",
+      "object": "an AS-REQ message without the encrypted timestamp and receive an AS-REP message with TGT data which may be encrypted with an insecure algorithm such as RC4"
+    }
   ]
 }
