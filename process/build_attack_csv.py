@@ -43,7 +43,7 @@ from process.translation_rules import (
 
 STIX_URL = "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json"
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "data")
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, "attack_techniques.csv")
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, "attack_techniques_nlp.csv")
 LOCAL_STIX = os.path.join(OUTPUT_DIR, "enterprise-attack.json")
 
 
