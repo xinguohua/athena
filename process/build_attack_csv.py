@@ -149,16 +149,19 @@ def instantiate_triples(sys_subj: str, op_verbs: List[str], sys_obj: str) -> Lis
 # 完整流水线
 # ============================================================
 
-def translate_technique(nlp, name: str, description: str) -> str:
-    """对一个 ATT&CK 技术描述执行完整的三步翻译流水线。"""
-    # 清理文本
+def extract_raw_triples(nlp, name: str, description: str) -> List[Tuple[str, str, str]]:
+    """只执行步骤一：结构化解析，返回原始三元组。"""
     text = re.sub(r"\(Citation:[^)]*\)", "", description).strip()
     text = re.sub(r"</?code>", "", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
 
-    # 步骤一：结构化解析
     doc = nlp(text)
-    triples = extract_triples(doc)
+    return extract_triples(doc)
+
+
+def translate_technique(nlp, name: str, description: str) -> str:
+    """对一个 ATT&CK 技术描述执行完整的三步翻译流水线。"""
+    triples = extract_raw_triples(nlp, name, description)
 
     # 步骤二 + 三：语义层转换 + 操作级实例化
     all_descriptions = []
@@ -244,85 +247,31 @@ def main():
 
     print(f"总技术数: {len(tech_info)}, 子技术→父技术映射: {len(sub_to_parent)} 条")
 
-    # 5) 翻译每个技术
+    # 5) 只跑第一步：提取原始三元组
     total = len(tech_info)
-    translated_cache = {}
-    success_count = 0
-    empty_count = 0
+    raw_triples = {}
 
     for i, (tech_id, info) in enumerate(tech_info.items()):
-        result = translate_technique(nlp, info["name"], info["description"])
-        translated_cache[tech_id] = result
-
-        if result:
-            success_count += 1
-        else:
-            empty_count += 1
+        triples = extract_raw_triples(nlp, info["name"], info["description"])
+        raw_triples[tech_id] = [
+            {"subject": s, "verb": v, "object": o}
+            for s, v, o in triples
+        ]
 
         if (i + 1) % 50 == 0:
-            print(f"  [{i+1}/{total}] 已翻译，成功={success_count}，空={empty_count}")
+            print(f"  [{i+1}/{total}] 已提取")
 
-    print(f"\n翻译完成: 成功={success_count}, 空={empty_count}")
+    # 统计
+    total_triples = sum(len(t) for t in raw_triples.values())
+    non_empty = sum(1 for t in raw_triples.values() if t)
+    print(f"\n提取完成: {non_empty}/{total} 个技术有三元组，共 {total_triples} 个三元组")
 
-    # 6) 生成 CSV，子技术合并父技术
-    rows = []
-    enriched_count = 0
-    for tech_id, info in tech_info.items():
-        sys_behaviors = translated_cache.get(tech_id, "")
-
-        # 子技术合并父技术
-        if info["is_sub"] and tech_id in sub_to_parent:
-            parent_id = sub_to_parent[tech_id]
-            parent_behaviors = translated_cache.get(parent_id, "")
-            if parent_behaviors:
-                if sys_behaviors:
-                    existing = set(b.strip() for b in sys_behaviors.split(","))
-                    for b in parent_behaviors.split(","):
-                        b = b.strip()
-                        if b and b not in existing:
-                            existing.add(b)
-                            sys_behaviors += ", " + b
-                else:
-                    sys_behaviors = parent_behaviors
-
-        if sys_behaviors:
-            body = f"{info['name']}. {sys_behaviors}"
-            enriched_count += 1
-        else:
-            body = f"{info['name']}. {info['description'][:500]}"
-
-        rows.append({
-            "Subject": f"{tech_id}: {info['name']}",
-            "filepath": info["url"],
-            "Date": "",
-            "Body": body,
-            "Source": "MITRE-ATT&CK",
-        })
-
-    print(f"  有操作级描述: {enriched_count}")
-    print(f"  保留原始描述: {len(rows) - enriched_count}")
-
-    # 7) 写 CSV
+    # 保存原始三元组到JSON
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    with open(OUTPUT_FILE, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["Subject", "filepath", "Date", "Body", "Source"])
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
-
-    print(f"\n已写入: {OUTPUT_FILE}")
-
-    # 8) 保存翻译缓存
-    cache_file = os.path.join(OUTPUT_DIR, "translation_cache.json")
-    with open(cache_file, "w", encoding="utf-8") as f:
-        json.dump(translated_cache, f, ensure_ascii=False, indent=2)
-
-    # 打印示例
-    print("\n=== 翻译示例 ===")
-    for tech_id in ["T1055", "T1055.009", "T1070.001", "T1059", "T1003"]:
-        if tech_id in translated_cache and translated_cache[tech_id]:
-            print(f"\n{tech_id}: {tech_info.get(tech_id, {}).get('name', '')}")
-            print(f"  → {translated_cache[tech_id][:200]}")
+    out_file = os.path.join(OUTPUT_DIR, "raw_triples.json")
+    with open(out_file, "w", encoding="utf-8") as f:
+        json.dump(raw_triples, f, ensure_ascii=False, indent=2)
+    print(f"已写入: {out_file}")
 
 
 if __name__ == "__main__":
