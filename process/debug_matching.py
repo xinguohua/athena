@@ -38,7 +38,7 @@ OUTPUT_FILE = "debug_matching_output.json"
 DIAG_INDEX = 0
 
 MAPPER_CONFIG = {
-    "triples_path": os.path.join(os.path.dirname(__file__), "data/technique_triples_transformed.json"),
+    "triples_path": os.path.join(os.path.dirname(__file__), "data/technique_triples_raw.json"),
     "model_name": "sentence-transformers/all-MiniLM-L12-v2",
     "top_k": 10,
 }
