@@ -4,8 +4,8 @@
     "global_idx": 251,
     "tech_db_count": 689
   },
-  "query_text": "process writes shared library. process opens file. process sends network connection. process reads file. process writes file. process receives network connection",
-  "query_length": 161,
+  "query_text": "process writes memhelp.so shared library. process sends network connection. process reads eWq10bVcx. process writes /tmp/injectLog.txt file. process receives network connection",
+  "query_length": 176,
   "snapshot_nodes": {
     "total": 100,
     "malicious_count": 3,
@@ -156,62 +156,62 @@
     {
       "rank": 1,
       "tech_id": "T1556.007",
-      "cosine_similarity": 0.934594,
+      "cosine_similarity": 0.743664,
       "description": "process writes network connection. process reads shared library. process writes shared library. process executes shared library"
     },
     {
       "rank": 2,
-      "tech_id": "T1221",
-      "cosine_similarity": 0.884033,
-      "description": "process writes file. process reads file. process sends network connection"
+      "tech_id": "T1021.001",
+      "cosine_similarity": 0.726193,
+      "description": "process reads network connection. process sends credential file. process writes shared library"
     },
     {
       "rank": 3,
-      "tech_id": "T1681",
-      "cosine_similarity": 0.877599,
-      "description": "process reads file. process writes file. process reads network connection"
+      "tech_id": "T1608.001",
+      "cosine_similarity": 0.69553,
+      "description": "process sends executable. process sends file. process sends shared library"
     },
     {
       "rank": 4,
-      "tech_id": "T1584.005",
-      "cosine_similarity": 0.868651,
-      "description": "process reads file. process writes file. process executes file. process executes network connection"
+      "tech_id": "T1560.002",
+      "cosine_similarity": 0.685807,
+      "description": "process reads shared library. process reads file. process writes file"
     },
     {
       "rank": 5,
-      "tech_id": "T1567.003",
-      "cosine_similarity": 0.868319,
-      "description": "process reads network connection. process sends network connection. process writes file"
+      "tech_id": "T1176",
+      "cosine_similarity": 0.682449,
+      "description": "process writes shared library. process writes file"
     },
     {
       "rank": 6,
-      "tech_id": "T1592.001",
-      "cosine_similarity": 0.866778,
-      "description": "process reads file. process reads network connection. process writes file. process executes file"
+      "tech_id": "T1654",
+      "cosine_similarity": 0.680129,
+      "description": "process reads log file. process executes process. process reads network connection"
     },
     {
       "rank": 7,
-      "tech_id": "T1071.002",
-      "cosine_similarity": 0.866635,
-      "description": "process sends network connection. process receives network connection. process writes file"
+      "tech_id": "T1505.005",
+      "cosine_similarity": 0.679039,
+      "description": "process writes file. process writes shared library"
     },
     {
       "rank": 8,
-      "tech_id": "T1583.001",
-      "cosine_similarity": 0.865635,
-      "description": "process reads network connection. process reads file. process writes network connection"
+      "tech_id": "T1546.006",
+      "cosine_similarity": 0.679039,
+      "description": "process writes file. process writes shared library"
     },
     {
       "rank": 9,
-      "tech_id": "T1557.002",
-      "cosine_similarity": 0.865573,
-      "description": "process writes file. process sends file. process sends network connection"
+      "tech_id": "T1574.012",
+      "cosine_similarity": 0.679039,
+      "description": "process writes file. process writes shared library"
     },
     {
       "rank": 10,
-      "tech_id": "T1601.001",
-      "cosine_similarity": 0.864875,
-      "description": "process writes network connection. process receives network connection. process writes process. process writes executable"
+      "tech_id": "T1219.002",
+      "cosine_similarity": 0.674539,
+      "description": "process writes executable. process reads network connection"
     }
   ]
 }

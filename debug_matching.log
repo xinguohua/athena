@@ -7,46 +7,46 @@
 技术描述库: 689 个技术
 节点总数: 100, 恶意节点数: 3
 
------ 查询文本 (长度=161) -----
-process writes shared library. process opens file. process sends network connection. process reads file. process writes file. process receives network connection
+----- 查询文本 (长度=176) -----
+process writes memhelp.so shared library. process sends network connection. process reads eWq10bVcx. process writes /tmp/injectLog.txt file. process receives network connection
 
 ----- Top 10 匹配结果 -----
 
-  [1] T1556.007  similarity=0.934594
+  [1] T1556.007  similarity=0.743664
       描述: process writes network connection. process reads shared library. process writes shared library. process executes shared library
 
-  [2] T1221  similarity=0.884033
-      描述: process writes file. process reads file. process sends network connection
+  [2] T1021.001  similarity=0.726193
+      描述: process reads network connection. process sends credential file. process writes shared library
 
-  [3] T1681  similarity=0.877599
-      描述: process reads file. process writes file. process reads network connection
+  [3] T1608.001  similarity=0.695530
+      描述: process sends executable. process sends file. process sends shared library
 
-  [4] T1584.005  similarity=0.868651
-      描述: process reads file. process writes file. process executes file. process executes network connection
+  [4] T1560.002  similarity=0.685807
+      描述: process reads shared library. process reads file. process writes file
 
-  [5] T1567.003  similarity=0.868319
-      描述: process reads network connection. process sends network connection. process writes file
+  [5] T1176  similarity=0.682449
+      描述: process writes shared library. process writes file
 
-  [6] T1592.001  similarity=0.866778
-      描述: process reads file. process reads network connection. process writes file. process executes file
+  [6] T1654  similarity=0.680129
+      描述: process reads log file. process executes process. process reads network connection
 
-  [7] T1071.002  similarity=0.866635
-      描述: process sends network connection. process receives network connection. process writes file
+  [7] T1505.005  similarity=0.679039
+      描述: process writes file. process writes shared library
 
-  [8] T1583.001  similarity=0.865635
-      描述: process reads network connection. process reads file. process writes network connection
+  [8] T1546.006  similarity=0.679039
+      描述: process writes file. process writes shared library
 
-  [9] T1557.002  similarity=0.865573
-      描述: process writes file. process sends file. process sends network connection
+  [9] T1574.012  similarity=0.679039
+      描述: process writes file. process writes shared library
 
-  [10] T1601.001  similarity=0.864875
-      描述: process writes network connection. process receives network connection. process writes process. process writes executable
+  [10] T1219.002  similarity=0.674539
+      描述: process writes executable. process reads network connection
 
 ----- 语义差距分析 -----
-最佳匹配: T1556.007  similarity=0.934594
-第1名 vs 第2名 相似度差: 0.050561 (区分度高)
+最佳匹配: T1556.007  similarity=0.743664
+第1名 vs 第2名 相似度差: 0.017471 (区分度低，匹配不确定)
 词汇重叠数: 7
 重叠词: ['connection.', 'library.', 'network', 'process', 'reads', 'shared', 'writes']
-查询独有词(前20): ['connection', 'file.', 'opens', 'receives', 'sends']
+查询独有词(前20): ['/tmp/injectlog.txt', 'connection', 'ewq10bvcx.', 'file.', 'memhelp.so', 'receives', 'sends']
 
 诊断结果已写入: debug_matching_output.json
