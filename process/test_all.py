@@ -773,11 +773,8 @@ def print_snapshot_throughput(snapshots, proc_times: Optional[List[float]] = Non
             proc_times = _compute_seq_filter_proc_times(
                 snapshots,
                 mapper_config={
-                    "csv_path": "data/attack_techniques.csv",
-                    "persist_dir": os.path.join(os.path.dirname(__file__), "chroma_db"),
+                    "triples_path": os.path.join(os.path.dirname(__file__), "data/technique_triples_transformed.json"),
                     "model_name": "sentence-transformers/all-MiniLM-L12-v2",
-                    "page_content_column": "Body",
-                    "code_column": "Subject",
                     "top_k": 5,
                 } if SEQ_FILTER.get("enable", False) else None,
                 library_path=SEQ_FILTER.get("library_path") if SEQ_FILTER.get("enable", False) else None,
@@ -1369,11 +1366,8 @@ def run_evaluation(path_map: dict) -> None:
 
     if SEQ_FILTER.get("enable", False):
         mapper_cfg = {
-            "csv_path": "data/attack_techniques.csv",
-            "persist_dir": os.path.join(os.path.dirname(__file__), "chroma_db"),
+            "triples_path": os.path.join(os.path.dirname(__file__), "data/technique_triples_transformed.json"),
             "model_name": "sentence-transformers/all-MiniLM-L12-v2",
-            "page_content_column": "Body",
-            "code_column": "Subject",
             "top_k": 5,
         }
         pred_labels_refined = _seq_filter_phase(

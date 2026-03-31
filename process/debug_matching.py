@@ -9,7 +9,6 @@
 import json
 import os
 import pickle
-import re
 import sys
 from pathlib import Path
 
@@ -36,16 +35,12 @@ sys.stdout = _Tee(sys.__stdout__, _log_fh)
 GLOBAL_ID = "xgh"
 SNAPSHOT_FILE = os.path.join(os.path.dirname(__file__), f"snapshot_data_{GLOBAL_ID}.pkl")
 OUTPUT_FILE = "debug_matching_output.json"
-# 只诊断第几个恶意快照（从0开始），选一个 true_label=1 的效果最好
 DIAG_INDEX = 0
 
 MAPPER_CONFIG = {
-    "csv_path": os.path.join(os.path.dirname(__file__), "data/attack_techniques.csv"),
-    "persist_dir": os.path.join(os.path.dirname(__file__), "chroma_db"),
+    "triples_path": os.path.join(os.path.dirname(__file__), "data/technique_triples_transformed.json"),
     "model_name": "sentence-transformers/all-MiniLM-L12-v2",
-    "page_content_column": "Body",
-    "code_column": "Subject",
-    "top_k": 5,
+    "top_k": 10,
 }
 
 
@@ -84,12 +79,8 @@ def main():
     from process.technique_semantic_mapper import TechniqueSemanticMapper
     mapper = TechniqueSemanticMapper(**MAPPER_CONFIG)
 
-    db_count = 0
-    try:
-        db_count = mapper._vectordb._collection.count()
-    except Exception:
-        pass
-    print(f"向量库文档数: {db_count}")
+    tech_count = len(mapper._tech_ids)
+    print(f"技术描述库: {tech_count} 个技术")
 
     # 3) 快照节点详情
     node_count = snap.vcount()
@@ -114,61 +105,50 @@ def main():
 
     print(f"节点总数: {node_count}, 恶意节点数: {len(mal_nodes)}")
 
-    # 4) 生成查询文本（完整，不截断）
+    # 4) 生成查询文本
     query = mapper.snapshot_to_query(snap)
     print(f"\n----- 查询文本 (长度={len(query)}) -----")
     print(query)
 
-    # 5) 向量检索 top_k，输出完整技术描述
+    # 5) 向量检索 top_k
     print(f"\n----- Top {mapper.top_k} 匹配结果 -----")
     candidates = []
-    try:
-        raw_results = mapper._vectordb.similarity_search_with_score(query, k=mapper.top_k)
-        for rank, (doc, score) in enumerate(raw_results):
-            filepath = str(doc.metadata.get("filepath", ""))
-            m = re.search(r"\bT\d{4}(?:[/.]\d{3})?\b", filepath, flags=re.IGNORECASE)
-            tech_id = m.group(0).replace(".", "/") if m else "UNKNOWN"
-            full_content = doc.page_content
-
-            candidate = {
-                "rank": rank + 1,
-                "tech_id": tech_id,
-                "score": round(float(score), 6),
-                "filepath": filepath,
-                "metadata": {k: str(v) for k, v in doc.metadata.items()},
-                "full_content": full_content,
-            }
-            candidates.append(candidate)
-
-            print(f"\n  [{rank+1}] {tech_id}  score={float(score):.6f}")
-            print(f"      filepath: {filepath}")
-            print(f"      内容 (前500字):")
-            print(f"      {full_content[:500]}")
-    except Exception as ex:
-        print(f"  检索失败: {ex}")
+    top_results = mapper.predict_top_k(query)
+    for rank, (tech_id, score) in enumerate(top_results):
+        tech_desc = mapper._tech_descs.get(tech_id, "")
+        candidate = {
+            "rank": rank + 1,
+            "tech_id": tech_id,
+            "cosine_similarity": round(score, 6),
+            "description": tech_desc,
+        }
+        candidates.append(candidate)
+        print(f"\n  [{rank+1}] {tech_id}  similarity={score:.6f}")
+        print(f"      描述: {tech_desc[:300]}")
 
     # 6) 语义差距分析
     print(f"\n----- 语义差距分析 -----")
     if candidates:
         best = candidates[0]
-        print(f"最佳匹配: {best['tech_id']}  距离={best['score']:.6f}")
+        print(f"最佳匹配: {best['tech_id']}  similarity={best['cosine_similarity']:.6f}")
         if len(candidates) >= 2:
-            gap = candidates[1]["score"] - candidates[0]["score"]
-            print(f"第1名 vs 第2名 距离差: {gap:.6f} ({'区分度高' if gap > 0.05 else '区分度低，匹配不确定'})")
-        # 查询文本里的关键词 vs 最佳匹配内容里的关键词
+            gap = candidates[0]["cosine_similarity"] - candidates[1]["cosine_similarity"]
+            print(f"第1名 vs 第2名 相似度差: {gap:.6f} ({'区分度高' if gap > 0.05 else '区分度低，匹配不确定'})")
+        # 词汇重叠分析
         query_words = set(query.lower().split())
-        best_words = set(best["full_content"].lower().split())
+        best_words = set(best["description"].lower().split())
         overlap = query_words & best_words
         only_query = query_words - best_words
         print(f"词汇重叠数: {len(overlap)}")
-        print(f"查询独有词(前30): {list(only_query)[:30]}")
+        print(f"重叠词: {sorted(overlap)[:30]}")
+        print(f"查询独有词(前20): {sorted(only_query)[:20]}")
 
     # 7) 输出 JSON
     output = {
         "config": {
             "snapshot_idx": target_idx,
             "global_idx": mal_start + target_idx,
-            "vectordb_doc_count": db_count,
+            "tech_db_count": tech_count,
         },
         "query_text": query,
         "query_length": len(query),

@@ -1,0 +1,9107 @@
+{
+  "T1001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "task scheduler",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1001.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1001.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1001.003": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    }
+  ],
+  "T1003.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1003.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1003.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1003.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1003.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1003.006": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1003.007": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    }
+  ],
+  "T1003.008": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "command shell",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1006": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1007": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    }
+  ],
+  "T1008": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1010": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1011": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1011.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1012": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1014": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1016": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1016.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1016.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1018": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1020": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1020.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1021": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "credential file"
+    }
+  ],
+  "T1021.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1021.002": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1021.003": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1021.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "command shell",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1021.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1021.006": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1021.007": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1021.008": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1025": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1027": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1027.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1027.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1027.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1027.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1027.005": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1027.006": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1027.007": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1027.008": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1027.009": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1027.010": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1027.011": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1027.012": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "executable"
+    }
+  ],
+  "T1027.013": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1027.014": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1027.015": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1027.016": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "task scheduler",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1027.017": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1029": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1030": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1033": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    }
+  ],
+  "T1036": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    }
+  ],
+  "T1036.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1036.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1036.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1036.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    }
+  ],
+  "T1036.005": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1036.006": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1036.007": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1036.008": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1036.009": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1036.010": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1036.011": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1036.012": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1037": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "configuration file"
+    }
+  ],
+  "T1037.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1037.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1037.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1037.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1037.005": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1039": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1040": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1041": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1046": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "system service"
+    }
+  ],
+  "T1047": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1048": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1048.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1048.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1048.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1049": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1052": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1052.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1053": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1053.002": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1053.003": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1053.005": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1053.006": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1053.007": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1055": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1055.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    }
+  ],
+  "T1055.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1055.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1055.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "task scheduler",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1055.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1055.008": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1055.009": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1055.011": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1055.012": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1055.013": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    },
+    {
+      "subject": "task scheduler",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1055.014": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "process"
+    }
+  ],
+  "T1055.015": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1056": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1056.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    }
+  ],
+  "T1056.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1056.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1056.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1057": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1059": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1059.001": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "command shell",
+      "verb": "receives",
+      "object": "executable"
+    },
+    {
+      "subject": "command shell",
+      "verb": "executes",
+      "object": "shared library"
+    }
+  ],
+  "T1059.002": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "scripting interpreter",
+      "verb": "sends",
+      "object": "executable"
+    },
+    {
+      "subject": "scripting interpreter",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1059.003": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1059.004": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    }
+  ],
+  "T1059.005": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "scripting interpreter",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1059.006": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "file"
+    }
+  ],
+  "T1059.007": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1059.008": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1059.009": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "command shell",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1059.010": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1059.011": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1059.012": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1059.013": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1068": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1069": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1069.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1069.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1069.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1070": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1070.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "log file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1070.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "log file"
+    }
+  ],
+  "T1070.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "log file"
+    },
+    {
+      "subject": "scripting interpreter",
+      "verb": "writes",
+      "object": "log file"
+    }
+  ],
+  "T1070.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1070.005": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1070.006": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "task scheduler",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1070.007": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "remote access service",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "remote access service",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1070.008": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1070.009": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1070.010": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1071": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1071.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1071.002": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1071.003": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    }
+  ],
+  "T1071.004": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1071.005": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1072": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1074": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1074.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1074.002": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1078": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1078.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1078.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "credential file"
+    }
+  ],
+  "T1078.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1078.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1080": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1082": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1083": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1087": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    }
+  ],
+  "T1087.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1087.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1087.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1087.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "command shell",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1090": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1090.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1090.002": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1090.003": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1090.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1091": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1092": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1095": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1098": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1098.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    }
+  ],
+  "T1098.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1098.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1098.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "authentication key file"
+    }
+  ],
+  "T1098.005": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1098.006": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1098.007": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1102": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "system service",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1102.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1102.002": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1102.003": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1104": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "task scheduler",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1105": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "executable"
+    }
+  ],
+  "T1106": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1110": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "credential file"
+    }
+  ],
+  "T1110.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "credential file"
+    }
+  ],
+  "T1110.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1110.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "credential file"
+    }
+  ],
+  "T1110.004": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1111": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1112": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1113": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1114": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    }
+  ],
+  "T1114.001": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1114.002": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1114.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1115": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1119": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1120": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1123": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1124": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1125": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1127": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1127.001": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "task scheduler",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1127.002": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1127.003": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1129": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    }
+  ],
+  "T1132": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1132.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1132.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1133": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    }
+  ],
+  "T1134": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1134.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1134.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1134.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1134.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1134.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1135": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1136": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1136.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1136.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1136.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1137": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1137.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "scripting interpreter",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1137.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1137.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1137.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1137.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1137.006": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1140": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1176": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1176.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    }
+  ],
+  "T1176.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1185": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1187": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1189": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1190": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1195": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1195.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1195.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1195.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1197": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1199": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1200": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1201": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1202": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1203": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1204": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1204.001": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1204.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1204.003": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    }
+  ],
+  "T1204.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1204.005": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1205": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1205.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1205.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1207": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1210": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1211": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1212": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1213": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1213.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1213.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1213.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1213.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1213.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1213.006": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1216": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1216.001": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1216.002": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1217": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "log file"
+    }
+  ],
+  "T1218": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1218.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    }
+  ],
+  "T1218.002": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    }
+  ],
+  "T1218.003": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1218.004": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1218.005": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1218.007": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    }
+  ],
+  "T1218.008": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    }
+  ],
+  "T1218.009": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1218.010": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1218.011": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1218.012": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1218.013": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    }
+  ],
+  "T1218.014": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1218.015": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1219": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1219.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1219.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1219.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1220": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "scripting interpreter"
+    }
+  ],
+  "T1221": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1222": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1222.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1222.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1480": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1480.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1480.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1482": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1484": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1484.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "task scheduler",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1484.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1485": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1485.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "configuration file"
+    }
+  ],
+  "T1486": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1489": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1490": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "task scheduler",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "task scheduler",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1491": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1491.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1491.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1495": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1496": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    }
+  ],
+  "T1496.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1496.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1496.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1496.004": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1497": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1497.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    }
+  ],
+  "T1497.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "log file"
+    }
+  ],
+  "T1497.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1498": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1498.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1498.002": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1499": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1499.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1499.002": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "system service"
+    }
+  ],
+  "T1499.003": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1499.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1505": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1505.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1505.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1505.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "command shell",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1505.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1505.005": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1505.006": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1518": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1518.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1518.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1525": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1526": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1528": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1529": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1530": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1531": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "scripting interpreter",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1534": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1535": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1537": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1538": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1539": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    }
+  ],
+  "T1542": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1542.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1542.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1542.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1542.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1542.005": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1543": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1543.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1543.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "system service"
+    }
+  ],
+  "T1543.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1543.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1543.005": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1546": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1546.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1546.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1546.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1546.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1546.005": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1546.006": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1546.007": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    }
+  ],
+  "T1546.008": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1546.009": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    }
+  ],
+  "T1546.010": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    }
+  ],
+  "T1546.011": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1546.012": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1546.013": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "scripting interpreter",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1546.014": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1546.015": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1546.016": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1546.017": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1546.018": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1547": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1547.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1547.002": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1547.003": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1547.004": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1547.005": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1547.006": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1547.007": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1547.008": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1547.009": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1547.010": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1547.012": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1547.013": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1547.014": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1547.015": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1548": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1548.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1548.002": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1548.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1548.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1548.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1548.006": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1550": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    }
+  ],
+  "T1550.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    }
+  ],
+  "T1550.002": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1550.003": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "credential file"
+    }
+  ],
+  "T1550.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1552": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "authentication key file"
+    }
+  ],
+  "T1552.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    }
+  ],
+  "T1552.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1552.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "log file"
+    }
+  ],
+  "T1552.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1552.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1552.006": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1552.007": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1552.008": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1553": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "authentication key file"
+    }
+  ],
+  "T1553.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1553.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1553.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1553.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "authentication key file"
+    }
+  ],
+  "T1553.005": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1553.006": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1554": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1555": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1555.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1555.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1555.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1555.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1555.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1555.006": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1556": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1556.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1556.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1556.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1556.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1556.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1556.006": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1556.007": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    }
+  ],
+  "T1556.008": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1556.009": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1557": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1557.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1557.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1557.003": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1557.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1558": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    }
+  ],
+  "T1558.001": [
+    {
+      "subject": "command shell",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1558.002": [
+    {
+      "subject": "command shell",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1558.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1558.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    }
+  ],
+  "T1558.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1559": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1559.001": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1559.002": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1559.003": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1560": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1560.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1560.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1560.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1561": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1561.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1561.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1562": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1562.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "task scheduler",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1562.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "log file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1562.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "log file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1562.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1562.006": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1562.007": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1562.008": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1562.009": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "configuration file"
+    }
+  ],
+  "T1562.010": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1562.011": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1562.012": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "log file"
+    }
+  ],
+  "T1562.013": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1563": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1563.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1563.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1564": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1564.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1564.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1564.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "scripting interpreter",
+      "verb": "executes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1564.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1564.005": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1564.006": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1564.007": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1564.008": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1564.009": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1564.010": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1564.011": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1564.012": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1564.013": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1564.014": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1565": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1565.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1565.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1565.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1566": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    }
+  ],
+  "T1566.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    }
+  ],
+  "T1566.002": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1566.003": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1566.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1567": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1567.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1567.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1567.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1567.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1568": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1568.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1568.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1568.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1569": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "system service"
+    }
+  ],
+  "T1569.001": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "system service"
+    }
+  ],
+  "T1569.002": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1569.003": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "system service"
+    }
+  ],
+  "T1570": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1571": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1572": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1573": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1573.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1573.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1574": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1574.001": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1574.004": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "shared library"
+    }
+  ],
+  "T1574.005": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1574.006": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1574.007": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1574.008": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1574.009": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1574.010": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1574.011": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1574.012": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "shared library"
+    }
+  ],
+  "T1574.013": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1574.014": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "shared library"
+    }
+  ],
+  "T1578": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    }
+  ],
+  "T1578.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1578.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    }
+  ],
+  "T1578.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1578.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1578.005": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1580": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1583": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1583.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1583.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1583.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1583.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1583.005": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    }
+  ],
+  "T1583.006": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1583.007": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1583.008": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1584": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    }
+  ],
+  "T1584.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1584.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1584.003": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1584.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "email"
+    }
+  ],
+  "T1584.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1584.006": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "system service"
+    }
+  ],
+  "T1584.007": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1584.008": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1585": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1585.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1585.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    }
+  ],
+  "T1585.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1586": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "email"
+    }
+  ],
+  "T1586.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1586.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1586.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "system service"
+    }
+  ],
+  "T1587": [],
+  "T1587.001": [],
+  "T1587.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1587.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1587.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1588": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "authentication key file"
+    }
+  ],
+  "T1588.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    }
+  ],
+  "T1588.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1588.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "authentication key file"
+    }
+  ],
+  "T1588.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "authentication key file"
+    }
+  ],
+  "T1588.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1588.006": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1588.007": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1589": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    }
+  ],
+  "T1589.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "credential file"
+    }
+  ],
+  "T1589.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1589.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1590": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    }
+  ],
+  "T1590.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1590.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1590.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1590.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    }
+  ],
+  "T1590.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1590.006": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1591": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    }
+  ],
+  "T1591.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1591.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1591.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1591.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    }
+  ],
+  "T1592": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1592.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1592.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1592.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "email"
+    }
+  ],
+  "T1592.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1593": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1593.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1593.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1593.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1594": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1595": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1595.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1595.002": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1595.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1596": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1596.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1596.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1596.003": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "authentication key file"
+    }
+  ],
+  "T1596.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1596.005": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1597": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1597.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1597.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1598": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1598.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1598.002": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    }
+  ],
+  "T1598.003": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "credential file"
+    }
+  ],
+  "T1598.004": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    }
+  ],
+  "T1599": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1599.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1600": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    }
+  ],
+  "T1600.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1600.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1601": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1601.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1601.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "configuration file"
+    }
+  ],
+  "T1602": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1602.001": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1602.002": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1606": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1606.001": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1606.002": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1608": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    }
+  ],
+  "T1608.001": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "shared library"
+    }
+  ],
+  "T1608.002": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1608.003": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1608.004": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    }
+  ],
+  "T1608.005": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "system service"
+    }
+  ],
+  "T1608.006": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "executable"
+    }
+  ],
+  "T1609": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    }
+  ],
+  "T1610": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1611": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1612": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1613": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    }
+  ],
+  "T1614": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    }
+  ],
+  "T1614.001": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    }
+  ],
+  "T1615": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    }
+  ],
+  "T1619": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1620": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1621": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1622": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "process"
+    }
+  ],
+  "T1647": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1648": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    }
+  ],
+  "T1649": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "authentication key file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "authentication key file"
+    }
+  ],
+  "T1650": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1651": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "system service"
+    }
+  ],
+  "T1652": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1653": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1654": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "log file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "process"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ],
+  "T1656": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    }
+  ],
+  "T1657": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1659": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "system service"
+    }
+  ],
+  "T1665": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "network connection"
+    }
+  ],
+  "T1666": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "system service"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "system service"
+    }
+  ],
+  "T1667": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    }
+  ],
+  "T1668": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    }
+  ],
+  "T1669": [
+    {
+      "subject": "process",
+      "verb": "sends",
+      "object": "network connection"
+    },
+    {
+      "subject": "process",
+      "verb": "receives",
+      "object": "network connection"
+    }
+  ],
+  "T1671": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "credential file"
+    }
+  ],
+  "T1672": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "email"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "configuration file"
+    }
+  ],
+  "T1673": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1674": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1675": [
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "remote access service"
+    }
+  ],
+  "T1677": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "credential file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "executable"
+    }
+  ],
+  "T1678": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "executes",
+      "object": "file"
+    }
+  ],
+  "T1679": [
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    }
+  ],
+  "T1680": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "executable"
+    }
+  ],
+  "T1681": [
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "writes",
+      "object": "file"
+    },
+    {
+      "subject": "process",
+      "verb": "reads",
+      "object": "network connection"
+    }
+  ]
+}

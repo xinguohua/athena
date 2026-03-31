@@ -1,21 +1,20 @@
 """
-基于 Chroma + sentence-transformers 的 ATT&CK 技术语义映射器。
+基于 sentence-transformers 的 ATT&CK 技术语义映射器。
 
 职责：
-1. 查询侧翻译：将快照中的系统调用日志翻译为系统事件自然语言描述
-2. 向量检索：用翻译后的查询文本在 ATT&CK 技术向量库中检索最相似的技术
-3. 技术码提取：从检索结果中提取 MITRE ATT&CK 技术 ID
+1. 日志侧提升：将快照中的系统调用日志翻译为系统事件自然语言描述
+2. 技术侧库：从预计算的操作级三元组构建技术描述库
+3. 向量检索：用 Sentence-BERT 编码后计算余弦相似度，检索最相似的技术
 
-翻译规则定义在 process/translation_rules.py 中。
+技术侧描述来源：process/data/technique_triples_transformed.json
+日志侧翻译规则：process/translation_rules.py
 """
 from __future__ import annotations
-from typing import List, Tuple, Optional, Any
+from typing import List, Tuple, Optional, Dict
+import json
 import os
 import re
-import pandas as pd
-from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.document_loaders import DataFrameLoader
+import numpy as np
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -26,12 +25,15 @@ from process.translation_rules import (
 
 
 # ============================================================
-# 查询侧翻译：快照 → 系统事件自然语言
+# 日志侧提升：快照 → 系统事件自然语言
 # ============================================================
 
 def snapshot_to_query(snapshot, *, node_scope: str = "malicious", max_nodes: int = 200) -> str:
-    """将快照图翻译为系统事件自然语言查询文本。"""
-    # 1. 收集节点
+    """将快照图翻译为系统事件自然语言查询文本。
+
+    溯源图中一条边 <主体进程, 事件类型, 客体实体> 被翻译为
+    "process_role: action object_type" 格式的系统事件描述。
+    """
     nodes = []
     for v in snapshot.vs:
         attrs = v.attributes()
@@ -50,28 +52,21 @@ def snapshot_to_query(snapshot, *, node_scope: str = "malicious", max_nodes: int
             freq = 0
         nodes.append({"type": node_type, "properties": props, "frequency": freq})
 
-    # 2. 按频率排序，截取
     nodes.sort(key=lambda d: d["frequency"], reverse=True)
     nodes = nodes[:max_nodes]
 
-    # 3. 翻译每个节点
     lines = []
     for n in nodes:
         raw_type = n["type"].strip()
         type_desc = TYPE_MAP.get(raw_type, raw_type.lower())
-        # 主体提升：进程节点翻译为功能角色
         if raw_type == "SUBJECT_PROCESS":
-            # 从 properties 中提取进程名并翻译为功能角色
-            props = n["properties"]
-            proc_name = _extract_process_name(props)
+            proc_name = _extract_process_name(n["properties"])
             if proc_name:
                 type_desc = get_process_role(proc_name)
 
-        # 解析 properties: "{' EVENT_WRITE memhelp.so', ' EVENT_CLOSE', ...}"
         events_raw = n["properties"].strip("{} '\"")
         event_items = [e.strip().strip("'\"") for e in events_raw.split(",") if e.strip()]
 
-        # 翻译并去重
         seen = set()
         translated = []
         for e in event_items:
@@ -87,58 +82,131 @@ def snapshot_to_query(snapshot, *, node_scope: str = "malicious", max_nodes: int
 
 
 # ============================================================
-# 向量库检索
+# 技术侧描述库
+# ============================================================
+
+def _load_technique_descriptions(
+    json_path: str,
+) -> Dict[str, str]:
+    """从转换后的三元组 JSON 构建技术描述库。
+
+    每个技术的三元组 [{subject, verb, object}, ...] 拼接为一段描述：
+    "subject verb object. subject verb object. ..."
+    """
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    descriptions = {}
+    for tech_id, triples in data.items():
+        if not triples:
+            continue
+        parts = []
+        for t in triples:
+            parts.append(f"{t['subject']} {t['verb']} {t['object']}")
+        descriptions[tech_id] = ". ".join(parts)
+
+    return descriptions
+
+
+# ============================================================
+# 语义匹配器
 # ============================================================
 
 class TechniqueSemanticMapper:
-    """ATT&CK 技术语义匹配器：管理向量库，执行检索。"""
+    """ATT&CK 技术语义匹配器。
+
+    使用 Sentence-BERT 对日志侧查询和技术侧描述进行编码，
+    通过余弦相似度检索最匹配的技术。
+    """
 
     def __init__(
         self,
         *,
-        csv_path: str = os.path.join(os.path.dirname(__file__), "data/attack_techniques.csv"),
-        persist_dir: str = os.path.join(os.path.dirname(__file__), "chroma_db"),
+        triples_path: str = os.path.join(
+            os.path.dirname(__file__), "data/technique_triples_transformed.json"
+        ),
         model_name: str = "sentence-transformers/all-MiniLM-L12-v2",
-        page_content_column: str = "Body",
         top_k: int = 5,
+        threshold: float = 0.0,
+        # 兼容旧接口参数（忽略）
+        **kwargs,
     ) -> None:
-        self.csv_path = csv_path
-        self.persist_dir = persist_dir
+        self.triples_path = triples_path
         self.model_name = model_name
-        self.page_content_column = page_content_column
         self.top_k = int(max(1, top_k))
-        self._vectordb, self._emb = self._open_or_build()
+        self.threshold = threshold
+
+        # 加载技术描述库
+        self._tech_descs = _load_technique_descriptions(triples_path)
+        self._tech_ids = list(self._tech_descs.keys())
+        self._tech_texts = [self._tech_descs[tid] for tid in self._tech_ids]
+
+        # 加载 Sentence-BERT 模型
+        try:
+            from sentence_transformers import SentenceTransformer
+            self._model = SentenceTransformer(model_name)
+        except ImportError:
+            raise ImportError(
+                "需要 sentence-transformers: pip install sentence-transformers"
+            )
+
+        # 预编码技术侧描述
+        print(f"[SemMapper] 编码 {len(self._tech_ids)} 个技术描述...")
+        self._tech_embeddings = self._model.encode(
+            self._tech_texts, show_progress_bar=False, normalize_embeddings=True
+        )
+        print(f"[SemMapper] 技术描述库就绪。")
 
     def snapshot_to_query(self, snap) -> str:
-        """兼容旧接口：将快照翻译为查询文本。"""
+        """将快照翻译为查询文本。"""
         return snapshot_to_query(snap)
 
-    def predict_top(self, query: str) -> Optional[Tuple[str, float, Any]]:
-        """返回最佳匹配的 (mitre_id, score, doc)，score 越小越相似。"""
+    def predict_top(self, query: str) -> Optional[Tuple[str, float]]:
+        """返回最佳匹配的 (mitre_id, cosine_similarity)。
+
+        similarity 越大越相似（范围 [-1, 1]）。
+        """
         if not query or not query.strip():
             return None
-        try:
-            results = self._vectordb.similarity_search_with_score(query, k=self.top_k)
-        except Exception as ex:
-            print(f"[predict_top] 检索失败: {ex}")
-            return None
-        if not results:
-            return None
 
-        best_doc, best_score = None, None
-        for doc, score in results:
-            try:
-                score = float(score)
-            except Exception:
-                continue
-            if best_score is None or score < best_score:
-                best_doc, best_score = doc, score
+        # 编码查询
+        q_emb = self._model.encode(
+            [query], show_progress_bar=False, normalize_embeddings=True
+        )
 
-        if best_doc is None:
+        # 计算余弦相似度（已归一化，点积即余弦）
+        similarities = np.dot(self._tech_embeddings, q_emb.T).flatten()
+
+        # 取 top_k
+        top_indices = np.argsort(similarities)[::-1][:self.top_k]
+
+        best_idx = top_indices[0]
+        best_score = float(similarities[best_idx])
+
+        if best_score < self.threshold:
             return None
 
-        mitre_id = _extract_mitre_id(best_doc.metadata.get("filepath", ""))
-        return mitre_id, float(best_score), best_doc
+        mitre_id = self._tech_ids[best_idx]
+        return mitre_id, best_score
+
+    def predict_top_k(self, query: str) -> List[Tuple[str, float]]:
+        """返回 top_k 个最匹配的 (mitre_id, cosine_similarity)。"""
+        if not query or not query.strip():
+            return []
+
+        q_emb = self._model.encode(
+            [query], show_progress_bar=False, normalize_embeddings=True
+        )
+        similarities = np.dot(self._tech_embeddings, q_emb.T).flatten()
+        top_indices = np.argsort(similarities)[::-1][:self.top_k]
+
+        results = []
+        for idx in top_indices:
+            score = float(similarities[idx])
+            if score >= self.threshold:
+                results.append((self._tech_ids[idx], score))
+
+        return results
 
     def predict_codes(self, queries: List[str]) -> List[str]:
         """批量查询，返回技术 ID 列表。"""
@@ -147,53 +215,47 @@ class TechniqueSemanticMapper:
             for q in queries
         ]
 
-    def _open_or_build(self):
-        """打开已有向量库，或从 CSV 构建新库。"""
-        emb = HuggingFaceEmbeddings(model_name=self.model_name)
-        vectordb = Chroma(persist_directory=self.persist_dir, embedding_function=emb)
-        try:
-            cnt = vectordb._collection.count()
-        except Exception:
-            cnt = 0
-        if cnt and cnt > 0:
-            return vectordb, emb
+    def predict_codes_batch(self, queries: List[str]) -> List[str]:
+        """批量查询（向量化），返回技术 ID 列表。"""
+        if not queries:
+            return []
 
-        if not (self.csv_path and os.path.exists(self.csv_path)):
-            raise RuntimeError("Chroma 向量库为空且未找到 CSV 构建源")
-
-        df = pd.read_csv(self.csv_path)
-        if self.page_content_column not in df.columns:
-            raise ValueError(f"CSV 缺少列: {self.page_content_column}")
-        loader = DataFrameLoader(df, page_content_column=self.page_content_column)
-        documents = loader.load()
-        vectordb = Chroma.from_documents(
-            documents=documents,
-            embedding=emb,
-            persist_directory=self.persist_dir,
+        # 批量编码
+        q_embs = self._model.encode(
+            queries, show_progress_bar=False, normalize_embeddings=True
         )
-        vectordb.persist()
-        return vectordb, emb
 
+        # 批量余弦相似度
+        similarities = np.dot(q_embs, self._tech_embeddings.T)  # (n_queries, n_techs)
+
+        results = []
+        for i in range(len(queries)):
+            if not queries[i] or not queries[i].strip():
+                results.append("UNKNOWN")
+                continue
+            best_idx = int(np.argmax(similarities[i]))
+            best_score = float(similarities[i, best_idx])
+            if best_score < self.threshold:
+                results.append("UNKNOWN")
+            else:
+                results.append(self._tech_ids[best_idx])
+
+        return results
+
+
+# ============================================================
+# 工具函数
+# ============================================================
 
 def _extract_process_name(properties: str) -> str:
     """从节点 properties 中提取进程名。"""
-    # properties 格式类似: "{'name': 'bash', ...}" 或 "bash"
     props = properties.strip()
-    # 尝试匹配 name 字段
     m = re.search(r"'name'\s*:\s*'([^']+)'", props)
     if m:
         return m.group(1)
     m = re.search(r'"name"\s*:\s*"([^"]+)"', props)
     if m:
         return m.group(1)
-    # 如果 properties 本身就是进程名
     if props and not props.startswith("{") and len(props) < 50:
         return props
     return ""
-
-
-def _extract_mitre_id(filepath: str) -> str:
-    """从 ATT&CK URL 中提取技术 ID，如 T1055/009。"""
-    filepath = str(filepath).strip()
-    m = re.search(r"\bT\d{4}(?:[/.]\d{3})?\b", filepath, flags=re.IGNORECASE)
-    return m.group(0).replace(".", "/") if m else "UNKNOWN"

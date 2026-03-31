@@ -90,10 +90,10 @@ PROCESS_ROLE_MAP = {
     "ruby": "scripting interpreter",
     "node": "scripting interpreter",
     "php": "scripting interpreter",
-    # SSH service
-    "sshd": "SSH service",
-    "ssh": "SSH client",
-    "telnetd": "telnet service",
+    # remote access service
+    "sshd": "remote access service",
+    "ssh": "remote access service",
+    "telnetd": "remote access service",
     # task scheduler
     "crond": "task scheduler",
     "cron": "task scheduler",
@@ -109,20 +109,20 @@ PROCESS_ROLE_MAP = {
     "postgres": "database service",
     "mongod": "database service",
     "redis-server": "database service",
-    # network utility
-    "curl": "network utility",
-    "wget": "network utility",
-    "nc": "network utility",
-    "ncat": "network utility",
-    "netcat": "network utility",
-    # system service manager
-    "systemd": "system service manager",
-    "init": "system service manager",
-    "launchd": "system service manager",
-    # powershell
-    "powershell": "powershell",
-    "pwsh": "powershell",
-    "powershell.exe": "powershell",
+    # network utility → process（兜底）
+    "curl": "process",
+    "wget": "process",
+    "nc": "process",
+    "ncat": "process",
+    "netcat": "process",
+    # system service
+    "systemd": "system service",
+    "init": "system service",
+    "launchd": "system service",
+    # scripting interpreter (PowerShell)
+    "powershell": "scripting interpreter",
+    "pwsh": "scripting interpreter",
+    "powershell.exe": "scripting interpreter",
     # cmd
     "cmd": "command shell",
     "cmd.exe": "command shell",
@@ -149,36 +149,36 @@ FILE_EXT_MAP = {
     # credential / key file
     ".pem": "authentication key file",
     ".key": "authentication key file",
-    ".crt": "certificate file",
-    ".cer": "certificate file",
+    ".crt": "authentication key file",
+    ".cer": "authentication key file",
     ".pgp": "authentication key file",
     ".gpg": "authentication key file",
     # executable
     ".exe": "executable",
     ".elf": "executable",
-    # script
-    ".sh": "shell script",
-    ".py": "python script",
-    ".pl": "perl script",
-    ".rb": "ruby script",
-    ".js": "javascript",
-    ".vbs": "vbscript",
-    ".ps1": "powershell script",
-    ".bat": "batch script",
-    ".cmd": "batch script",
-    # data
-    ".db": "database file",
-    ".sqlite": "database file",
-    ".json": "json file",
-    ".xml": "xml file",
-    ".csv": "data file",
-    # archive
-    ".zip": "archive file",
-    ".tar": "archive file",
-    ".gz": "compressed file",
-    ".bz2": "compressed file",
-    ".7z": "archive file",
-    ".rar": "archive file",
+    # script → executable
+    ".sh": "executable",
+    ".py": "executable",
+    ".pl": "executable",
+    ".rb": "executable",
+    ".js": "executable",
+    ".vbs": "executable",
+    ".ps1": "executable",
+    ".bat": "executable",
+    ".cmd": "executable",
+    # data → file
+    ".db": "file",
+    ".sqlite": "file",
+    ".json": "file",
+    ".xml": "file",
+    ".csv": "file",
+    # archive → file
+    ".zip": "file",
+    ".tar": "file",
+    ".gz": "file",
+    ".bz2": "file",
+    ".7z": "file",
+    ".rar": "file",
 }
 
 # ============================================================
@@ -192,25 +192,25 @@ FILE_PATH_MAP = [
     ("/etc/master.passwd", "credential file"),
     # authorized keys
     ("authorized_keys", "authentication key file"),
-    (".ssh/", "SSH configuration"),
-    # scheduled task
-    ("crontab", "scheduled task configuration"),
-    ("/etc/cron", "scheduled task configuration"),
-    ("/etc/init.d/", "scheduled task configuration"),
-    ("/etc/systemd/", "scheduled task configuration"),
-    # proc filesystem
-    ("/proc/", "process information"),
+    (".ssh/", "configuration file"),
+    # scheduled task → configuration file（17种类型中无单独的 scheduled task 类型）
+    ("crontab", "configuration file"),
+    ("/etc/cron", "configuration file"),
+    ("/etc/init.d/", "configuration file"),
+    ("/etc/systemd/", "configuration file"),
+    # proc filesystem → process
+    ("/proc/", "process"),
     # log
     ("/var/log/", "log file"),
-    # general paths
-    ("/tmp/", "temporary directory"),
-    ("/etc/", "system configuration directory"),
-    ("/dev/", "device"),
-    ("/bin/", "binary directory"),
-    ("/sbin/", "system binary directory"),
-    ("/usr/bin/", "user binary directory"),
-    ("/home/", "user home directory"),
-    ("/root/", "root home directory"),
+    # general paths → 映射为17种类型中的兜底类型
+    ("/tmp/", "file"),
+    ("/etc/", "configuration file"),
+    ("/dev/", "file"),
+    ("/bin/", "executable"),
+    ("/sbin/", "executable"),
+    ("/usr/bin/", "executable"),
+    ("/home/", "file"),
+    ("/root/", "file"),
 ]
 
 # ============================================================
@@ -218,24 +218,24 @@ FILE_PATH_MAP = [
 # ============================================================
 
 PORT_MAP = {
-    "80": "HTTP",
-    "443": "HTTPS",
-    "22": "SSH",
-    "53": "DNS",
-    "25": "SMTP",
-    "587": "SMTP",
-    "110": "POP3",
-    "143": "IMAP",
-    "21": "FTP",
-    "23": "telnet",
-    "3306": "MySQL",
-    "5432": "PostgreSQL",
-    "6379": "Redis",
-    "3389": "RDP",
-    "445": "SMB",
-    "139": "SMB",
-    "8080": "HTTP proxy",
-    "8443": "HTTPS",
+    "80": "network connection",
+    "443": "network connection",
+    "22": "network connection",
+    "53": "network connection",
+    "25": "email",
+    "587": "email",
+    "110": "network connection",
+    "143": "network connection",
+    "21": "network connection",
+    "23": "network connection",
+    "3306": "network connection",
+    "5432": "network connection",
+    "6379": "network connection",
+    "3389": "network connection",
+    "445": "network connection",
+    "139": "network connection",
+    "8080": "network connection",
+    "8443": "network connection",
 }
 
 # ============================================================
