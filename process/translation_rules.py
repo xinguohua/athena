@@ -372,17 +372,17 @@ def get_process_role(process_name: str) -> str:
 
 
 def get_file_type(filepath: str) -> str:
-    """文件路径 → 系统级类型描述。"""
+    """文件路径 → 系统级类型描述。扩展名优先于路径前缀。"""
     fp = filepath.strip()
 
-    # 先匹配具体路径
-    for prefix, desc in FILE_PATH_MAP:
-        if prefix in fp:
-            return desc
-
-    # 再匹配扩展名
+    # 先匹配扩展名（优先，因为 .so/.dll 比 /tmp/ 更有信息量）
     for ext, desc in FILE_EXT_MAP.items():
         if fp.endswith(ext):
+            return desc
+
+    # 再匹配具体路径
+    for prefix, desc in FILE_PATH_MAP:
+        if prefix in fp:
             return desc
 
     return ""
@@ -433,13 +433,13 @@ def translate_event(event_str: str) -> str:
     if not obj:
         return action
 
-    # 将文件路径映射为系统级类型
+    # 将文件路径映射为系统级类型，同时保留原始路径/文件名
     file_type = get_file_type(obj)
     if file_type:
-        return f"{action} {file_type}"
+        return f"{action} {obj} {file_type}"
 
-    # 未命中映射表的文件 → 兜底为 "file"
-    return f"{action} file"
+    # 未命中映射表的文件 → 保留原始路径
+    return f"{action} {obj}"
 
 
 # ============================================================
