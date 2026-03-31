@@ -2,7 +2,7 @@
   "config": {
     "snapshot_idx": 77,
     "global_idx": 251,
-    "tech_db_count": 689
+    "tech_db_count": 691
   },
   "query_text": "process writes memhelp.so shared library. process sends network connection. process reads eWq10bVcx. process writes /tmp/injectLog.txt file. process receives network connection",
   "query_length": 176,
@@ -155,63 +155,63 @@
   "candidates": [
     {
       "rank": 1,
-      "tech_id": "T1556.007",
-      "cosine_similarity": 0.743664,
-      "description": "process writes network connection. process reads shared library. process writes shared library. process executes shared library"
+      "tech_id": "T1055.011",
+      "cosine_similarity": 0.426383,
+      "description": "Adversaries inject malicious code into process via Extra Window Memory (EWM). Malware write place a pointer to the code in EWM, then invoke execution by returning control to the address in EWM. Adversaries avoid highly monitored API calls by writing payloads to shared sections instead of using WriteProcessMemory and CreateRemoteThread"
     },
     {
       "rank": 2,
-      "tech_id": "T1021.001",
-      "cosine_similarity": 0.726193,
-      "description": "process reads network connection. process sends credential file. process writes shared library"
+      "tech_id": "T1055.008",
+      "cosine_similarity": 0.41465,
+      "description": "Adversaries inject malicious code into processes via ptrace (process trace) system calls. Ptrace system call injection attach to and modify a running process by writing arbitrary code into it (ex: malloc) then invoking that memory with PTRACE_SETREGS. Ptrace system call injection copy PTRACE_POKETEXT/PTRACE_POKEDATA to copy data to a specific address in the target processes' memory"
     },
     {
       "rank": 3,
-      "tech_id": "T1608.001",
-      "cosine_similarity": 0.69553,
-      "description": "process sends executable. process sends file. process sends shared library"
+      "tech_id": "T1055.002",
+      "cosine_similarity": 0.394263,
+      "description": "Adversaries inject portable executables (PE) into processes. Adversaries copy code into the target process using native Windows API calls such as VirtualAllocEx and WriteProcessMemory, then invoke with CreateRemoteThread or shellcode"
     },
     {
       "rank": 4,
-      "tech_id": "T1560.002",
-      "cosine_similarity": 0.685807,
-      "description": "process reads shared library. process reads file. process writes file"
+      "tech_id": "T1055.001",
+      "cosine_similarity": 0.382845,
+      "description": "Adversaries inject dynamic-link libraries (DLLs) into processes. Adversaries write native Windows API calls such as VirtualAllocEx and WriteProcessMemory, then invoke with CreateRemoteThread. Adversaries may also load a legitimate DLL into a remote process and manually overwrite the module's AddressOfEntryPoint before starting a new thread"
     },
     {
       "rank": 5,
-      "tech_id": "T1176",
-      "cosine_similarity": 0.682449,
-      "description": "process writes shared library. process writes file"
+      "tech_id": "T1055.009",
+      "cosine_similarity": 0.37879,
+      "description": "Adversaries inject malicious code into processes via the /proc filesystem. Adversaries enumerate the memory of a process via /proc/[pid] then craft a return-oriented programming (ROP) payload with available gadgets/instructions. Proc memory injection overwrite the target processes' stack using memory mappings provided by the /proc filesystem, including using dd on /proc/[pid]/maps"
     },
     {
       "rank": 6,
-      "tech_id": "T1654",
-      "cosine_similarity": 0.680129,
-      "description": "process reads log file. process executes process. process reads network connection"
+      "tech_id": "T1055.013",
+      "cosine_similarity": 0.378031,
+      "description": "Adversaries inject malicious code into process via process doppelgänging. Adversaries inject a file-less variation of Process Injection. Process Doppelgänging step 1 Transact Create a TxF transaction using a legitimate executable then overwrite the file with malicious code. Process Doppelgänging step 2 Load Create a shared section of memory and load the malicious executable. Process Doppelgänging step 3 Rollback Undo changes to original executable, effectively removing malicious code from the file system. Process Doppelgänging step 4 Animate Create a process from the tainted section of memory and initiate execution"
     },
     {
       "rank": 7,
-      "tech_id": "T1505.005",
-      "cosine_similarity": 0.679039,
-      "description": "process writes file. process writes shared library"
+      "tech_id": "T1055.012",
+      "cosine_similarity": 0.375739,
+      "description": "Adversaries inject malicious code into suspended and hollowed processes. Adversaries create a process in a suspended state using native Windows API calls such as CreateProcess with a flag to suspend the primary thread. Adversaries unmap the victim process using APIs such as ZwUnmapViewOfSection or NtUnmapViewOfSection before writing malicious code, realigning, and resuming"
     },
     {
       "rank": 8,
-      "tech_id": "T1546.006",
-      "cosine_similarity": 0.679039,
-      "description": "process writes file. process writes shared library"
+      "tech_id": "T1055",
+      "cosine_similarity": 0.373475,
+      "description": "Adversaries inject code into processes in order to evade process-based defenses as well as possibly elevate privileges. Adversaries run code in the context of another process to access the process's memory, system/network resources, and possibly elevated privileges. Adversaries inject named pipes or other inter-process communication (IPC) mechanisms to segment modules and further evade detection"
     },
     {
       "rank": 9,
-      "tech_id": "T1574.012",
-      "cosine_similarity": 0.679039,
-      "description": "process writes file. process writes shared library"
+      "tech_id": "T1129",
+      "cosine_similarity": 0.3691,
+      "description": "Adversaries execute malicious payloads via loading shared modules. Adversaries can modularize functionality of their malware into shared objects that perform various functions such as managing C2 network communications or execution of specific actions on objective. The Linux & macOS module loader load dlopen and dlsym in dlfcn.h to load and execute shared objects from arbitrary local paths. The Windows module loader load LoadLibrary to load DLLs from arbitrary local paths and UNC network paths"
     },
     {
       "rank": 10,
-      "tech_id": "T1219.002",
-      "cosine_similarity": 0.674539,
-      "description": "process writes executable. process reads network connection"
+      "tech_id": "T1559",
+      "cosine_similarity": 0.361129,
+      "description": "Adversaries execute inter-process communication (IPC) mechanisms for local code or command execution. Adversaries execute remote IPC execution"
     }
   ]
 }
