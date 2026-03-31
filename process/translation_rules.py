@@ -44,30 +44,31 @@ EVENT_MAP = {
     "EVENT_OPEN": "opens",
     "EVENT_CLOSE": "closes",
     "EVENT_EXECUTE": "executes",
-    "EVENT_FORK": "creates child process",
+    "EVENT_FORK": "executes process",
     "EVENT_EXIT": "exits",
-    "EVENT_CONNECT": "connects to",
-    "EVENT_SENDTO": "sends network data",
-    "EVENT_RECVFROM": "receives network data",
-    "EVENT_SENDMSG": "sends message",
-    "EVENT_RECVMSG": "receives message",
-    "EVENT_MODIFY_PROCESS": "modifies process",
+    "EVENT_CONNECT": "sends network connection",
+    "EVENT_SENDTO": "sends network connection",
+    "EVENT_RECVFROM": "receives network connection",
+    "EVENT_SENDMSG": "sends network connection",
+    "EVENT_RECVMSG": "receives network connection",
+    "EVENT_MODIFY_PROCESS": "writes process",
     "EVENT_CREATE_OBJECT": "creates",
     "EVENT_CHANGE_PRINCIPAL": "changes principal",
     "EVENT_LSEEK": "seeks in file",
-    "EVENT_MODIFY_FILE_ATTRIBUTES": "modifies file attributes",
-    "EVENT_RENAME": "renames",
-    "EVENT_UNLINK": "deletes",
+    "EVENT_MODIFY_FILE_ATTRIBUTES": "writes configuration file",
+    "EVENT_RENAME": "writes file",
+    "EVENT_UNLINK": "writes file",
     "EVENT_MMAP": "maps memory",
     "EVENT_MPROTECT": "changes memory protection",
-    "EVENT_CLONE": "clones process",
-    "EVENT_BIND": "binds to port",
-    "EVENT_ACCEPT": "accepts connection",
-    "EVENT_LOGIN": "logs in",
-    "EVENT_LOGOUT": "logs out",
+    "EVENT_CLONE": "executes process",
+    "EVENT_BIND": "sends network connection",
+    "EVENT_ACCEPT": "receives network connection",
+    "EVENT_LOGIN": "reads credential file",
+    "EVENT_LOGOUT": "exits",
 }
 
-LOW_INFO_EVENTS = {"closes", "exits"}
+LOW_INFO_EVENTS = {"closes", "exits", "opens", "seeks in file", "maps memory",
+                    "changes memory protection", "creates", "changes principal"}
 
 # ============================================================
 # 日志侧：进程名 → 功能角色
@@ -405,10 +406,12 @@ def is_internal_ip(ip: str) -> bool:
 
 
 def translate_event(event_str: str) -> str:
-    """日志侧：将单个系统调用事件翻译为自然语言。
+    """日志侧：将单个系统调用事件翻译为系统事件描述。
 
     输入: 'EVENT_WRITE /tmp/memhelp.so'
-    输出: 'writes shared library in temporary directory'
+    输出: 'writes shared library'
+
+    输出格式为 "verb object_type"，与技术侧三元组的 verb+object 部分对齐。
     """
     event_str = event_str.strip()
     if not event_str:
@@ -418,29 +421,24 @@ def translate_event(event_str: str) -> str:
     event_type = parts[0]
     obj = parts[1] if len(parts) > 1 else ""
 
-    action = EVENT_MAP.get(event_type, event_type.replace("EVENT_", "").lower())
+    action = EVENT_MAP.get(event_type, "")
+    if not action:
+        return ""
+
+    # 如果事件已经包含了完整的 "verb object_type"（如 "sends network connection"），直接返回
+    if " " in action:
+        return action
+
     if not obj:
         return action
 
-    # 对象描述
-    descriptions = []
-
-    # 文件类型
+    # 将文件路径映射为系统级类型
     file_type = get_file_type(obj)
     if file_type:
-        descriptions.append(file_type)
-    else:
-        # 从文件名中提取有意义的词
-        basename = obj.rsplit("/", 1)[-1] if "/" in obj else obj
-        name_stem = basename.rsplit(".", 1)[0] if "." in basename else basename
-        words = re.findall(r'[a-zA-Z]+', name_stem)
-        meaningful = [w.lower() for w in words if len(w) > 2]
-        if meaningful:
-            descriptions.append(" ".join(meaningful))
+        return f"{action} {file_type}"
 
-    if descriptions:
-        return f"{action} {' '.join(descriptions)}"
-    return action
+    # 未命中映射表的文件 → 兜底为 "file"
+    return f"{action} file"
 
 
 # ============================================================

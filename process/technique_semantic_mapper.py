@@ -31,8 +31,10 @@ from process.translation_rules import (
 def snapshot_to_query(snapshot, *, node_scope: str = "malicious", max_nodes: int = 200) -> str:
     """将快照图翻译为系统事件自然语言查询文本。
 
-    溯源图中一条边 <主体进程, 事件类型, 客体实体> 被翻译为
-    "process_role: action object_type" 格式的系统事件描述。
+    输出格式与技术侧描述一致：
+    "subject verb object. subject verb object. ..."
+
+    例如：command shell writes shared library. command shell sends network connection.
     """
     nodes = []
     for v in snapshot.vs:
@@ -55,30 +57,33 @@ def snapshot_to_query(snapshot, *, node_scope: str = "malicious", max_nodes: int
     nodes.sort(key=lambda d: d["frequency"], reverse=True)
     nodes = nodes[:max_nodes]
 
-    lines = []
+    triples = []
+    seen = set()
     for n in nodes:
         raw_type = n["type"].strip()
-        type_desc = TYPE_MAP.get(raw_type, raw_type.lower())
-        if raw_type == "SUBJECT_PROCESS":
-            proc_name = _extract_process_name(n["properties"])
-            if proc_name:
-                type_desc = get_process_role(proc_name)
 
+        # 主语：进程节点 → 进程角色，其他节点跳过（只有进程发起动作）
+        if raw_type != "SUBJECT_PROCESS":
+            continue
+
+        proc_name = _extract_process_name(n["properties"])
+        subject = get_process_role(proc_name) if proc_name else "process"
+
+        # 解析事件列表
         events_raw = n["properties"].strip("{} '\"")
         event_items = [e.strip().strip("'\"") for e in events_raw.split(",") if e.strip()]
 
-        seen = set()
-        translated = []
         for e in event_items:
             t = translate_event(e)
-            if t and t not in LOW_INFO_EVENTS and t not in seen:
-                seen.add(t)
-                translated.append(t)
+            if not t or t in LOW_INFO_EVENTS:
+                continue
+            # 构造 "subject verb object" 格式的三元组
+            triple = f"{subject} {t}"
+            if triple not in seen:
+                seen.add(triple)
+                triples.append(triple)
 
-        if translated:
-            lines.append(f"{type_desc}: {', '.join(translated)}")
-
-    return ". ".join(lines) if lines else ""
+    return ". ".join(triples) if triples else ""
 
 
 # ============================================================
