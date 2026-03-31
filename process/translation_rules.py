@@ -67,8 +67,9 @@ EVENT_MAP = {
     "EVENT_LOGOUT": "exits",
 }
 
-LOW_INFO_EVENTS = {"closes", "exits", "opens", "seeks in file", "maps memory",
-                    "changes memory protection", "creates", "changes principal"}
+# 低信息量动作前缀：translate_event 返回以这些词开头的结果会被过滤
+LOW_INFO_PREFIXES = {"closes", "exits", "opens", "seeks", "maps memory",
+                     "changes memory", "creates", "changes principal"}
 
 # ============================================================
 # 日志侧：进程名 → 功能角色

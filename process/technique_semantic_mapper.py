@@ -19,7 +19,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from process.translation_rules import (
-    TYPE_MAP, EVENT_MAP, LOW_INFO_EVENTS,
+    TYPE_MAP, EVENT_MAP, LOW_INFO_PREFIXES,
     translate_event, get_process_role,
 )
 
@@ -75,7 +75,7 @@ def snapshot_to_query(snapshot, *, node_scope: str = "malicious", max_nodes: int
 
         for e in event_items:
             t = translate_event(e)
-            if not t or t in LOW_INFO_EVENTS:
+            if not t or any(t.startswith(p) for p in LOW_INFO_PREFIXES):
                 continue
             # 构造 "subject verb object" 格式的三元组
             triple = f"{subject} {t}"
