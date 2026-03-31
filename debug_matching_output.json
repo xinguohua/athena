@@ -2,10 +2,10 @@
   "config": {
     "snapshot_idx": 77,
     "global_idx": 251,
-    "vectordb_doc_count": 691
+    "tech_db_count": 689
   },
-  "query_text": "process: writes memhelp.so shared library (memhelp), opens /tmp/eWq10bVcx in temporary directory (ewq bvcx), sends network data, reads eWq10bVcx (ewq bvcx), writes /tmp/injectLog.txt in temporary directory text file (injectlog), seeks in file, receives network data, opens /tmp/memhelp.so in temporary directory shared library (memhelp). file: writes memhelp.so shared library (memhelp), opens /tmp/memhelp.so in temporary directory shared library (memhelp). file: reads eWq10bVcx (ewq bvcx), opens /tmp/eWq10bVcx in temporary directory (ewq bvcx), seeks in file",
-  "query_length": 562,
+  "query_text": "process: writes shared library, opens file, sends network data, reads ewq bvcx, writes file, seeks in file, receives network data. file: writes shared library, opens file. file: reads ewq bvcx, opens file, seeks in file",
+  "query_length": 219,
   "snapshot_nodes": {
     "total": 100,
     "malicious_count": 3,
@@ -155,63 +155,63 @@
   "candidates": [
     {
       "rank": 1,
-      "tech_id": "T1218/013",
-      "score": 0.779841,
-      "filepath": "https://attack.mitre.org/techniques/T1218/013",
-      "metadata": {
-        "filepath": "https://attack.mitre.org/techniques/T1218/013",
-        "Subject": "T1218.013: Mavinject",
-        "Source": "MITRE-ATT&CK"
-      },
-      "full_content": "Mavinject. process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process loads shared library, process writes shared library (.dll) to disk. process loads shared library (.so), process writes shared library to temporary directory. process sends and receives network data through proxy, process connects to network. process receives network data, process writes file to disk. process executes command, process creates child process"
+      "tech_id": "T1560.002",
+      "cosine_similarity": 0.781634,
+      "description": "process reads shared library. process reads file. process writes file"
     },
     {
       "rank": 2,
-      "tech_id": "T1055/002",
-      "score": 0.798013,
-      "filepath": "https://attack.mitre.org/techniques/T1055/002",
-      "metadata": {
-        "filepath": "https://attack.mitre.org/techniques/T1055/002",
-        "Subject": "T1055.002: Portable Executable Injection",
-        "Source": "MITRE-ATT&CK"
-      },
-      "full_content": "Portable Executable Injection. process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process reads and writes memory mapped files, process maps memory regions. process creates file, process writes file to directory. process modifies process, process changes principal or user context. process sends and receives network data, process connects to network"
+      "tech_id": "T1556.007",
+      "cosine_similarity": 0.77768,
+      "description": "process writes network connection. process reads shared library. process writes shared library. process executes shared library"
     },
     {
       "rank": 3,
-      "tech_id": "T1129",
-      "score": 0.812488,
-      "filepath": "https://attack.mitre.org/techniques/T1129",
-      "metadata": {
-        "filepath": "https://attack.mitre.org/techniques/T1129",
-        "Subject": "T1129: Shared Modules",
-        "Source": "MITRE-ATT&CK"
-      },
-      "full_content": "Shared Modules. process loads shared library (.so .dll), process writes shared module to disk. process sends and receives network data, process connects to network"
+      "tech_id": "T1221",
+      "cosine_similarity": 0.745947,
+      "description": "process writes file. process reads file. process sends network connection"
     },
     {
       "rank": 4,
-      "tech_id": "T1055/001",
-      "score": 0.835169,
-      "filepath": "https://attack.mitre.org/techniques/T1055/001",
-      "metadata": {
-        "Source": "MITRE-ATT&CK",
-        "Subject": "T1055.001: Dynamic-link Library Injection",
-        "filepath": "https://attack.mitre.org/techniques/T1055/001"
-      },
-      "full_content": "Dynamic-link Library Injection. process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process loads shared library, process writes shared library (.dll) to disk. process loads shared library (.so), process writes shared library to temporary directory. process reads and writes memory mapped files, process maps memory regions. process creates file, process writes file to directory. process modifies process, process changes principal or user context. process sends and receives network data, process connects to network"
+      "tech_id": "T1505.005",
+      "cosine_similarity": 0.736849,
+      "description": "process writes file. process writes shared library"
     },
     {
       "rank": 5,
-      "tech_id": "T1218/005",
-      "score": 0.842406,
-      "filepath": "https://attack.mitre.org/techniques/T1218/005",
-      "metadata": {
-        "filepath": "https://attack.mitre.org/techniques/T1218/005",
-        "Source": "MITRE-ATT&CK",
-        "Subject": "T1218.005: Mshta"
-      },
-      "full_content": "Mshta. process writes log file, process reads log file. process sends and receives network data through proxy, process connects to network. process executes script file, process creates child process. process receives network data, process writes file to disk. process executes command, process creates child process"
+      "tech_id": "T1546.006",
+      "cosine_similarity": 0.736849,
+      "description": "process writes file. process writes shared library"
+    },
+    {
+      "rank": 6,
+      "tech_id": "T1574.012",
+      "cosine_similarity": 0.736849,
+      "description": "process writes file. process writes shared library"
+    },
+    {
+      "rank": 7,
+      "tech_id": "T1681",
+      "cosine_similarity": 0.736698,
+      "description": "process reads file. process writes file. process reads network connection"
+    },
+    {
+      "rank": 8,
+      "tech_id": "T1176.001",
+      "cosine_similarity": 0.736497,
+      "description": "process writes shared library. process executes shared library. process writes file. process reads credential file. process sends credential file"
+    },
+    {
+      "rank": 9,
+      "tech_id": "T1596.004",
+      "cosine_similarity": 0.734682,
+      "description": "process reads network connection. process reads file. process sends file"
+    },
+    {
+      "rank": 10,
+      "tech_id": "T1592.001",
+      "cosine_similarity": 0.73344,
+      "description": "process reads file. process reads network connection. process writes file. process executes file"
     }
   ]
 }

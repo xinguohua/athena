@@ -2,43 +2,51 @@
 选择恶意节点最多的快照: [77] 恶意节点数=3
 
 ===== 诊断快照 [77] (全局索引 251) =====
-向量库文档数: 691
+[SemMapper] 编码 689 个技术描述...
+[SemMapper] 技术描述库就绪。
+技术描述库: 689 个技术
 节点总数: 100, 恶意节点数: 3
 
------ 查询文本 (长度=562) -----
-process: writes memhelp.so shared library (memhelp), opens /tmp/eWq10bVcx in temporary directory (ewq bvcx), sends network data, reads eWq10bVcx (ewq bvcx), writes /tmp/injectLog.txt in temporary directory text file (injectlog), seeks in file, receives network data, opens /tmp/memhelp.so in temporary directory shared library (memhelp). file: writes memhelp.so shared library (memhelp), opens /tmp/memhelp.so in temporary directory shared library (memhelp). file: reads eWq10bVcx (ewq bvcx), opens /tmp/eWq10bVcx in temporary directory (ewq bvcx), seeks in file
+----- 查询文本 (长度=219) -----
+process: writes shared library, opens file, sends network data, reads ewq bvcx, writes file, seeks in file, receives network data. file: writes shared library, opens file. file: reads ewq bvcx, opens file, seeks in file
 
------ Top 5 匹配结果 -----
+----- Top 10 匹配结果 -----
 
-  [1] T1218/013  score=0.779841
-      filepath: https://attack.mitre.org/techniques/T1218/013
-      内容 (前500字):
-      Mavinject. process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process loads shared library, process writes shared library (.dll) to disk. process loads shared library (.so), process writes shared library to temporary directory. process sends and receives network data through proxy, process connects to network. process receives network data, process writes file to disk. process executes command, process creates chil
+  [1] T1560.002  similarity=0.781634
+      描述: process reads shared library. process reads file. process writes file
 
-  [2] T1055/002  score=0.798013
-      filepath: https://attack.mitre.org/techniques/T1055/002
-      内容 (前500字):
-      Portable Executable Injection. process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process reads and writes memory mapped files, process maps memory regions. process creates file, process writes file to directory. process modifies process, process changes principal or user context. process sends and receives network data, process connects to network
+  [2] T1556.007  similarity=0.777680
+      描述: process writes network connection. process reads shared library. process writes shared library. process executes shared library
 
-  [3] T1129  score=0.812488
-      filepath: https://attack.mitre.org/techniques/T1129
-      内容 (前500字):
-      Shared Modules. process loads shared library (.so .dll), process writes shared module to disk. process sends and receives network data, process connects to network
+  [3] T1221  similarity=0.745947
+      描述: process writes file. process reads file. process sends network connection
 
-  [4] T1055/001  score=0.835169
-      filepath: https://attack.mitre.org/techniques/T1055/001
-      内容 (前500字):
-      Dynamic-link Library Injection. process writes shared library (.so .dll) to disk, process modifies another process memory, process creates or opens temporary files. process loads shared library, process writes shared library (.dll) to disk. process loads shared library (.so), process writes shared library to temporary directory. process reads and writes memory mapped files, process maps memory regions. process creates file, process writes file to directory. process modifies process, process chan
+  [4] T1505.005  similarity=0.736849
+      描述: process writes file. process writes shared library
 
-  [5] T1218/005  score=0.842406
-      filepath: https://attack.mitre.org/techniques/T1218/005
-      内容 (前500字):
-      Mshta. process writes log file, process reads log file. process sends and receives network data through proxy, process connects to network. process executes script file, process creates child process. process receives network data, process writes file to disk. process executes command, process creates child process
+  [5] T1546.006  similarity=0.736849
+      描述: process writes file. process writes shared library
+
+  [6] T1574.012  similarity=0.736849
+      描述: process writes file. process writes shared library
+
+  [7] T1681  similarity=0.736698
+      描述: process reads file. process writes file. process reads network connection
+
+  [8] T1176.001  similarity=0.736497
+      描述: process writes shared library. process executes shared library. process writes file. process reads credential file. process sends credential file
+
+  [9] T1596.004  similarity=0.734682
+      描述: process reads network connection. process reads file. process sends file
+
+  [10] T1592.001  similarity=0.733440
+      描述: process reads file. process reads network connection. process writes file. process executes file
 
 ----- 语义差距分析 -----
-最佳匹配: T1218/013  距离=0.779841
-第1名 vs 第2名 距离差: 0.018172 (区分度低，匹配不确定)
-词汇重叠数: 10
-查询独有词(前30): ['(injectlog),', '/tmp/memhelp.so', 'in', 'process:', '(ewq', '(memhelp).', '(memhelp),', 'seeks', 'file,', 'bvcx),', 'file:', 'reads', '/tmp/ewq10bvcx', 'text', 'ewq10bvcx', '/tmp/injectlog.txt', 'memhelp.so', 'directory']
+最佳匹配: T1560.002  similarity=0.781634
+第1名 vs 第2名 相似度差: 0.003954 (区分度低，匹配不确定)
+词汇重叠数: 5
+重叠词: ['file', 'file.', 'reads', 'shared', 'writes']
+查询独有词(前20): ['bvcx,', 'data,', 'data.', 'ewq', 'file,', 'file:', 'in', 'library,', 'network', 'opens', 'process:', 'receives', 'seeks', 'sends']
 
 诊断结果已写入: debug_matching_output.json
