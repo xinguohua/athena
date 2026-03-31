@@ -128,7 +128,7 @@ class TechniqueSemanticMapper:
         self,
         *,
         triples_path: str = os.path.join(
-            os.path.dirname(__file__), "data/technique_triples_transformed.json"
+            os.path.dirname(__file__), "data/technique_triples_raw.json"
         ),
         model_name: str = "sentence-transformers/all-MiniLM-L12-v2",
         top_k: int = 5,
