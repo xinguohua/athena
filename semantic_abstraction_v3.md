@@ -24,29 +24,29 @@ $$f_{\text{rarity}}(P) = \frac{1}{\text{Freq}(P)}$$
 
 ### 日志侧翻译词表
 
-溯源图中的原始标识符（进程名 `bash`、文件路径 `/tmp/memhelp.so`、套接字 `192.168.1.1:80`）对嵌入模型而言信息密度低且缺乏语义。我们构建一套翻译词表，将这些标识符翻译为嵌入模型可理解的自然语言类型标签。翻译词表的粒度遵循*攻击语义可区分*原则：credential file 与 file 必须区分（前者对应凭据访问 T1003，后者仅为一般文件操作），command shell 与 task scheduler 必须区分（前者对应命令行执行 T1059，后者对应计划任务持久化 T1053），但 /etc/shadow 与 SAM 无需区分（对应同一类攻击行为）。据此，进程名按功能角色翻译为 8 类，文件路径按内容类型翻译为 7 类，网络地址统一翻译为 network connection 或 email。
+溯源图中的原始标识符（进程名 `bash`、文件路径 `/tmp/memhelp.so`、套接字 `192.168.1.1:80`）对嵌入模型而言信息密度低且缺乏语义。我们构建一套翻译词表，将这些标识符翻译为嵌入模型可理解的自然语言类型标签。
+
+类型标签的划分通过数据驱动推导：我们对 691 项 ATT&CK 技术的 1,737 个三元组宾语用 Sentence-BERT 编码为语义向量，然后进行 Ward 层次聚类。聚类结果显示，ATT&CK 宾语自然分离为若干语义簇：凭据类（user credentials, passwords, hashes）、动态库类（DLLs, modules）、证书类（SSL/TLS certificates）、配置类（Registry, config）、命令/执行类（arbitrary commands, scripts）、远程访问类（remote IPC, remote systems）、网络类（network traffic, DoS）、邮件类（phishing, spam）等。每个簇对应一种类型标签。据此，进程名按功能角色翻译为 3 类，文件路径按内容类型翻译为 6 类，网络地址翻译为 2 类，共 12 类（含兜底类型）。该推导过程完全可复现（`derive_type_labels.py`）。
 
 ### 日志侧提升
 
 日志侧提升将溯源图中的系统内部标识符翻译为 $\mathcal{Y}$ 中的系统级类型，同时**保留原始标识符**以提供区分信号。一条溯源边 $\langle$主体进程, 事件类型, 客体实体$\rangle$ 的翻译分三步：
 
-**主体翻译。** 将进程名映射为 $\mathcal{Y}$ 中的进程类型。映射基于操作系统中进程名与功能角色的标准对应关系（bash → command shell，python → scripting interpreter，sshd → remote access service 等）。未命中映射表的进程名保持原样——进程名本身已是嵌入模型可理解的自然语言标识。
+**主体翻译。** 将进程名映射为进程类型。通过对 1,765 个三元组的主语进行分类，识别出四类在日志中可通过进程名区分的角色：命令行解释器（bash、cmd）、脚本引擎（PowerShell、Python）、远程访问服务（sshd）、系统代理执行工具（rundll32、regsvr32、msiexec 等 LOLBins）。其余进程名保持原样——进程名本身已是嵌入模型可理解的自然语言标识。
 
-**客体翻译。** 将文件路径和网络地址映射为 $\mathcal{Y}$ 中的文件或网络类型，**同时保留原始路径/文件名**。映射依据操作系统标准化约定：文件扩展名（.dll → shared library），目录路径（/etc/shadow → credential file, /var/log/ → log file），端口号统一映射为 network connection。扩展名匹配优先于路径匹配，因为 .so 比 /tmp/ 更有信息量。例如，`/tmp/memhelp.so` 翻译为 `memhelp.so shared library` 而非仅 `shared library`——保留文件名使嵌入模型能捕获名称中蕴含的语义线索（如 "memhelp" 暗示 memory helper）。
+**客体翻译。** 将文件路径和网络地址映射为文件或网络类型，**同时保留原始路径/文件名**。映射依据操作系统标准化约定：文件扩展名（.dll → shared library），目录路径（/etc/shadow → credential file），端口号统一映射为 network connection。扩展名匹配优先于路径匹配。例如，`/tmp/memhelp.so` 翻译为 `memhelp.so shared library` 而非仅 `shared library`——保留文件名使嵌入模型能捕获名称中蕴含的语义线索。
 
 | 类别 | 日志原始标识符 | 翻译结果 |
 |------|-------------|---------|
 | **进程** | bash / sh / zsh / cmd | command shell |
 | | python / perl / powershell | scripting interpreter |
 | | sshd / telnetd | remote access service |
-| | crond / at | task scheduler |
-| | apache / nginx | web server |
-| | mysqld / postgres | database service |
-| | systemd / init | system service |
-| **文件** | /tmp/memhelp.so | memhelp.so shared library |
-| | /etc/shadow | /etc/shadow credential file |
-| | /var/log/syslog | /var/log/syslog log file |
-| | .conf / .cfg / .ini | 原名 configuration file |
+| | rundll32 / regsvr32 / msiexec / cmstp 等 | proxy executor |
+| | 其他进程名 | 保留原名 |
+| **文件** | .so / .dll / .dylib | 原名 shared library |
+| | /etc/shadow / /etc/passwd / SAM | 原名 credential file |
+| | .conf / .cfg / .ini / .plist | 原名 configuration file |
+| | .pem / .key / authorized_keys | 原名 authentication key file |
 | | .exe / ELF binary | 原名 executable |
 | | 其他文件 | 保留原名 |
 | **网络** | 任意 IP:端口 | network connection |

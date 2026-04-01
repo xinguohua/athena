@@ -76,7 +76,7 @@ LOW_INFO_PREFIXES = {"closes", "exits", "opens", "seeks", "maps memory",
 # ============================================================
 
 PROCESS_ROLE_MAP = {
-    # command shell
+    # command shell（数据支撑：ATT&CK T1059.003/004）
     "bash": "command shell",
     "sh": "command shell",
     "zsh": "command shell",
@@ -84,7 +84,9 @@ PROCESS_ROLE_MAP = {
     "tcsh": "command shell",
     "dash": "command shell",
     "fish": "command shell",
-    # scripting interpreter
+    "cmd": "command shell",
+    "cmd.exe": "command shell",
+    # scripting interpreter（数据支撑：ATT&CK T1059.001/005/006，~10个三元组）
     "python": "scripting interpreter",
     "python2": "scripting interpreter",
     "python3": "scripting interpreter",
@@ -92,42 +94,35 @@ PROCESS_ROLE_MAP = {
     "ruby": "scripting interpreter",
     "node": "scripting interpreter",
     "php": "scripting interpreter",
-    # remote access service
-    "sshd": "remote access service",
-    "ssh": "remote access service",
-    "telnetd": "remote access service",
-    # task scheduler
-    "crond": "task scheduler",
-    "cron": "task scheduler",
-    "atd": "task scheduler",
-    "at": "task scheduler",
-    # web server
-    "apache": "web server",
-    "apache2": "web server",
-    "httpd": "web server",
-    "nginx": "web server",
-    # database service
-    "mysqld": "database service",
-    "postgres": "database service",
-    "mongod": "database service",
-    "redis-server": "database service",
-    # network utility → process（兜底）
-    "curl": "process",
-    "wget": "process",
-    "nc": "process",
-    "ncat": "process",
-    "netcat": "process",
-    # system service
-    "systemd": "system service",
-    "init": "system service",
-    "launchd": "system service",
-    # scripting interpreter (PowerShell)
     "powershell": "scripting interpreter",
     "pwsh": "scripting interpreter",
     "powershell.exe": "scripting interpreter",
-    # cmd
-    "cmd": "command shell",
-    "cmd.exe": "command shell",
+    # remote access service（数据支撑：ATT&CK T1021，~5个三元组）
+    "sshd": "remote access service",
+    "ssh": "remote access service",
+    "telnetd": "remote access service",
+    # proxy executor / LOLBins（数据支撑：ATT&CK T1218，~15个三元组）
+    "rundll32": "proxy executor",
+    "rundll32.exe": "proxy executor",
+    "regsvr32": "proxy executor",
+    "regsvr32.exe": "proxy executor",
+    "cmstp": "proxy executor",
+    "cmstp.exe": "proxy executor",
+    "msiexec": "proxy executor",
+    "msiexec.exe": "proxy executor",
+    "installutil": "proxy executor",
+    "installutil.exe": "proxy executor",
+    "mavinject": "proxy executor",
+    "mavinject.exe": "proxy executor",
+    "odbcconf": "proxy executor",
+    "odbcconf.exe": "proxy executor",
+    "wmic": "proxy executor",
+    "wmic.exe": "proxy executor",
+    "mshta": "proxy executor",
+    "mshta.exe": "proxy executor",
+    "certutil": "proxy executor",
+    "certutil.exe": "proxy executor",
+    # 其余进程名不映射，保留原名（Sentence-BERT 直接匹配）
 }
 
 # ============================================================
