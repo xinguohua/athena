@@ -1,0 +1,15 @@
+[
+  {
+    "strategy": "no_aug",
+    "acc": 89.28571428571429,
+    "prec": 0.0,
+    "f1": 0.0,
+    "rec": 0.0,
+    "fpr": 0.0,
+    "tp": 0,
+    "fp": 0,
+    "tn": 75,
+    "fn": 9,
+    "dataset": "cadets/cadets314"
+  }
+]
