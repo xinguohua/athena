@@ -513,7 +513,15 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 # 单一路径：优先使用融合缓存；否则回退到原始恶意ego或tokens路径
                 if has_ego:
                     mal_cache_available = hasattr(self, '_mal_ego_cache') and len(self._mal_ego_cache) > 0
-                    if self.use_pos_fusion_neg and mal_cache_available:
+                    # Mimicry 模式：向恶意子图注入良性信号
+                    if getattr(self, 'mimicry_mode', False):
+                        blocks, w_neg = self._build_neg_block_mimicry(
+                            Bc, device=device,
+                            benign_x_list=x_list,
+                            benign_e_list=e_list,
+                            benign_node_counts=node_counts,
+                        )
+                    elif self.use_pos_fusion_neg and mal_cache_available:
                         blocks, w_neg = self._build_neg_block_from_snapshots_with_pos(
                             Bc,
                             device=device,
@@ -921,6 +929,121 @@ class GCCEmbedderDev(GraphEmbedderBase):
             Z_blocks.append(Z_block)
 
         # 简单起见，负样本权重统一为 1
+        w_neg = torch.ones(Bc, dtype=torch.float32, device=device)
+        return Z_blocks, w_neg
+
+    def _build_neg_block_mimicry(self, Bc: int, device: torch.device,
+                                 benign_x_list=None, benign_e_list=None,
+                                 benign_node_counts=None):
+        """Mimicry [ProvNinja] 风格的负样本构造：
+        从恶意 ego 池采样子图，向其中注入良性边和良性节点特征，
+        使恶意子图伪装成良性，作为难负样本。
+
+        核心操作：
+        1. 采样恶意子图
+        2. 从当前 batch 的良性子图中随机选取节点
+        3. 在恶意子图与良性节点之间添加跨连边
+        4. 替换部分恶意节点的特征为良性特征（属性模糊）
+        """
+        pool = self._mal_ego_pool if hasattr(self, '_mal_ego_pool') else None
+        if not pool:
+            return [], torch.zeros(Bc, device=device)
+
+        # 采样恶意子图
+        if len(pool) >= Bc:
+            chosen = random.sample(pool, k=Bc)
+        else:
+            chosen = [random.choice(pool) for _ in range(Bc)]
+
+        x_list, e_list, node_counts = [], [], []
+        for (sidx, center) in chosen:
+            g = self.snapshots[sidx]
+            if g is None or g.vcount() == 0:
+                x_list.append(torch.zeros((0, self.prop_feat_dim), dtype=torch.float32, device=device))
+                e_list.append(torch.zeros((2, 0), dtype=torch.long, device=device))
+                node_counts.append(0)
+                continue
+            try:
+                sub = self._ego_subgraph(g, center=center, r=self.r_hop, max_nodes=self.ego_max_nodes)
+            except Exception:
+                sub = None
+            if sub is None or sub.vcount() == 0:
+                x_list.append(torch.zeros((0, self.prop_feat_dim), dtype=torch.float32, device=device))
+                e_list.append(torch.zeros((2, 0), dtype=torch.long, device=device))
+                node_counts.append(0)
+                continue
+            x_np = self._build_node_features(sub)
+            eidx = self._igraph_edges_to_edge_index(sub)
+            x_list.append(torch.from_numpy(x_np).to(device))
+            e_list.append(eidx.to(device))
+            node_counts.append(sub.vcount())
+
+        if sum(node_counts) == 0:
+            return [], torch.zeros(Bc, device=device)
+
+        # Mimicry 增强：向恶意子图注入良性信号
+        has_benign = (benign_x_list is not None and len(benign_x_list) > 0
+                      and benign_node_counts is not None and sum(benign_node_counts) > 0)
+
+        if has_benign:
+            # 拼接所有良性节点特征，作为特征替换的源
+            benign_feats_all = torch.cat([bx for bx in benign_x_list if bx.numel() > 0], dim=0)
+
+            for gi in range(len(x_list)):
+                xi = x_list[gi]
+                ei = e_list[gi]
+                nc = node_counts[gi]
+                if nc == 0 or xi.numel() == 0:
+                    continue
+
+                # (1) 特征替换：将 30% 的恶意节点特征替换为随机良性节点特征
+                replace_ratio = 0.3
+                n_replace = max(1, int(nc * replace_ratio))
+                replace_idx = torch.randperm(nc, device=device)[:n_replace]
+                benign_sample_idx = torch.randint(0, benign_feats_all.size(0), (n_replace,), device=device)
+                xi_new = xi.clone()
+                xi_new[replace_idx] = benign_feats_all[benign_sample_idx]
+                x_list[gi] = xi_new
+
+                # (2) 边注入：在恶意节点与"虚拟良性节点"之间添加边
+                #     这里简化为在已有节点之间添加随机边（模拟良性交互模式）
+                n_inject = max(1, int(ei.size(1) * 0.2))  # 注入 20% 的边
+                src_new = torch.randint(0, nc, (n_inject,), device=device)
+                dst_new = torch.randint(0, nc, (n_inject,), device=device)
+                inject_edges = torch.stack([
+                    torch.cat([src_new, dst_new]),
+                    torch.cat([dst_new, src_new])
+                ])  # 无向化
+                e_list[gi] = torch.cat([ei, inject_edges], dim=1)
+
+        # 编码：两个视角
+        offsets_neg = np.cumsum([0] + node_counts[:-1]).tolist()
+        graph_ids_neg = torch.tensor(
+            [gi for gi, n in enumerate(node_counts) for _ in range(n)],
+            device=device
+        )
+        X_neg = torch.cat([xi for xi in x_list if xi.numel() > 0], dim=0) if any(
+            n > 0 for n in node_counts) else torch.zeros((0, self.prop_feat_dim), device=device)
+
+        Z_blocks: List[torch.Tensor] = []
+        for _ in range(2):
+            if any(n > 0 for n in node_counts):
+                e_cols = [self._augment_edges(ei, self.drop_edge_p) + off
+                          for ei, off in zip(e_list, offsets_neg)]
+            else:
+                e_cols = []
+            EN = torch.cat(e_cols, dim=1) if e_cols else torch.zeros((2, 0), dtype=torch.long, device=device)
+            XN = self._augment_features(X_neg, self.feat_mask_p)
+            ZN_layers = self.encoder(XN, EN, return_all=True)
+            NL = ZN_layers[-1]
+            sums = torch.zeros((Bc, NL.size(1)), device=device)
+            cnts = torch.zeros(Bc, device=device)
+            sums.index_add_(0, graph_ids_neg, NL)
+            cnts.index_add_(0, graph_ids_neg, torch.ones_like(graph_ids_neg, dtype=torch.float32))
+            means = sums / (cnts.clamp_min(1e-6).unsqueeze(1))
+            Z_block = F.normalize(self.proj_head(means), dim=-1)
+            Z_blocks.append(Z_block)
+
         w_neg = torch.ones(Bc, dtype=torch.float32, device=device)
         return Z_blocks, w_neg
 
