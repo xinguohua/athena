@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -rh \"^import\\\\|^from\" /Users/xinguohua/Code/prographer/process/*.py)",
+      "Bash(find /Users/xinguohua/Code/prographer -type f \\\\\\(-name *mitre* -o -name *attack* -o -name *technique* \\\\\\))",
+      "Bash(grep -r \"snapshots\\\\s*=\" /Users/xinguohua/Code/prographer/process/datahandlers/*.py)",
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(python3:*)",
+      "Bash(pip install:*)",
+      "Bash(source /tmp/spacy_env/bin/activate)",
+      "Bash(/tmp/claude_triples_batch8.json:*)",
+      "Bash(__NEW_LINE_893b014ee33f6bbe__ python3:*)",
+      "Bash(/tmp/claude_triples_batch9.json:*)",
+      "Bash(__NEW_LINE_e26c4770e4dc4908__ python3:*)",
+      "Bash(/tmp/claude_triples_batch10.json:*)",
+      "Bash(__NEW_LINE_fe640d14052bf826__ python3:*)",
+      "Bash(/tmp/claude_triples_batch11.json:*)",
+      "Bash(__NEW_LINE_7270da11148a09fd__ python3:*)",
+      "Bash(/tmp/claude_triples_batch12.json:*)",
+      "Bash(__NEW_LINE_ff76140cfff77177__ python3:*)",
+      "Bash(/tmp/claude_triples_batch13.json:*)",
+      "Bash(__NEW_LINE_18c3b441a3400d08__ python3:*)",
+      "Bash(/tmp/claude_triples_batch14.json:*)",
+      "Bash(__NEW_LINE_98ef952ca044c08f__ python3:*)",
+      "Bash(/tmp/claude_triples_batch15.json:*)",
+      "Bash(__NEW_LINE_94a4ff626105cf72__ python3:*)",
+      "Bash(/tmp/claude_triples_batch16.json:*)",
+      "Bash(__NEW_LINE_61b23dd2b7595916__ python3:*)",
+      "Bash(/tmp/claude_triples_batch17.json:*)",
+      "Bash(__NEW_LINE_aea7baadcb5fc4a3__ python3:*)",
+      "Bash(/tmp/claude_triples_batch18.json:*)",
+      "Bash(__NEW_LINE_cab572fabefb5609__ python3:*)",
+      "Bash(/tmp/claude_triples_batch19.json:*)",
+      "Bash(__NEW_LINE_dca6aa0831ba5124__ python3:*)"
+    ]
+  }
+}
