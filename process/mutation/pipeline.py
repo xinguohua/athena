@@ -1,45 +1,34 @@
 """
-MutationPipeline: 完整的 LLM-guided graph mutation 流水线
+MutationPipeline: 为每个良性快照生成专属难负样本 G̃_b
 
-整合结构变异、语义变异、验证三个阶段，生成用于对比学习的难负样本。
-
-用法:
-    pipeline = MutationPipeline(snapshots, benign_range, attack_range)
-    mutated_graphs = pipeline.generate(llm_fn=my_llm_fn, max_mutations=100)
+训练时负样本集 N(b) = 攻击图(共享) + G̃_b(专属)，加权对比损失自动放大难负样本。
+验证不通过换攻击图重试，直到成功或穷尽候选。
 """
 from __future__ import annotations
 from typing import List, Tuple, Optional, Callable, Set, Dict
 import time
+import random
 
 try:
     import igraph as ig
 except ImportError:
     ig = None
 
-from .structural import generate_structural_mutations, aligned_region_search, subgraph_replacement
+from .structural import aligned_region_search, subgraph_replacement
 from .semantic import apply_semantic_mutation_llm, _collect_benign_corpus
-from .verification import build_historical_profiles, verify_mutation
+from .verification import verify_mutation, build_historical_profiles
+from .wl_kernel import top_k_similar_attacks
 
 
 class MutationPipeline:
-    """
-    论文 Section IV-C 的完整变异流水线。
-
-    Attributes:
-        snapshots: 全部快照列表（igraph.Graph）
-        benign_range: (start, end) 良性快照索引范围
-        attack_range: (start, end) 恶意快照索引范围
-        delta_h: hardness 检查阈值
-        top_k: 每个良性图检索的攻击图数
-        top_m: 每个攻击图的候选区域数
-    """
 
     def __init__(
         self,
         snapshots: list,
         benign_range: Tuple[int, int],
         attack_range: Tuple[int, int],
-        delta_h: float = 0.5,
+        delta_h: float = 0.3,
+        delta_h_upper: float = 0.95,
         top_k: int = 5,
         top_m: int = 3,
         max_region_size: int = 32,
@@ -48,11 +37,11 @@ class MutationPipeline:
         self.benign_range = benign_range
         self.attack_range = attack_range
         self.delta_h = delta_h
+        self.delta_h_upper = delta_h_upper
         self.top_k = top_k
         self.top_m = top_m
         self.max_region_size = max_region_size
 
-        # 预构建良性/攻击图列表
         b_start, b_end = benign_range
         a_start, a_end = attack_range
         self.benign_graphs = [
@@ -64,31 +53,46 @@ class MutationPipeline:
             if i < len(snapshots) and snapshots[i] is not None
         ]
 
-        # 预构建良性语料和历史行为剖面
         self.benign_commands: Set[str] = set()
         self.benign_args: Set[str] = set()
         self.benign_files: Set[str] = set()
         self.entity_ops: Dict[str, Set[str]] = {}
         self.type_attrs: Dict[str, Set[str]] = {}
-
         self._build_profiles()
 
     def _build_profiles(self):
-        """预构建良性行为剖面"""
         t0 = time.time()
-
-        # 良性语料（用于语义变异策略分配）
         self.benign_commands, self.benign_args, self.benign_files = \
             _collect_benign_corpus(self.benign_graphs)
-
-        # 历史行为剖面（用于验证）
         self.entity_ops, self.type_attrs = \
             build_historical_profiles(self.benign_graphs)
 
-        print(f"[MutPipeline] 良性剖面构建完成: "
+        # 预计算所有图的 WL histogram，避免重复计算
+        from .wl_kernel import wl_subtree_labels, _kernel_from_histograms
+        self._wl_cache = {}  # {snapshot_idx: histograms}
+
+        for g, idx in self.benign_graphs + self.attack_graphs:
+            if g is not None and g.vcount() > 0:
+                self._wl_cache[idx] = wl_subtree_labels(g, h=3)
+
+        # 预计算每个良性图的 Top-K 攻击图（一次性算完所有配对）
+        self._topk_cache = {}  # {benign_idx: [(attack_graph, attack_idx, sim), ...]}
+        for g_b, b_idx in self.benign_graphs:
+            if b_idx not in self._wl_cache:
+                continue
+            hist_b = self._wl_cache[b_idx]
+            scored = []
+            for g_a, a_idx in self.attack_graphs:
+                if a_idx not in self._wl_cache:
+                    continue
+                sim = _kernel_from_histograms(hist_b, self._wl_cache[a_idx])
+                scored.append((g_a, a_idx, sim))
+            scored.sort(key=lambda x: -x[2])
+            self._topk_cache[b_idx] = scored[:self.top_k]
+
+        print(f"[MutPipeline] 剖面+WL预计算完成: "
               f"{len(self.benign_commands)} 命令, "
-              f"{len(self.benign_args)} 参数, "
-              f"{len(self.benign_files)} 文件, "
+              f"{len(self._wl_cache)} 图histogram, "
               f"耗时 {time.time()-t0:.1f}s")
 
     def generate(
@@ -96,105 +100,92 @@ class MutationPipeline:
         llm_fn: Optional[Callable[[str], str]] = None,
         max_mutations: int = 100,
         skip_verification: bool = False,
-    ) -> List[Tuple]:
+    ) -> Dict[int, object]:
         """
-        执行完整变异流水线。
-
-        Args:
-            llm_fn: LLM 调用函数 (prompt) -> response_text
-                    若为 None，语义变异将使用规则 fallback
-            max_mutations: 最大变异图数量
-            skip_verification: 是否跳过验证（调试用）
+        为每个良性快照生成专属难负样本。
+        有 LLM 时做语义变异（伪装攻击 properties），无 LLM 时保留原始攻击 properties。
 
         Returns:
-            [(mutated_graph, benign_idx, attack_idx), ...]
-            通过验证的变异图列表
+            {benign_idx: mutated_graph}
         """
-        print(f"\n[MutPipeline] 开始变异生成: "
-              f"良性图={len(self.benign_graphs)}, "
-              f"攻击图={len(self.attack_graphs)}, "
-              f"LLM={'有' if llm_fn else '无(规则)'}")
+        print(f"\n[MutPipeline] 为每个良性快照生成专属难负样本: "
+              f"良性={len(self.benign_graphs)}, 攻击={len(self.attack_graphs)}, "
+              f"LLM={'有' if llm_fn else '无(仅结构变异)'}")
 
         t0 = time.time()
+        result: Dict[int, object] = {}
+        n_success = 0
+        n_fallback = 0
 
-        # ---- 阶段 1: 结构变异 ----
-        print("[MutPipeline] 阶段1: 结构变异...")
-        t1 = time.time()
-        struct_mutations = generate_structural_mutations(
-            self.benign_graphs,
-            self.attack_graphs,
-            top_k=self.top_k,
-            top_m=self.top_m,
-            max_region_size=self.max_region_size,
-            max_mutations=max_mutations * 3,  # 过量生成，后面验证会筛掉一部分
-        )
-        print(f"[MutPipeline] 结构变异完成: {len(struct_mutations)} 个, "
-              f"耗时 {time.time()-t1:.1f}s")
+        for bi, (g_b, b_idx) in enumerate(self.benign_graphs):
+            if g_b is None or g_b.vcount() == 0:
+                continue
 
-        # ---- 阶段 2: 语义变异 ----
-        print("[MutPipeline] 阶段2: 语义变异...")
-        t2 = time.time()
-        sem_mutations = []
-        for g_mut, b_idx, a_idx in struct_mutations:
-            if len(sem_mutations) >= max_mutations * 2:
-                break
-
-            # 找出被替换（攻击）的节点
-            attack_nodes = []
-            for v_idx in range(g_mut.vcount()):
-                if g_mut.vs[v_idx].get("label", 0) == 1:
-                    attack_nodes.append(v_idx)
-
-            # 语义变异
-            g_sem = apply_semantic_mutation_llm(
-                g_mut,
-                attack_nodes,
-                self.benign_commands,
-                self.benign_args,
-                llm_fn=llm_fn,
-                r_hop=2,
+            g_mut = self._generate_one(
+                g_b, b_idx, llm_fn=llm_fn,
+                skip_verification=skip_verification,
             )
 
-            if g_sem is not None:
-                sem_mutations.append((g_sem, b_idx, a_idx, set(attack_nodes)))
+            if g_mut is not None:
+                result[b_idx] = g_mut
+                n_success += 1
+            else:
+                # 兜底：用最相似攻击图
+                topk = self._topk_cache.get(b_idx, [])
+                if topk:
+                    result[b_idx] = topk[0][0]
+                    n_fallback += 1
 
-        print(f"[MutPipeline] 语义变异完成: {len(sem_mutations)} 个, "
-              f"耗时 {time.time()-t2:.1f}s")
-
-        # ---- 阶段 3: 验证 ----
-        if skip_verification:
-            verified = [(g, bi, ai) for g, bi, ai, _ in sem_mutations[:max_mutations]]
-            print(f"[MutPipeline] 跳过验证, 保留 {len(verified)} 个")
-        else:
-            print("[MutPipeline] 阶段3: 统一验证...")
-            t3 = time.time()
-            verified = []
-            n_checked = 0
-            n_passed = 0
-
-            for g_sem, b_idx, a_idx, replaced in sem_mutations:
-                if len(verified) >= max_mutations:
-                    break
-
-                n_checked += 1
-                g_anchor = self.snapshots[b_idx]
-
-                passed, failed = verify_mutation(
-                    g_sem, g_anchor, replaced,
-                    self.entity_ops, self.type_attrs,
-                    delta_h=self.delta_h,
-                )
-
-                if passed:
-                    n_passed += 1
-                    verified.append((g_sem, b_idx, a_idx))
-
-            print(f"[MutPipeline] 验证完成: {n_checked} 检查, "
-                  f"{n_passed} 通过 ({n_passed/max(n_checked,1)*100:.0f}%), "
-                  f"耗时 {time.time()-t3:.1f}s")
+            if (bi + 1) % 20 == 0 or bi == len(self.benign_graphs) - 1:
+                print(f"[MutPipeline] 进度 {bi+1}/{len(self.benign_graphs)}: "
+                      f"变异={n_success}, 兜底={n_fallback}")
 
         total_time = time.time() - t0
-        print(f"[MutPipeline] 总计生成 {len(verified)} 个变异图, "
+        print(f"[MutPipeline] 完成: {n_success} 变异 + {n_fallback} 兜底, "
+              f"覆盖 {len(result)}/{len(self.benign_graphs)}, "
               f"总耗时 {total_time:.1f}s")
+        return result
 
-        return verified
+    def _generate_one(
+        self, g_b, b_idx, llm_fn=None,
+        skip_verification=False,
+    ) -> Optional:
+        """为单个良性快照生成变异图。不通过就换攻击图重试。"""
+        similar = self._topk_cache.get(b_idx, [])
+
+        for g_a, a_idx, sim in similar:
+            candidates = aligned_region_search(
+                g_b, g_a, max_region_size=self.max_region_size
+            )
+            for S_b, S_a, pi, score in candidates[:self.top_m]:
+                if len(pi) < 2:
+                    continue
+
+                g_mut = subgraph_replacement(g_b, g_a, S_b, S_a, pi)
+                if g_mut is None:
+                    continue
+
+                replaced = set(S_b)
+
+                # 语义变异：只在有 LLM 时做，无 LLM 保留原始攻击 properties
+                if llm_fn is not None:
+                    g_mut = apply_semantic_mutation_llm(
+                        g_mut, list(replaced),
+                        self.benign_commands, self.benign_args,
+                        llm_fn=llm_fn, r_hop=2,
+                    )
+                    if g_mut is None:
+                        continue
+
+                if not skip_verification:
+                    passed, _ = verify_mutation(
+                        g_mut, g_b, replaced,
+                        self.entity_ops, self.type_attrs,
+                        delta_h=self.delta_h, delta_h_upper=self.delta_h_upper,
+                    )
+                    if not passed:
+                        continue
+
+                return g_mut
+
+        return None

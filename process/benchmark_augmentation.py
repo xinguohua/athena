@@ -58,12 +58,12 @@ DATASET_SCENES = [
 # 增强策略预设
 # ========================================================================
 AUGMENT_PRESETS = {
-    # 无增强：不做边删除、不做特征掩盖、不使用恶意样本
+    # 无增强：不做边删除、不做特征掩盖，但使用有监督对比（恶意快照作为负样本）
     "no_aug": {
         "drop_edge_p": 0.0,
         "feat_mask_p": 0.0,
         "use_degree_coop_augment": False,
-        "use_malicious_snapshots": False,
+        "use_malicious_snapshots": True,
         "use_malicious_negatives": False,
         "combine": False,
     },
@@ -72,7 +72,7 @@ AUGMENT_PRESETS = {
         "drop_edge_p": 0.2,
         "feat_mask_p": 0.2,
         "use_degree_coop_augment": False,  # 关键：使用均匀随机，非度感知
-        "use_malicious_snapshots": False,
+        "use_malicious_snapshots": True,
         "use_malicious_negatives": False,
         "combine": False,
     },
@@ -81,7 +81,7 @@ AUGMENT_PRESETS = {
         "drop_edge_p": 0.2,
         "feat_mask_p": 0.2,
         "use_degree_coop_augment": True,  # 关键：度感知增强
-        "use_malicious_snapshots": False,
+        "use_malicious_snapshots": True,
         "use_malicious_negatives": False,
         "combine": False,
     },
@@ -103,30 +103,82 @@ AUGMENT_PRESETS = {
         "use_malicious_snapshots": True,
         "use_malicious_negatives": False,
         "combine": False,
-        "use_mutation_pipeline": True,  # 启用完整变异流水线
-        "llm_model": None,  # None=规则 fallback, "gpt-4o"/"llama3-7b"/...
+        "use_mutation_pipeline": True,
+        "llm_model": None,
+        "delta_h": 0.1,
+        "delta_h_upper": 0.98,
+        "n_ensemble": 1,
+    },
+    # ---- 不同 LLM 后端对比（Table IX: LLM model comparison） ----
+    # provider: "chatanywhere" 或 "siliconflow"，决定用哪组 API key/endpoint
+    "llm_gpt4o": {
+        "drop_edge_p": 0.2, "feat_mask_p": 0.2,
+        "use_degree_coop_augment": True, "use_malicious_snapshots": True,
+        "use_malicious_negatives": False, "combine": False,
+        "use_mutation_pipeline": True,
+        "llm_model": "gpt-4o", "llm_provider": "chatanywhere",
+    },
+    "llm_qwen25_7b": {
+        "drop_edge_p": 0.2, "feat_mask_p": 0.2,
+        "use_degree_coop_augment": True, "use_malicious_snapshots": True,
+        "use_malicious_negatives": False, "combine": False,
+        "use_mutation_pipeline": True,
+        "llm_model": "Qwen/Qwen2.5-7B-Instruct", "llm_provider": "siliconflow",
+    },
+    "llm_qwen25_14b": {
+        "drop_edge_p": 0.2, "feat_mask_p": 0.2,
+        "use_degree_coop_augment": True, "use_malicious_snapshots": True,
+        "use_malicious_negatives": False, "combine": False,
+        "use_mutation_pipeline": True,
+        "llm_model": "Qwen/Qwen2.5-14B-Instruct", "llm_provider": "siliconflow",
+    },
+    "llm_deepseek_v3": {
+        "drop_edge_p": 0.2, "feat_mask_p": 0.2,
+        "use_degree_coop_augment": True, "use_malicious_snapshots": True,
+        "use_malicious_negatives": False, "combine": False,
+        "use_mutation_pipeline": True,
+        "llm_model": "deepseek-ai/DeepSeek-V3", "llm_provider": "siliconflow",
+        "skip_semantic": True,  # 跳过语义变异，只用结构变异+LLM验证
+        "max_mutations": 15, "delta_h": 0.2,
+    },
+    "llm_glm4_9b": {
+        "drop_edge_p": 0.2, "feat_mask_p": 0.2,
+        "use_degree_coop_augment": True, "use_malicious_snapshots": True,
+        "use_malicious_negatives": False, "combine": False,
+        "use_mutation_pipeline": True,
+        "llm_model": "THUDM/GLM-4-9B-0414", "llm_provider": "siliconflow",
     },
 }
 
 
-def _make_llm_fn(model_name: str):
-    """构造 LLM 调用函数（根据模型名选择后端）"""
+def _make_llm_fn(model_name: str, provider: str = "chatanywhere"):
+    """构造 LLM 调用函数（根据 provider 选择 API key/endpoint）"""
     if not model_name:
         return None
 
     try:
-        from process.local_settings import CHATANYWHERE_API_KEY, CHATANYWHERE_ENDPOINT
+        from process.local_settings import (
+            CHATANYWHERE_API_KEY, CHATANYWHERE_ENDPOINT,
+            SILICONFLOW_API_KEY, SILICONFLOW_ENDPOINT,
+        )
     except ImportError:
         print("[WARN] 未找到 local_settings.py，LLM 语义变异将使用规则 fallback")
         return None
 
+    if provider == "siliconflow":
+        api_key, endpoint = SILICONFLOW_API_KEY, SILICONFLOW_ENDPOINT
+    else:
+        api_key, endpoint = CHATANYWHERE_API_KEY, CHATANYWHERE_ENDPOINT
+
     from process.llm_clients.chatanywhere_client import chatanywhere_summarize
+
+    print(f"[LLM] 使用 {provider} / {model_name}")
 
     def llm_fn(prompt: str) -> str:
         return chatanywhere_summarize(
             prompt,
-            api_key=CHATANYWHERE_API_KEY,
-            endpoint=CHATANYWHERE_ENDPOINT,
+            api_key=api_key,
+            endpoint=endpoint,
             model=model_name,
             temperature=0.2,
             timeout=60.0,
@@ -136,40 +188,40 @@ def _make_llm_fn(model_name: str):
 
 def _run_mutation_pipeline(embedder, handler, preset: dict):
     """
-    运行 MutationPipeline 生成变异图，并将变异图注入到 embedder 的恶意 ego 池中。
+    运行 MutationPipeline，为每个良性快照生成专属难负样本。
+    结果存入 embedder.mutation_map = {benign_idx: mutated_graph}。
+    训练时每个良性快照的负样本集 = 攻击图(共享池) + G̃_b(专属变异图)。
     """
     from process.mutation import MutationPipeline
 
-    print("[LLM-guided] 运行 MutationPipeline 生成变异图...")
+    print("[LLM-guided] 运行 MutationPipeline...")
+
+    delta_h = preset.get("delta_h", 0.3)
+    delta_h_upper = preset.get("delta_h_upper", 0.95)
 
     pipeline = MutationPipeline(
         snapshots=handler.snapshots,
         benign_range=(handler.benign_idx_start, handler.benign_idx_end),
         attack_range=(handler.malicious_idx_start, handler.malicious_idx_end),
-        delta_h=0.5,
+        delta_h=delta_h,
+        delta_h_upper=delta_h_upper,
         top_k=5,
         top_m=3,
     )
 
     llm_model = preset.get("llm_model", None)
-    llm_fn = _make_llm_fn(llm_model)
+    llm_provider = preset.get("llm_provider", "chatanywhere")
+    llm_fn = _make_llm_fn(llm_model, provider=llm_provider)
 
-    mutated = pipeline.generate(
+    mutation_map = pipeline.generate(
         llm_fn=llm_fn,
-        max_mutations=50,
-        skip_verification=(llm_fn is None),  # 无 LLM 时跳过验证
+        skip_verification=False,
     )
 
-    if mutated:
-        # 将变异图注入 embedder 的快照列表末尾，作为额外的恶意样本
-        # 这些图带有 label=1 的攻击节点，会被 embedder 用作负样本
-        n_before = len(embedder.snapshots)
-        for g_mut, b_idx, a_idx in mutated:
-            embedder.snapshots.append(g_mut)
-        print(f"[LLM-guided] 注入 {len(mutated)} 个变异图到快照列表 "
-              f"(索引 {n_before}~{n_before + len(mutated) - 1})")
-    else:
-        print("[LLM-guided] 未生成变异图，将使用原始恶意快照")
+    # 变异图不进共享 pool，只作为专属难负样本
+    # mutation_map 直接存图对象，训练时按 sidx 查找
+    embedder.mutation_map = mutation_map
+    print(f"[LLM-guided] {len(mutation_map)} 个良性快照有专属难负样本（不进共享pool）")
 
 
 def load_config():
@@ -181,33 +233,56 @@ def load_config():
 
 
 def prepare_data(path_map: dict, dataset_name: str, scene_name: str = None):
-    """加载数据集并构建快照（可多策略共享）"""
+    """加载数据集并构建快照（可多策略共享）。优先从缓存加载，跳过耗时的日志解析。"""
     t0 = time.time()
+    # 缓存文件名带上数据集和场景名，避免不同数据集共用同一个缓存
+    cache_tag = f"{dataset_name}_{scene_name}" if scene_name else dataset_name
+    snapshot_file = f"snapshot_data_{GLOBAL_ID}_{cache_tag}.pkl"
+
+    if os.path.exists(snapshot_file):
+        print(f"[数据准备] 发现缓存 {snapshot_file}，直接加载...")
+        with open(snapshot_file, 'rb') as f:
+            snapshot_data = pickle.load(f)
+        # 构造一个轻量 handler 对象，只填充下游需要的字段
+        handler = get_handler(dataset_name, True, path_map, scene_name=scene_name)
+        handler.snapshots = snapshot_data['all_snapshots']
+        handler.benign_idx_start = snapshot_data['benign_idx_start']
+        handler.benign_idx_end = snapshot_data['benign_idx_end']
+        handler.malicious_idx_start = snapshot_data['malicious_idx_start']
+        handler.malicious_idx_end = snapshot_data['malicious_idx_end']
+        print(f"[数据准备] 从缓存加载 {len(handler.snapshots)} 个快照，耗时: {time.time()-t0:.1f}s")
+        return handler
+
+    # 无缓存：完整加载，gid 带数据集名以生成对应的缓存文件
+    gid = f"{GLOBAL_ID}_{cache_tag}"
     handler = get_handler(dataset_name, True, path_map, scene_name=scene_name)
     handler.load()
-    handler.build_graph(GLOBAL_ID)
+    handler.build_graph(gid)
     print(f"[数据准备] {dataset_name}/{scene_name or 'all'} 耗时: {time.time()-t0:.1f}s")
     return handler
 
 
-def train_with_strategy(strategy_name: str, handler, path_map: dict) -> dict:
-    """用指定增强策略训练编码器 + 分类器，返回评估指标"""
-    preset = AUGMENT_PRESETS[strategy_name]
-    tag = f"{GLOBAL_ID}_{strategy_name}"  # 每个策略独立的模型文件后缀
+def _set_seed(seed: int = 42):
+    """固定所有随机种子"""
+    import random as _random
+    _random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
-    print(f"\n{'='*60}")
-    print(f" 策略: {strategy_name}")
-    print(f"{'='*60}")
-    print(f" 参数: {json.dumps(preset, indent=2, ensure_ascii=False)}")
 
-    # ---- 2. 编码器训练 ----
-    t0 = time.time()
+def _train_single_encoder(strategy_name, handler, preset, seed_val):
+    """训练单个编码器并返回快照嵌入"""
+    _set_seed(seed_val)
+    tag = f"{GLOBAL_ID}_{strategy_name}_{seed_val}"
+
     embedder_cls = get_embedder_by_name("gcc_dev")
     default_model = getattr(embedder_cls, "_default_path", "embedder_model.pth")
     _p = Path(default_model)
     model_path = f"{_p.stem}_{tag}{_p.suffix}"
 
-    # 构建编码器参数：基础参数 + 策略预设
+    train_indices = list(range(handler.benign_idx_start, handler.benign_idx_end + 1))
     embedder_kwargs = {
         "model_path": model_path,
         "drop_edge_p": preset["drop_edge_p"],
@@ -216,21 +291,53 @@ def train_with_strategy(strategy_name: str, handler, path_map: dict) -> dict:
         "use_malicious_snapshots": preset["use_malicious_snapshots"],
         "use_malicious_negatives": preset["use_malicious_negatives"],
         "combine": preset["combine"],
+        "train_indices": train_indices,
+        "num_epochs": preset.get("num_epochs", 3),
+        "attr_weight_alpha": preset.get("attr_weight_alpha", 0.3),
     }
 
     embedder = embedder_cls(handler.snapshots, **embedder_kwargs)
 
-    # Mimicry 模式：使用恶意快照但用 mimicry 策略构造负样本（注入良性边+特征替换）
     if preset.get("mimicry_mode", False):
         embedder.use_pos_fusion_neg = False
         embedder.mimicry_mode = True
 
-    # LLM-guided 模式：先通过 MutationPipeline 生成变异图，注入训练
     if preset.get("use_mutation_pipeline", False):
         _run_mutation_pipeline(embedder, handler, preset)
 
     embedder.train()
-    snapshot_embeddings = embedder.get_snapshot_embeddings()
+    return embedder.get_snapshot_embeddings()
+
+
+def train_with_strategy(strategy_name: str, handler, path_map: dict, seed: int = 42) -> dict:
+    """用指定增强策略训练编码器 + 分类器，返回评估指标"""
+    preset = AUGMENT_PRESETS[strategy_name]
+    tag = f"{GLOBAL_ID}_{strategy_name}"
+
+    print(f"\n{'='*60}")
+    print(f" 策略: {strategy_name}")
+    print(f"{'='*60}")
+    print(f" 参数: {json.dumps(preset, indent=2, ensure_ascii=False)}")
+
+    # ---- 2. 编码器训练（多编码器集成以稳定结果） ----
+    t0 = time.time()
+    n_ensemble = preset.get("n_ensemble", 1)
+
+    if n_ensemble > 1:
+        # 多编码器集成：用不同种子训练多个编码器，平均嵌入
+        ensemble_seeds = [seed + i * 1000 for i in range(n_ensemble)]
+        all_embs = []
+        for es in ensemble_seeds:
+            print(f"[{strategy_name}] 集成编码器 seed={es}...")
+            emb = _train_single_encoder(strategy_name, handler, preset, es)
+            all_embs.append(emb[:len(handler.snapshots)])  # 只取原始快照嵌入
+        # 截断到原始长度并平均
+        min_len = min(e.shape[0] for e in all_embs)
+        snapshot_embeddings = np.mean([e[:min_len] for e in all_embs], axis=0)
+        print(f"[{strategy_name}] 集成 {n_ensemble} 个编码器完成")
+    else:
+        snapshot_embeddings = _train_single_encoder(strategy_name, handler, preset, seed)
+
     print(f"[{strategy_name}] 编码器训练耗时: {time.time()-t0:.1f}s")
     print(f"[{strategy_name}] 嵌入维度: {snapshot_embeddings.shape}")
 
@@ -248,21 +355,35 @@ def train_with_strategy(strategy_name: str, handler, path_map: dict) -> dict:
         for g in mal_snapshots
     ], dtype=int)
 
-    # 划分训练/测试：用 30% 恶意数据训练，70% 用于评估（论文 7:3 split）
+    # 划分训练/测试：分层随机采样，确保正负样本在训练和测试集中都有分布
+    from sklearn.model_selection import StratifiedShuffleSplit
     n_mal = len(mal_labels)
-    n_train_mal = max(1, int(n_mal * 0.3))
-    # 按序划分（保持时序）
-    train_mal_emb = mal_embeddings[:n_train_mal]
-    train_mal_labels = mal_labels[:n_train_mal]
+    n_pos = int(mal_labels.sum())
+    print(f"[{strategy_name}] 恶意范围: {n_mal} 快照, 含攻击={n_pos}")
+
+    if n_pos >= 2:
+        # 分层采样：30% 训练，70% 测试
+        sss = StratifiedShuffleSplit(n_splits=1, test_size=0.7, random_state=42)
+        train_idx, test_idx = next(sss.split(mal_embeddings, mal_labels))
+    else:
+        # 正样本太少，退回顺序划分
+        n_train_mal = max(1, int(n_mal * 0.3))
+        train_idx = list(range(n_train_mal))
+        test_idx = list(range(n_train_mal, n_mal))
+
+    train_mal_emb = mal_embeddings[train_idx]
+    train_mal_labels = mal_labels[train_idx]
+    test_mal_emb = mal_embeddings[test_idx]
+    test_mal_labels = mal_labels[test_idx]
+    print(f"[{strategy_name}] 训练集: {len(train_idx)} (攻击={int(train_mal_labels.sum())}), "
+          f"测试集: {len(test_idx)} (攻击={int(test_mal_labels.sum())})")
 
     classify = get_classfy(CLASSIFY_NAME, gid=tag)
     classify.train(benign_embeddings, train_mal_emb, train_mal_labels)
     print(f"[{strategy_name}] 分类器训练耗时: {time.time()-t0:.1f}s")
 
-    # ---- 4. 评估（用训练集以外的 70% 恶意数据） ----
+    # ---- 4. 评估 ----
     t0 = time.time()
-    test_mal_emb = mal_embeddings[n_train_mal:]
-    test_mal_labels = mal_labels[n_train_mal:]
     metrics = evaluate_strategy(
         strategy_name, classify, test_mal_emb, test_mal_labels
     )
@@ -351,6 +472,10 @@ def main():
         "--scene", type=str, default=None,
         help="场景名（如 cadets314），不传则使用默认配置"
     )
+    parser.add_argument(
+        "--seed", type=int, default=42,
+        help="随机种子"
+    )
     args = parser.parse_args()
 
     env_config = load_config()
@@ -377,7 +502,7 @@ def main():
 
         for strat in strategies:
             try:
-                metrics = train_with_strategy(strat, handler, path_map)
+                metrics = train_with_strategy(strat, handler, path_map, seed=args.seed)
                 if metrics:
                     metrics["dataset"] = ds_label
                     all_results.append(metrics)

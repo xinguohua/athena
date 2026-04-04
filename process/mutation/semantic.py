@@ -1,11 +1,14 @@
 """
 语义变异 (Semantic Mutation) — 论文 Figure 5
 
-对结构变异后注入的攻击节点，使用 LLM 修改其属性使其融入良性上下文。
+对结构变异后注入的攻击节点，使用 LLM 修改其 properties 使其融入良性上下文。
 三种策略：
 - Replacement: 命令名在良性语料中，参数不在 → 替换参数
 - Rewriting: 命令名和参数都在良性语料中 → 重写整个命令
 - Extension: 命令名和参数都不在良性语料中 → 前后追加良性操作
+
+注意：节点特征由 properties 决定（embedder 用 properties 构建特征向量），
+name 是 UUID 仅用作字典 key，语义变异必须操作 properties。
 """
 from __future__ import annotations
 from typing import List, Dict, Optional, Tuple, Set
@@ -18,13 +21,66 @@ except ImportError:
     ig = None
 
 
+def _clean_set_str(prop: str) -> str:
+    """将 str(set(...)) 格式的 properties 清理为单条字符串。
+
+    properties 存储为 str(set(...))，如 "{'bash -c wget,12345,/bin/bash', 'other'}"
+    取第一个元素（通常是最主要的属性描述）。
+    """
+    s = prop.strip()
+    if not s or s in ("set()", "{}"):
+        return ""
+    # 去掉 set 的花括号
+    if s.startswith("{") and s.endswith("}"):
+        s = s[1:-1].strip()
+    # 按引号拆分取第一个元素（set 元素被引号包裹，逗号分隔）
+    if s.startswith("'") or s.startswith('"'):
+        quote = s[0]
+        end = s.find(quote, 1)
+        if end > 0:
+            return s[1:end]
+    # fallback: 没引号的情况
+    return s
+
+
+def _get_properties(g, v_idx: int) -> str:
+    """获取节点的 properties 字符串（已清理 set 格式）"""
+    try:
+        raw = str(g.vs[v_idx]['properties'])
+    except Exception:
+        raw = str(g.vs[v_idx].attributes().get('properties', ''))
+    return _clean_set_str(raw)
+
+
+def _parse_process_properties(prop: str) -> Tuple[str, str, str]:
+    """解析进程节点的 properties: 'cmdLine,tgid,path' → (cmdLine, tgid, path)
+
+    prop 应已经过 _clean_set_str 清理。
+    """
+    parts = prop.split(',', 2)  # 最多拆 3 段
+    cmd = parts[0].strip() if len(parts) > 0 else ""
+    tgid = parts[1].strip() if len(parts) > 1 else ""
+    path = parts[2].strip() if len(parts) > 2 else ""
+    return cmd, tgid, path
+
+
+def _parse_network_properties(prop: str) -> Tuple[str, str, str, str]:
+    """解析网络节点的 properties: 'srcaddr,srcport,dstaddr,dstport'"""
+    parts = prop.split(',')
+    srcaddr = parts[0].strip() if len(parts) > 0 else ""
+    srcport = parts[1].strip() if len(parts) > 1 else ""
+    dstaddr = parts[2].strip() if len(parts) > 2 else ""
+    dstport = parts[3].strip() if len(parts) > 3 else ""
+    return srcaddr, srcport, dstaddr, dstport
+
+
 def _collect_benign_corpus(benign_graphs: list) -> Tuple[Set[str], Set[str], Set[str]]:
     """
-    从历史良性图中收集属性白名单 H_b。
+    从历史良性图中收集属性白名单 H_b（基于 properties 字段）。
 
     Returns:
         (benign_commands, benign_args, benign_files):
-        - benign_commands: 出现过的进程命令名集合
+        - benign_commands: 出现过的进程命令名集合（从 properties 的 cmdLine 提取）
         - benign_args: 出现过的命令行参数集合
         - benign_files: 出现过的文件路径集合
     """
@@ -34,57 +90,65 @@ def _collect_benign_corpus(benign_graphs: list) -> Tuple[Set[str], Set[str], Set
 
     for g, _ in benign_graphs:
         for v in range(g.vcount()):
-            attrs = g.vs[v].attributes()
-            name = str(attrs.get("name", ""))
-            vtype = str(attrs.get("type", "")).lower()
+            vtype = str(g.vs[v].attributes().get("type", "")).lower()
+            prop = _get_properties(g, v)
 
             if "process" in vtype or "subject" in vtype:
-                # 进程节点：提取命令名和参数
-                parts = name.split()
-                if parts:
-                    commands.add(parts[0])
-                    for p in parts[1:]:
+                # 进程节点：从 properties 解析 cmdLine
+                cmd_line, _tgid, _path = _parse_process_properties(prop)
+                cmd_parts = cmd_line.split()
+                if cmd_parts:
+                    commands.add(cmd_parts[0])
+                    for p in cmd_parts[1:]:
                         args.add(p)
             elif "file" in vtype:
-                files.add(name)
+                # 文件节点：properties 就是文件路径
+                if prop and prop != "set()":
+                    files.add(prop)
 
     return commands, args, files
 
 
 def _assign_strategy(
-    node_name: str,
+    prop: str,
+    vtype: str,
     benign_commands: Set[str],
     benign_args: Set[str],
 ) -> str:
     """
-    为进程节点分配变异策略。
+    为节点分配变异策略（基于 properties）。
 
     - Replacement: 命令名在 H_b，参数不在 → 保留命令，替换参数
     - Rewriting: 命令名和参数都在 H_b → 重写整个命令
     - Extension: 命令名和参数都不在 H_b → 追加良性操作
     """
-    parts = node_name.split()
-    if not parts:
-        return "extension"
+    if "process" in vtype or "subject" in vtype:
+        cmd_line, _tgid, _path = _parse_process_properties(prop)
+        parts = cmd_line.split()
+        if not parts:
+            return "extension"
 
-    cmd = parts[0]
-    node_args = set(parts[1:]) if len(parts) > 1 else set()
+        cmd = parts[0]
+        node_args = set(parts[1:]) if len(parts) > 1 else set()
 
-    cmd_in_benign = cmd in benign_commands
-    args_in_benign = bool(node_args) and node_args.issubset(benign_args)
+        cmd_in_benign = cmd in benign_commands
+        args_in_benign = bool(node_args) and node_args.issubset(benign_args)
 
-    if cmd_in_benign and not args_in_benign:
-        return "replacement"
-    elif cmd_in_benign and args_in_benign:
-        return "rewriting"
+        if cmd_in_benign and not args_in_benign:
+            return "replacement"
+        elif cmd_in_benign and args_in_benign:
+            return "rewriting"
+        else:
+            return "extension"
     else:
-        return "extension"
+        # 文件/网络节点统一用 replacement
+        return "replacement"
 
 
 def _build_context_triples(g, node_idx: int, r_hop: int = 2) -> List[str]:
     """
     提取节点的 r-hop 边界上下文，编码为因果三元组序列。
-    格式: <entity_type:attribute, operation_type, entity_type:attribute>
+    格式: <entity_type:properties_summary, operation_type, entity_type:properties_summary>
     """
     triples = []
     visited = {node_idx}
@@ -102,14 +166,14 @@ def _build_context_triples(g, node_idx: int, r_hop: int = 2) -> List[str]:
                 next_frontier.add(neighbor)
                 visited.add(neighbor)
 
-                # 构建三元组
+                # 构建三元组（用 properties 摘要代替 name/UUID）
                 action = str(e.attributes().get("actions", "UNK"))
-                src_type = str(g.vs[src].get("type", "UNK"))
-                src_name = str(g.vs[src].get("name", ""))[:32]
-                dst_type = str(g.vs[dst].get("type", "UNK"))
-                dst_name = str(g.vs[dst].get("name", ""))[:32]
+                src_type = str(g.vs[src].attributes().get("type", "UNK"))
+                src_prop = _get_properties(g, src)[:48]
+                dst_type = str(g.vs[dst].attributes().get("type", "UNK"))
+                dst_prop = _get_properties(g, dst)[:48]
 
-                triple = f"<{src_type}:{src_name}, {action}, {dst_type}:{dst_name}>"
+                triple = f"<{src_type}:{src_prop}, {action}, {dst_type}:{dst_prop}>"
                 triples.append(triple)
         frontier = next_frontier
 
@@ -124,8 +188,8 @@ def build_semantic_mutation_prompt(
     构建语义变异的 LLM prompt（论文 Figure 5）。
 
     Args:
-        nodes_info: [{"node_id": int, "attributes": str, "associated_nodes": str,
-                       "strategy": str}, ...]
+        nodes_info: [{"node_id": int, "properties": str, "associated_nodes": str,
+                       "strategy": str, "node_type": str}, ...]
         context_triples: 对应每个节点的上下文三元组
 
     Returns:
@@ -134,29 +198,31 @@ def build_semantic_mutation_prompt(
     prompt_parts = [
         "[Context] The following attack process nodes are embedded in a provenance graph "
         "with their associated file/network nodes and r-hop benign context C.\n"
+        "Node properties format: process='cmdLine,tgid,path', "
+        "file='filepath', network='srcaddr,srcport,dstaddr,dstport'.\n"
     ]
-    prompt_parts.append(f"[Input] {len(nodes_info)} process nodes:\n")
+    prompt_parts.append(f"[Input] {len(nodes_info)} nodes:\n")
 
     for i, info in enumerate(nodes_info):
         ctx = "; ".join(context_triples[i][:20]) if i < len(context_triples) else ""
         prompt_parts.append(
-            f"  Node {i+1}: attributes={info['attributes']}, "
+            f"  Node {i+1}: type={info.get('node_type', 'process')}, "
+            f"properties={info['properties']}, "
             f"associated_nodes={info.get('associated_nodes', 'N/A')}, "
             f"strategy={info['strategy']}, C={{{ctx}}}\n"
         )
 
     prompt_parts.append(
-        "\n[Task] Mutate each process node's attributes via its assigned strategy:\n"
-        "  A. Replacement: preserve the attack-critical component, replace the other "
-        "with benign values guided by C.\n"
-        "  B. Rewriting: rewrite the entire command into a different expression guided "
-        "by C that fits the surrounding benign context.\n"
+        "\n[Task] Mutate each node's properties via its assigned strategy:\n"
+        "  A. Replacement: preserve the attack-critical component of the command, "
+        "replace the other args/paths with benign values guided by C.\n"
+        "  B. Rewriting: rewrite the entire cmdLine into a different expression "
+        "guided by C that fits the surrounding benign context.\n"
         "  C. Extension: preserve entire command, prepend/append benign operations from C.\n"
-        "For each mutated process node, also output updated attributes for any associated "
-        "file or network nodes whose values change.\n"
+        "For each mutated node, output the FULL new properties string in the same format.\n"
         "Constraints: (1) generated values must be legitimate system commands, file names, "
         "or IP addresses; (2) mutated values must be compatible with neighboring operations in C.\n"
-        "\n[Output] JSON: [{node_id, new_attributes, associated_updates}].\n"
+        "\n[Output] JSON: [{node_id, new_properties, associated_updates: [{node_id, new_properties}]}].\n"
     )
 
     return "".join(prompt_parts)
@@ -171,7 +237,7 @@ def apply_semantic_mutation_llm(
     r_hop: int = 2,
 ) -> Optional:
     """
-    对变异图中的攻击节点执行语义变异。
+    对变异图中的攻击节点执行语义变异（修改 properties）。
 
     Args:
         g_mut: 结构变异后的图（将被修改）
@@ -187,44 +253,61 @@ def apply_semantic_mutation_llm(
     if not attack_node_indices:
         return g_mut
 
-    # 收集需要变异的进程节点信息
-    process_nodes = []
+    # 收集需要变异的节点信息
+    target_nodes = []
     for idx in attack_node_indices:
         if idx >= g_mut.vcount():
             continue
-        vtype = str(g_mut.vs[idx].get("type", "")).lower()
-        if "process" not in vtype and "subject" not in vtype:
+        vtype = str(g_mut.vs[idx].attributes().get("type", "")).lower()
+        prop = _get_properties(g_mut, idx)
+        strategy = _assign_strategy(prop, vtype, benign_commands, benign_args)
+
+        if "process" in vtype or "subject" in vtype:
+            node_type = "process"
+        elif "file" in vtype:
+            node_type = "file"
+        elif "net" in vtype or "flow" in vtype or "sock" in vtype:
+            node_type = "network"
+        else:
             continue
-        name = str(g_mut.vs[idx].get("name", ""))
-        strategy = _assign_strategy(name, benign_commands, benign_args)
-        process_nodes.append({
+
+        target_nodes.append({
             "idx": idx,
-            "name": name,
+            "properties": prop,
             "strategy": strategy,
+            "node_type": node_type,
         })
 
-    if not process_nodes:
+    if not target_nodes:
         return g_mut
 
-    if llm_fn is not None:
-        # LLM 语义变异
+    # 分离进程节点和文件/网络节点：LLM 只变异进程节点，文件/网络用规则
+    proc_only = [n for n in target_nodes if n["node_type"] == "process"]
+    non_proc = [n for n in target_nodes if n["node_type"] != "process"]
+
+    # 文件/网络节点始终用规则变异
+    if non_proc:
+        _apply_rule_based_mutation(g_mut, non_proc, benign_commands, benign_args)
+
+    if llm_fn is not None and proc_only:
+        # LLM 语义变异（仅进程节点）
         nodes_info = []
         context_triples = []
-        for pn in process_nodes:
+        for pn in proc_only:
             ctx = _build_context_triples(g_mut, pn["idx"], r_hop=r_hop)
             context_triples.append(ctx)
-            # 收集关联的文件/网络节点
             associated = []
             for nb in g_mut.neighbors(pn["idx"], mode="all"):
-                nb_type = str(g_mut.vs[nb].get("type", "")).lower()
-                nb_name = str(g_mut.vs[nb].get("name", ""))
+                nb_type = str(g_mut.vs[nb].attributes().get("type", "")).lower()
+                nb_prop = _get_properties(g_mut, nb)[:32]
                 if "file" in nb_type or "net" in nb_type or "flow" in nb_type:
-                    associated.append(f"{nb_type}:{nb_name}")
+                    associated.append(f"{nb_type}:{nb_prop}")
             nodes_info.append({
                 "node_id": pn["idx"],
-                "attributes": pn["name"],
+                "properties": pn["properties"],
                 "associated_nodes": "; ".join(associated[:5]),
                 "strategy": pn["strategy"],
+                "node_type": pn["node_type"],
             })
 
         prompt = build_semantic_mutation_prompt(nodes_info, context_triples)
@@ -232,22 +315,19 @@ def apply_semantic_mutation_llm(
         try:
             response = llm_fn(prompt)
             mutations = _parse_llm_response(response)
-            _apply_mutations(g_mut, mutations, process_nodes)
+            _apply_mutations(g_mut, mutations, proc_only)
         except Exception as ex:
-            print(f"[SemMut] LLM 变异失败，回退到规则变异: {ex}")
-            _apply_rule_based_mutation(g_mut, process_nodes, benign_commands, benign_args)
-    else:
-        # 规则变异（无 LLM 时的 fallback）
-        _apply_rule_based_mutation(g_mut, process_nodes, benign_commands, benign_args)
+            print(f"[SemMut] LLM 变异失败: {ex}")
+    elif proc_only:
+        # 无 LLM 时不做语义变异（规则 fallback 是噪声，不如保留原始攻击 properties）
+        pass
 
     return g_mut
 
 
 def _parse_llm_response(response: str) -> List[Dict]:
     """解析 LLM 返回的 JSON 变异结果"""
-    # 尝试提取 JSON
     try:
-        # 处理 markdown 代码块
         text = response.strip()
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
@@ -263,70 +343,120 @@ def _parse_llm_response(response: str) -> List[Dict]:
 
 
 def _apply_mutations(g_mut, mutations: List[Dict], process_nodes: List[Dict]):
-    """将 LLM 输出的变异应用到图上"""
-    node_map = {pn["idx"]: pn for pn in process_nodes}
+    """将 LLM 输出的变异应用到图的 properties 上。
+
+    LLM 返回的 node_id 可能是：
+    - prompt 中的序号（1-based: Node 1, Node 2, ...）
+    - 实际图节点索引
+    两种都尝试匹配。
+    """
+    # 按实际图索引映射
+    idx_map = {pn["idx"]: pn for pn in process_nodes}
+    # 按 prompt 序号映射（1-based）
+    seq_map = {i + 1: pn for i, pn in enumerate(process_nodes)}
 
     for mut in mutations:
-        node_id = mut.get("node_id")
-        new_attrs = mut.get("new_attributes", "")
-        if node_id is None or node_id not in node_map:
+        raw_id = mut.get("node_id")
+        new_props = mut.get("new_properties", "")
+        if raw_id is None or not new_props:
             continue
-        if new_attrs and node_id < g_mut.vcount():
-            g_mut.vs[node_id]["name"] = str(new_attrs)
+
+        # node_id 可能是字符串或整数，统一转 int
+        try:
+            node_id = int(raw_id)
+        except (ValueError, TypeError):
+            continue
+
+        # 优先按实际索引匹配，再按 prompt 序号匹配
+        target = idx_map.get(node_id) or seq_map.get(node_id)
+        if target is None:
+            continue
+
+        actual_idx = target["idx"]
+        if actual_idx < g_mut.vcount():
+            g_mut.vs[actual_idx]["properties"] = str(new_props)
 
         # 关联节点更新
         for update in mut.get("associated_updates", []):
             if isinstance(update, dict):
-                for k, v in update.items():
-                    try:
-                        # 尝试匹配关联节点并更新
-                        for nb in g_mut.neighbors(node_id, mode="all"):
-                            if str(g_mut.vs[nb].get("name", "")).startswith(str(k)[:10]):
-                                g_mut.vs[nb]["name"] = str(v)
-                                break
-                    except Exception:
-                        pass
+                try:
+                    assoc_id = int(update.get("node_id", -1))
+                except (ValueError, TypeError):
+                    continue
+                assoc_props = update.get("new_properties", "")
+                if assoc_props and 0 <= assoc_id < g_mut.vcount():
+                    g_mut.vs[assoc_id]["properties"] = str(assoc_props)
 
 
 def _apply_rule_based_mutation(
     g_mut,
-    process_nodes: List[Dict],
+    target_nodes: List[Dict],
     benign_commands: Set[str],
     benign_args: Set[str],
 ):
     """
     规则变异（无 LLM 时的 fallback）：
-    根据策略直接替换/重写/扩展节点名称
+    根据策略和节点类型修改 properties
     """
     benign_cmd_list = list(benign_commands) if benign_commands else ["bash"]
     benign_arg_list = list(benign_args) if benign_args else ["-l", "--help"]
 
     import random as _rng
 
-    for pn in process_nodes:
-        idx = pn["idx"]
-        name = pn["name"]
-        strategy = pn["strategy"]
-        parts = name.split()
+    # 收集良性文件路径（从图中非攻击文件节点的 properties）
+    benign_file_list = []
+    for v in range(g_mut.vcount()):
+        vtype = str(g_mut.vs[v].attributes().get("type", "")).lower()
+        if "file" in vtype and g_mut.vs[v].attributes().get("label", 0) != 1:
+            fp = _get_properties(g_mut, v)
+            if fp and fp != "set()":
+                benign_file_list.append(fp)
+    if not benign_file_list:
+        benign_file_list = ["/tmp/data.log", "/var/log/syslog", "/etc/hosts"]
+
+    for tn in target_nodes:
+        idx = tn["idx"]
+        prop = tn["properties"]
+        strategy = tn["strategy"]
+        node_type = tn["node_type"]
 
         if idx >= g_mut.vcount():
             continue
 
-        if strategy == "replacement" and len(parts) > 1:
-            # 保留命令名，替换参数为良性参数
-            cmd = parts[0]
-            n_args = min(len(parts) - 1, 3)
+        # 文件节点：替换 properties 为良性文件路径
+        if node_type == "file":
+            g_mut.vs[idx]["properties"] = _rng.choice(benign_file_list)
+            continue
+
+        # 网络节点：替换 properties 为良性 IP/端口
+        if node_type == "network":
+            octets = [str(_rng.randint(10, 200)) for _ in range(4)]
+            port = _rng.choice([80, 443, 8080, 22, 53, 8443])
+            # 保持 properties 格式: srcaddr,srcport,dstaddr,dstport
+            src_ip = ".".join(octets[:4])
+            dst_ip = ".".join([str(_rng.randint(10, 200)) for _ in range(4)])
+            g_mut.vs[idx]["properties"] = f"{src_ip},{_rng.choice([1024,2048,4096,8080])},{dst_ip},{port}"
+            continue
+
+        # 进程节点：按策略变异 properties 中的 cmdLine 部分
+        cmd_line, tgid, path = _parse_process_properties(prop)
+        cmd_parts = cmd_line.split()
+
+        if strategy == "replacement" and len(cmd_parts) > 1:
+            # 保留命令名，替换参数
+            cmd = cmd_parts[0]
+            n_args = min(len(cmd_parts) - 1, 3)
             new_args = _rng.sample(benign_arg_list, min(n_args, len(benign_arg_list)))
-            new_name = f"{cmd} {' '.join(new_args)}"
+            new_cmd_line = f"{cmd} {' '.join(new_args)}"
         elif strategy == "rewriting":
-            # 替换为随机良性命令
+            # 整个命令重写
             new_cmd = _rng.choice(benign_cmd_list) if benign_cmd_list else "ls"
             n_args = _rng.randint(0, 2)
             new_args = _rng.sample(benign_arg_list, min(n_args, len(benign_arg_list)))
-            new_name = f"{new_cmd} {' '.join(new_args)}".strip()
+            new_cmd_line = f"{new_cmd} {' '.join(new_args)}".strip()
         else:  # extension
-            # 在命令前后追加良性操作
             prefix_cmd = _rng.choice(benign_cmd_list) if benign_cmd_list else "echo"
-            new_name = f"{prefix_cmd} && {name}"
+            new_cmd_line = f"{prefix_cmd} && {cmd_line}"
 
-        g_mut.vs[idx]["name"] = new_name
+        # 重组 properties：保留 tgid 和 path，替换 cmdLine
+        g_mut.vs[idx]["properties"] = f"{new_cmd_line},{tgid},{path}"

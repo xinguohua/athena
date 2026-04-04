@@ -51,9 +51,12 @@ def chatanywhere_summarize(
         resp.raise_for_status()
         data = resp.json()
         content = ((data.get("choices") or [{}])[0].get("message", {}) or {}).get("content", "")
-        return str(content).strip() or text
-    except Exception:
-        return text
+        result = str(content).strip()
+        if not result:
+            raise ValueError("LLM 返回空内容")
+        return result
+    except Exception as ex:
+        raise RuntimeError(f"LLM API 调用失败: {ex}") from ex
 
 
 def make_chatanywhere_summarizer(
