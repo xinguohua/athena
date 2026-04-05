@@ -983,7 +983,6 @@ class GCCEmbedderDev(GraphEmbedderBase):
         if not pool:
             return None
 
-        # 从恶意 ego pool 有放回采样 Bc 个，保证与正样本 1:1
         chosen = [random.choice(pool) for _ in range(Bc)]
 
         _ef_zero = torch.zeros(0, dtype=torch.long, device=device)
