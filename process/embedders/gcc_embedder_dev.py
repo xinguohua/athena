@@ -378,7 +378,14 @@ class GCCEmbedderDev(GraphEmbedderBase):
         print(
             f"[GCC-Dev] Pretrain on {len(self.train_snapshot_indices)} snapshots | batch={self.batch_size} | tau={self.temperature}")
 
+        # 对比学习采样的 ego = 训练集。最后一个 epoch 保存。
+        self.train_ego_cache = []
+        self._save_egos = False
+
         for epoch in range(self.num_epochs):
+            # 最后一个 epoch 开启保存
+            if epoch == self.num_epochs - 1:
+                self._save_egos = True
             if self.use_temporal:
                 self.temporal.reset()  # 每个 epoch 重置时序状态（仅开启时）
             epoch_loss = 0.0
@@ -438,64 +445,27 @@ class GCCEmbedderDev(GraphEmbedderBase):
             print(f"[GCC-Dev] Epoch {epoch + 1}/{self.num_epochs} DONE | AvgLoss={avg:.6f}")
 
         self.save_malicious_snapshot_stats()
-        # 训练结束后生成节点嵌入（两种方式）
-        self.generate_node_embeddings(use_temporal=self.use_temporal)  # full-graph（兼容旧接口）
-        self._generate_ego_embeddings()  # ego 子图级（跟对比学习一致）
-        self.save_model()
+        self.generate_node_embeddings(use_temporal=self.use_temporal)
 
-    def _generate_ego_embeddings(self):
-        """用冻结编码器生成 ego 子图嵌入。
-        良性快照采样，攻击节点全部保留。
-        结果存入 self.ego_embeddings = [{node_name: (embedding, label)}, ...]
-        """
-        import random as _rng
-        self.encoder.eval()
-        self.ego_embeddings = []
-        print("[GCC-Dev] 生成 ego 子图嵌入...")
-        t0 = __import__('time').time()
+        # 训练集：对比学习保存的正样本 ego + 攻击池 ego
+        # 正样本在最后 epoch 已保存到 self.train_ego_cache
+        # 攻击 ego 从 _mal_ego_cache 取
+        mal_cache = getattr(self, '_mal_ego_cache', [])
+        for entry in mal_cache:
+            x_t, ei_t, nc = entry[0], entry[1], entry[2]
+            ef_t = entry[3] if len(entry) > 3 else torch.zeros(0, dtype=torch.long)
+            self.train_ego_cache.append((
+                x_t.numpy() if isinstance(x_t, torch.Tensor) else x_t,
+                ei_t.cpu() if isinstance(ei_t, torch.Tensor) else ei_t,
+                ef_t.cpu() if isinstance(ef_t, torch.Tensor) else ef_t,
+                1,  # 攻击 label
+                -1,
+            ))
 
-        MAX_PER_SNAPSHOT = 50  # 每个快照最多采样节点数（攻击节点不受限）
-        total_nodes = 0
-
-        with torch.no_grad():
-            for sidx, g in enumerate(self.snapshots):
-                snap_embs = {}
-                if g is None or g.vcount() == 0:
-                    self.ego_embeddings.append(snap_embs)
-                    continue
-
-                self._preheat_snapshot_properties(g)
-
-                # 确定要编码的节点：全部攻击节点 + 采样良性节点
-                attack_nodes = [v for v in range(g.vcount()) if g.vs[v].attributes().get('label', 0) == 1]
-                benign_nodes = [v for v in range(g.vcount()) if g.vs[v].attributes().get('label', 0) == 0]
-
-                if len(benign_nodes) > MAX_PER_SNAPSHOT:
-                    sampled_benign = _rng.sample(benign_nodes, MAX_PER_SNAPSHOT)
-                else:
-                    sampled_benign = benign_nodes
-
-                nodes_to_encode = attack_nodes + sampled_benign
-
-                for v in nodes_to_encode:
-                    sub = self._ego_subgraph(g, v, r=self.r_hop, max_nodes=self.ego_max_nodes)
-                    if sub.vcount() == 0:
-                        continue
-                    x = torch.from_numpy(self._build_node_features(sub)).to(self.device)
-                    ei, ef = self._igraph_edges_to_edge_index(sub)
-                    h = self.encoder(x, ei, edge_feat=ef)
-                    nid = g.vs[v]['name']
-                    lab = int(g.vs[v].attributes().get('label', 0))
-                    snap_embs[nid] = (h[0].detach().cpu().numpy(), lab)
-
-                self.ego_embeddings.append(snap_embs)
-                total_nodes += len(snap_embs)
-
-        # 变异图的攻击 ego 子图也加入（跟对比学习一致）
+        # 变异图的攻击 ego 也加入训练集
         mutation_map = getattr(self, 'mutation_map', None)
-        n_mut_attack = 0
+        n_mut = 0
         if mutation_map:
-            mut_snap_embs = {}
             for b_idx, g_mut in mutation_map.items():
                 if g_mut is None or g_mut.vcount() == 0:
                     continue
@@ -505,17 +475,55 @@ class GCCEmbedderDev(GraphEmbedderBase):
                         sub = self._ego_subgraph(g_mut, v, r=self.r_hop, max_nodes=self.ego_max_nodes)
                         if sub.vcount() == 0:
                             continue
-                        x = torch.from_numpy(self._build_node_features(sub)).to(self.device)
+                        x_np = self._build_node_features(sub)
                         ei, ef = self._igraph_edges_to_edge_index(sub)
-                        h = self.encoder(x, ei, edge_feat=ef)
-                        nid = f"mut_{b_idx}_{v}"
-                        mut_snap_embs[nid] = (h[0].detach().cpu().numpy(), 1)
-                        n_mut_attack += 1
-            # 存到一个特殊索引
-            self.ego_embeddings.append(mut_snap_embs)
+                        self.train_ego_cache.append((x_np, ei.cpu(), ef.cpu(), 1, -1))
+                        n_mut += 1
 
-        print(f"[GCC-Dev] ego 嵌入生成完成: {len(self.ego_embeddings)} 快照, "
-              f"{total_nodes} 原始节点 + {n_mut_attack} 变异攻击节点, "
+        train_benign = sum(1 for _, _, _, lab, _ in self.train_ego_cache if lab == 0)
+        train_attack = sum(1 for _, _, _, lab, _ in self.train_ego_cache if lab == 1)
+        print(f"[GCC-Dev] 训练集: {len(self.train_ego_cache)} ego "
+              f"(良性={train_benign}, 攻击={train_attack}, 含{n_mut}变异)")
+
+        # 测试集：恶意快照全部攻击节点 + 采样良性节点
+        self._generate_test_ego_cache()
+        self.save_model()
+
+    def _generate_test_ego_cache(self):
+        """构建测试集：恶意快照的全部攻击节点 + 采样良性节点 ego"""
+        import random as _rng
+        self.test_ego_cache = []
+        print("[GCC-Dev] 构建测试集 ego...")
+        t0 = __import__('time').time()
+
+        SAMPLE_PER_SNAPSHOT = 50
+        benign_end = self.train_snapshot_indices[-1] if self.train_snapshot_indices else 0
+        mal_start_idx = benign_end + 1
+        mal_end_idx = len(self.snapshots) - 1
+
+        for sidx in range(mal_start_idx, mal_end_idx + 1):
+            g = self.snapshots[sidx]
+            if g is None or g.vcount() == 0:
+                continue
+            self._preheat_snapshot_properties(g)
+            attack_nodes = [v for v in range(g.vcount()) if g.vs[v].attributes().get('label', 0) == 1]
+            benign_nodes = [v for v in range(g.vcount()) if g.vs[v].attributes().get('label', 0) == 0]
+            if len(benign_nodes) > SAMPLE_PER_SNAPSHOT:
+                benign_nodes = _rng.sample(benign_nodes, SAMPLE_PER_SNAPSHOT)
+
+            for v in attack_nodes + benign_nodes:
+                sub = self._ego_subgraph(g, v, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                if sub.vcount() == 0:
+                    continue
+                x_np = self._build_node_features(sub)
+                ei, ef = self._igraph_edges_to_edge_index(sub)
+                lab = int(g.vs[v].attributes().get('label', 0))
+                self.test_ego_cache.append((x_np, ei.cpu(), ef.cpu(), lab, sidx))
+
+        test_benign = sum(1 for _, _, _, lab, _ in self.test_ego_cache if lab == 0)
+        test_attack = sum(1 for _, _, _, lab, _ in self.test_ego_cache if lab == 1)
+        print(f"[GCC-Dev] 测试集: {len(self.test_ego_cache)} ego "
+              f"(良性={test_benign}, 攻击={test_attack}), "
               f"耗时 {__import__('time').time()-t0:.1f}s")
 
     def _train_small_snapshots_packed(self, snapshot_batch: list) -> float:
@@ -777,6 +785,18 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
             total_loss += float(loss.detach().cpu().item())
             total_steps += 1
+
+            # 最后一个 epoch 保存正样本 ego 原始数据（构建训练集）
+            if getattr(self, '_save_egos', False):
+                for xi, ei_raw, efi, sub_g in zip(x_list, e_list, ef_list, subs):
+                    lab = 0  # 正样本来自良性快照
+                    self.train_ego_cache.append((
+                        xi.detach().cpu().numpy(),
+                        ei_raw.cpu(),
+                        efi.cpu(),
+                        lab,
+                        sidx,
+                    ))
 
             # 缓存到 CPU（仅在需要 token 负样本时才存，避免无谓的显存/内存占用）
             if self.use_malicious_negatives:

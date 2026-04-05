@@ -342,28 +342,18 @@ def train_with_strategy(strategy_name: str, handler, path_map: dict, seed: int =
     print(f"[{strategy_name}] 编码器训练耗时: {time.time()-t0:.1f}s")
     print(f"[{strategy_name}] 嵌入维度: {snapshot_embeddings.shape}")
 
-    # ---- 3. Stage 2: 线性分类器（仿照 SupCon main_linear.py） ----
-    # 冻结 encoder，用 ego 嵌入训练 nn.Linear + CrossEntropy
+    # ---- 3. Stage 2: MLP（仿 SupCon，实时增强+冻结 encoder） ----
     t0 = time.time()
     mal_start = handler.malicious_idx_start
     mal_end = handler.malicious_idx_end
-    ego_embs = embedder.ego_embeddings  # Stage 1 已用冻结 encoder 计算好
+    ego_cache = embedder.train_ego_cache  # 对比学习采样的 ego = 训练集
 
-    # 收集全部 ego 嵌入 + 标签（跟 Stage 1 用同一份数据）
-    all_vecs, all_labels = [], []
-    for i in range(len(ego_embs)):
-        for nid, (vec, lab) in ego_embs[i].items():
-            all_vecs.append(vec)
-            all_labels.append(lab)
+    n_attack = sum(1 for _, _, _, lab, _ in ego_cache if lab == 1)
+    n_benign = sum(1 for _, _, _, lab, _ in ego_cache if lab == 0)
+    feat_dim = embedder.enc_out_dim
+    print(f"[{strategy_name}] Stage 2: {len(ego_cache)} ego子图 (良性={n_benign}, 攻击={n_attack})")
 
-    feat_X = torch.tensor(np.array(all_vecs, dtype=np.float32), device=DEVICE)
-    feat_y = torch.tensor(np.array(all_labels, dtype=np.int64), device=DEVICE)
-    n_pos = int((feat_y == 1).sum().item())
-    n_neg = int((feat_y == 0).sum().item())
-    feat_dim = feat_X.shape[1]
-    print(f"[{strategy_name}] Stage 2: {len(feat_y)} ego嵌入 (良性={n_neg}, 攻击={n_pos}), feat_dim={feat_dim}")
-
-    # MLP 分类器（两层）
+    # MLP 分类器
     classifier = torch.nn.Sequential(
         torch.nn.Linear(feat_dim, 128),
         torch.nn.ReLU(),
@@ -371,23 +361,63 @@ def train_with_strategy(strategy_name: str, handler, path_map: dict, seed: int =
         torch.nn.Linear(128, 2),
     ).to(DEVICE)
 
-    class_weight = torch.tensor([1.0, n_neg / max(n_pos, 1)], device=DEVICE)
-    criterion = torch.nn.CrossEntropyLoss(weight=class_weight)
+    criterion = torch.nn.CrossEntropyLoss()  # 1:1 平衡后不需要 class_weight
     optimizer = torch.optim.Adam(classifier.parameters(), lr=1e-3, weight_decay=1e-4)
 
-    BATCH_SIZE = 256
-    NUM_EPOCHS = 50
-    n_samples = len(feat_y)
-
+    embedder.encoder.eval()
     classifier.train()
+
+    drop_edge_p = preset["drop_edge_p"]
+    feat_mask_p = preset["feat_mask_p"]
+    BATCH_SIZE = 128
+    NUM_EPOCHS = 10
+    n_samples = len(ego_cache)
+
+    # 1:1 平衡：下采样良性 + 过采样攻击
+    import random as _rng
+    benign_indices = [i for i, (_, _, _, lab, _) in enumerate(ego_cache) if lab == 0]
+    attack_indices = [i for i, (_, _, _, lab, _) in enumerate(ego_cache) if lab == 1]
+    # 良性最多取攻击的 10 倍，避免过多
+    max_benign = min(len(benign_indices), max(len(attack_indices) * 10, 500))
+    sampled_benign = _rng.sample(benign_indices, max_benign)
+    # 攻击过采样匹配良性数量
+    balanced_attack = (attack_indices * (max_benign // max(len(attack_indices), 1) + 1))[:max_benign]
+    balanced_indices = sampled_benign + balanced_attack
+    n_balanced = len(balanced_indices)
+    print(f"[{strategy_name}] 平衡采样: {len(sampled_benign)} 良性 + {len(balanced_attack)} 攻击(增强x{len(balanced_attack)//max(len(attack_indices),1)})")
+
     for ep in range(NUM_EPOCHS):
-        perm = torch.randperm(n_samples, device=DEVICE)
-        ep_loss = 0.0
-        n_batches = 0
-        for start in range(0, n_samples, BATCH_SIZE):
-            idx = perm[start:start + BATCH_SIZE]
-            output = classifier(feat_X[idx])
-            loss = criterion(output, feat_y[idx])
+        perm = torch.randperm(n_balanced)
+        ep_loss, n_batches = 0.0, 0
+
+        for start in range(0, n_balanced, BATCH_SIZE):
+            batch_perm = perm[start:start + BATCH_SIZE]
+            batch_idx = [balanced_indices[p] for p in batch_perm]
+            batch_feats, batch_labels = [], []
+
+            with torch.no_grad():
+                for i in batch_idx:
+                    x_np, ei, ef, lab, _ = ego_cache[i]
+                    # 增强：随机删边 + 特征掩盖（跟对比学习一致）
+                    x = torch.from_numpy(x_np.copy()).to(DEVICE)
+                    mask = torch.rand_like(x) < feat_mask_p
+                    x = x * (~mask).float()
+                    ei_d, ef_d = ei.to(DEVICE), ef.to(DEVICE)
+                    if ei_d.numel() > 0:
+                        keep = torch.rand(ei_d.size(1), device=DEVICE) > drop_edge_p
+                        ei_d = ei_d[:, keep]
+                        ef_d = ef_d[keep] if ef_d.numel() > 0 else ef_d
+                    h = embedder.encoder(x, ei_d, edge_feat=ef_d)
+                    batch_feats.append(h[0])
+                    batch_labels.append(lab)
+
+            if not batch_feats:
+                continue
+            feats = torch.stack(batch_feats)
+            labels = torch.tensor(batch_labels, dtype=torch.long, device=DEVICE)
+
+            output = classifier(feats)
+            loss = criterion(output, labels)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -397,34 +427,26 @@ def train_with_strategy(strategy_name: str, handler, path_map: dict, seed: int =
         if (ep + 1) % 10 == 0 or ep == 0:
             print(f"  [MLP] Epoch {ep+1}/{NUM_EPOCHS} Loss={ep_loss/max(n_batches,1):.4f}")
 
-    print(f"[{strategy_name}] Stage 2 MLP训练耗时: {time.time()-t0:.1f}s")
+    print(f"[{strategy_name}] Stage 2 训练耗时: {time.time()-t0:.1f}s")
 
-    # ---- 4. 评估：ego 级分类 → 快照级判断 ----
+    # ---- 4. ego 级评估（在测试集上） ----
     t0 = time.time()
-    true_labels = np.array([
-        int(any(v["label"] == 1 for v in handler.snapshots[sid].vs))
-        for sid in range(mal_start, mal_end + 1)
-    ], dtype=int)
-
     classifier.eval()
-    pred_labels = []
+    embedder.encoder.eval()
+    test_cache = embedder.test_ego_cache
+
+    all_true, all_pred = [], []
     with torch.no_grad():
-        for sid in range(mal_start, mal_end + 1):
-            snap_ego = ego_embs[sid] if sid < len(ego_embs) else {}
-            if not snap_ego:
-                pred_labels.append(0)
-                continue
+        for x_np, ei, ef, lab, sidx in test_cache:
+            x = torch.from_numpy(x_np).to(DEVICE)
+            h = embedder.encoder(x, ei.to(DEVICE), edge_feat=ef.to(DEVICE))
+            logit = classifier(h[0].unsqueeze(0))
+            all_true.append(lab)
+            all_pred.append(logit.argmax(dim=1).item())
 
-            vecs = torch.tensor(
-                np.array([vec for vec, _ in snap_ego.values()], dtype=np.float32),
-                device=DEVICE,
-            )
-            logits = classifier(vecs)
-            preds = logits.argmax(dim=1)
+    true_labels = np.array(all_true, dtype=int)
+    pred_labels = np.array(all_pred, dtype=int)
 
-            pred_labels.append(1 if (preds == 1).any().item() else 0)
-
-    pred_labels = np.array(pred_labels, dtype=int)
     from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
     acc = accuracy_score(true_labels, pred_labels) * 100
     prec = precision_score(true_labels, pred_labels, zero_division=0) * 100
@@ -437,20 +459,13 @@ def train_with_strategy(strategy_name: str, handler, path_map: dict, seed: int =
 
     metrics = {"strategy": strategy_name, "acc": acc, "prec": prec, "f1": f1, "rec": rec,
                "tp": tp, "fp": fp, "tn": tn, "fn": fn}
-    print(f"\n--- [{strategy_name}] SupCon 线性分类 → 快照级 ---")
+    print(f"\n--- [{strategy_name}] ego 级评估 ---")
     print(f"  Acc:  {acc:.2f}%")
     print(f"  Prec: {prec:.2f}%")
     print(f"  F1:   {f1:.2f}%")
     print(f"  Rec:  {rec:.2f}%")
     print(f"  TP={tp} FP={fp} TN={tn} FN={fn}")
-
-    for i, sid in enumerate(range(mal_start, mal_end + 1)):
-        if true_labels[i] == 1 and pred_labels[i] == 0:
-            n_att = sum(1 for v in range(handler.snapshots[sid].vcount())
-                        if handler.snapshots[sid].vs[v].attributes().get('label', 0) == 1)
-            print(f"  [FN] A[{sid}] {handler.snapshots[sid].vcount()}节点, {n_att}攻击")
-        elif true_labels[i] == 0 and pred_labels[i] == 1:
-            print(f"  [FP] A[{sid}] {handler.snapshots[sid].vcount()}节点")
+    print(f"  总 ego: {len(true_labels)} (良性={int((true_labels==0).sum())}, 攻击={int((true_labels==1).sum())})")
 
     return metrics
 
