@@ -306,7 +306,7 @@ def _train_single_encoder(strategy_name, handler, preset, seed_val):
         _run_mutation_pipeline(embedder, handler, preset)
 
     embedder.train()
-    return embedder.get_snapshot_embeddings()
+    return embedder
 
 
 def train_with_strategy(strategy_name: str, handler, path_map: dict, seed: int = 42) -> dict:
@@ -336,58 +336,121 @@ def train_with_strategy(strategy_name: str, handler, path_map: dict, seed: int =
         snapshot_embeddings = np.mean([e[:min_len] for e in all_embs], axis=0)
         print(f"[{strategy_name}] 集成 {n_ensemble} 个编码器完成")
     else:
-        snapshot_embeddings = _train_single_encoder(strategy_name, handler, preset, seed)
+        embedder = _train_single_encoder(strategy_name, handler, preset, seed)
 
+    snapshot_embeddings = embedder.get_snapshot_embeddings()
     print(f"[{strategy_name}] 编码器训练耗时: {time.time()-t0:.1f}s")
     print(f"[{strategy_name}] 嵌入维度: {snapshot_embeddings.shape}")
 
-    # ---- 3. 分类器训练（有监督：MLP + cross-entropy） ----
+    # ---- 3. Stage 2: 线性分类器（仿照 SupCon main_linear.py） ----
+    # 冻结 encoder，用 ego 嵌入训练 nn.Linear + CrossEntropy
     t0 = time.time()
-    benign_embeddings = snapshot_embeddings[handler.benign_idx_start:handler.benign_idx_end + 1]
-
-    # 恶意区间的嵌入和真实标签（用于有监督训练）
     mal_start = handler.malicious_idx_start
     mal_end = handler.malicious_idx_end
-    mal_snapshots = handler.snapshots[mal_start: mal_end + 1]
-    mal_embeddings = snapshot_embeddings[mal_start: mal_end + 1]
-    mal_labels = np.array([
-        int(any(v["label"] == 1 for v in g.vs))
-        for g in mal_snapshots
+    ego_embs = embedder.ego_embeddings  # Stage 1 已用冻结 encoder 计算好
+
+    # 收集全部 ego 嵌入 + 标签（跟 Stage 1 用同一份数据）
+    all_vecs, all_labels = [], []
+    for i in range(len(ego_embs)):
+        for nid, (vec, lab) in ego_embs[i].items():
+            all_vecs.append(vec)
+            all_labels.append(lab)
+
+    feat_X = torch.tensor(np.array(all_vecs, dtype=np.float32), device=DEVICE)
+    feat_y = torch.tensor(np.array(all_labels, dtype=np.int64), device=DEVICE)
+    n_pos = int((feat_y == 1).sum().item())
+    n_neg = int((feat_y == 0).sum().item())
+    feat_dim = feat_X.shape[1]
+    print(f"[{strategy_name}] Stage 2: {len(feat_y)} ego嵌入 (良性={n_neg}, 攻击={n_pos}), feat_dim={feat_dim}")
+
+    # MLP 分类器（两层）
+    classifier = torch.nn.Sequential(
+        torch.nn.Linear(feat_dim, 128),
+        torch.nn.ReLU(),
+        torch.nn.Dropout(0.1),
+        torch.nn.Linear(128, 2),
+    ).to(DEVICE)
+
+    class_weight = torch.tensor([1.0, n_neg / max(n_pos, 1)], device=DEVICE)
+    criterion = torch.nn.CrossEntropyLoss(weight=class_weight)
+    optimizer = torch.optim.Adam(classifier.parameters(), lr=1e-3, weight_decay=1e-4)
+
+    BATCH_SIZE = 256
+    NUM_EPOCHS = 50
+    n_samples = len(feat_y)
+
+    classifier.train()
+    for ep in range(NUM_EPOCHS):
+        perm = torch.randperm(n_samples, device=DEVICE)
+        ep_loss = 0.0
+        n_batches = 0
+        for start in range(0, n_samples, BATCH_SIZE):
+            idx = perm[start:start + BATCH_SIZE]
+            output = classifier(feat_X[idx])
+            loss = criterion(output, feat_y[idx])
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            ep_loss += loss.item()
+            n_batches += 1
+
+        if (ep + 1) % 10 == 0 or ep == 0:
+            print(f"  [MLP] Epoch {ep+1}/{NUM_EPOCHS} Loss={ep_loss/max(n_batches,1):.4f}")
+
+    print(f"[{strategy_name}] Stage 2 MLP训练耗时: {time.time()-t0:.1f}s")
+
+    # ---- 4. 评估：ego 级分类 → 快照级判断 ----
+    t0 = time.time()
+    true_labels = np.array([
+        int(any(v["label"] == 1 for v in handler.snapshots[sid].vs))
+        for sid in range(mal_start, mal_end + 1)
     ], dtype=int)
 
-    # 划分训练/测试：分层随机采样，确保正负样本在训练和测试集中都有分布
-    from sklearn.model_selection import StratifiedShuffleSplit
-    n_mal = len(mal_labels)
-    n_pos = int(mal_labels.sum())
-    print(f"[{strategy_name}] 恶意范围: {n_mal} 快照, 含攻击={n_pos}")
+    classifier.eval()
+    pred_labels = []
+    with torch.no_grad():
+        for sid in range(mal_start, mal_end + 1):
+            snap_ego = ego_embs[sid] if sid < len(ego_embs) else {}
+            if not snap_ego:
+                pred_labels.append(0)
+                continue
 
-    if n_pos >= 2:
-        # 分层采样：30% 训练，70% 测试
-        sss = StratifiedShuffleSplit(n_splits=1, test_size=0.7, random_state=42)
-        train_idx, test_idx = next(sss.split(mal_embeddings, mal_labels))
-    else:
-        # 正样本太少，退回顺序划分
-        n_train_mal = max(1, int(n_mal * 0.3))
-        train_idx = list(range(n_train_mal))
-        test_idx = list(range(n_train_mal, n_mal))
+            vecs = torch.tensor(
+                np.array([vec for vec, _ in snap_ego.values()], dtype=np.float32),
+                device=DEVICE,
+            )
+            logits = classifier(vecs)
+            preds = logits.argmax(dim=1)
 
-    train_mal_emb = mal_embeddings[train_idx]
-    train_mal_labels = mal_labels[train_idx]
-    test_mal_emb = mal_embeddings[test_idx]
-    test_mal_labels = mal_labels[test_idx]
-    print(f"[{strategy_name}] 训练集: {len(train_idx)} (攻击={int(train_mal_labels.sum())}), "
-          f"测试集: {len(test_idx)} (攻击={int(test_mal_labels.sum())})")
+            pred_labels.append(1 if (preds == 1).any().item() else 0)
 
-    classify = get_classfy(CLASSIFY_NAME, gid=tag)
-    classify.train(benign_embeddings, train_mal_emb, train_mal_labels)
-    print(f"[{strategy_name}] 分类器训练耗时: {time.time()-t0:.1f}s")
+    pred_labels = np.array(pred_labels, dtype=int)
+    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+    acc = accuracy_score(true_labels, pred_labels) * 100
+    prec = precision_score(true_labels, pred_labels, zero_division=0) * 100
+    rec = recall_score(true_labels, pred_labels, zero_division=0) * 100
+    f1 = f1_score(true_labels, pred_labels, zero_division=0) * 100
+    tp = int(np.sum((true_labels == 1) & (pred_labels == 1)))
+    fp = int(np.sum((true_labels == 0) & (pred_labels == 1)))
+    tn = int(np.sum((true_labels == 0) & (pred_labels == 0)))
+    fn = int(np.sum((true_labels == 1) & (pred_labels == 0)))
 
-    # ---- 4. 评估 ----
-    t0 = time.time()
-    metrics = evaluate_strategy(
-        strategy_name, classify, test_mal_emb, test_mal_labels
-    )
-    print(f"[{strategy_name}] 评估耗时: {time.time()-t0:.1f}s")
+    metrics = {"strategy": strategy_name, "acc": acc, "prec": prec, "f1": f1, "rec": rec,
+               "tp": tp, "fp": fp, "tn": tn, "fn": fn}
+    print(f"\n--- [{strategy_name}] SupCon 线性分类 → 快照级 ---")
+    print(f"  Acc:  {acc:.2f}%")
+    print(f"  Prec: {prec:.2f}%")
+    print(f"  F1:   {f1:.2f}%")
+    print(f"  Rec:  {rec:.2f}%")
+    print(f"  TP={tp} FP={fp} TN={tn} FN={fn}")
+
+    for i, sid in enumerate(range(mal_start, mal_end + 1)):
+        if true_labels[i] == 1 and pred_labels[i] == 0:
+            n_att = sum(1 for v in range(handler.snapshots[sid].vcount())
+                        if handler.snapshots[sid].vs[v].attributes().get('label', 0) == 1)
+            print(f"  [FN] A[{sid}] {handler.snapshots[sid].vcount()}节点, {n_att}攻击")
+        elif true_labels[i] == 0 and pred_labels[i] == 1:
+            print(f"  [FP] A[{sid}] {handler.snapshots[sid].vcount()}节点")
 
     return metrics
 

@@ -438,9 +438,85 @@ class GCCEmbedderDev(GraphEmbedderBase):
             print(f"[GCC-Dev] Epoch {epoch + 1}/{self.num_epochs} DONE | AvgLoss={avg:.6f}")
 
         self.save_malicious_snapshot_stats()
-        # 训练结束后生成节点嵌入：遵循全局开关 self.use_temporal
-        self.generate_node_embeddings(use_temporal=self.use_temporal)
+        # 训练结束后生成节点嵌入（两种方式）
+        self.generate_node_embeddings(use_temporal=self.use_temporal)  # full-graph（兼容旧接口）
+        self._generate_ego_embeddings()  # ego 子图级（跟对比学习一致）
         self.save_model()
+
+    def _generate_ego_embeddings(self):
+        """用冻结编码器生成 ego 子图嵌入。
+        良性快照采样，攻击节点全部保留。
+        结果存入 self.ego_embeddings = [{node_name: (embedding, label)}, ...]
+        """
+        import random as _rng
+        self.encoder.eval()
+        self.ego_embeddings = []
+        print("[GCC-Dev] 生成 ego 子图嵌入...")
+        t0 = __import__('time').time()
+
+        MAX_PER_SNAPSHOT = 50  # 每个快照最多采样节点数（攻击节点不受限）
+        total_nodes = 0
+
+        with torch.no_grad():
+            for sidx, g in enumerate(self.snapshots):
+                snap_embs = {}
+                if g is None or g.vcount() == 0:
+                    self.ego_embeddings.append(snap_embs)
+                    continue
+
+                self._preheat_snapshot_properties(g)
+
+                # 确定要编码的节点：全部攻击节点 + 采样良性节点
+                attack_nodes = [v for v in range(g.vcount()) if g.vs[v].attributes().get('label', 0) == 1]
+                benign_nodes = [v for v in range(g.vcount()) if g.vs[v].attributes().get('label', 0) == 0]
+
+                if len(benign_nodes) > MAX_PER_SNAPSHOT:
+                    sampled_benign = _rng.sample(benign_nodes, MAX_PER_SNAPSHOT)
+                else:
+                    sampled_benign = benign_nodes
+
+                nodes_to_encode = attack_nodes + sampled_benign
+
+                for v in nodes_to_encode:
+                    sub = self._ego_subgraph(g, v, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                    if sub.vcount() == 0:
+                        continue
+                    x = torch.from_numpy(self._build_node_features(sub)).to(self.device)
+                    ei, ef = self._igraph_edges_to_edge_index(sub)
+                    h = self.encoder(x, ei, edge_feat=ef)
+                    nid = g.vs[v]['name']
+                    lab = int(g.vs[v].attributes().get('label', 0))
+                    snap_embs[nid] = (h[0].detach().cpu().numpy(), lab)
+
+                self.ego_embeddings.append(snap_embs)
+                total_nodes += len(snap_embs)
+
+        # 变异图的攻击 ego 子图也加入（跟对比学习一致）
+        mutation_map = getattr(self, 'mutation_map', None)
+        n_mut_attack = 0
+        if mutation_map:
+            mut_snap_embs = {}
+            for b_idx, g_mut in mutation_map.items():
+                if g_mut is None or g_mut.vcount() == 0:
+                    continue
+                self._preheat_snapshot_properties(g_mut)
+                for v in range(g_mut.vcount()):
+                    if g_mut.vs[v].attributes().get('label', 0) == 1:
+                        sub = self._ego_subgraph(g_mut, v, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                        if sub.vcount() == 0:
+                            continue
+                        x = torch.from_numpy(self._build_node_features(sub)).to(self.device)
+                        ei, ef = self._igraph_edges_to_edge_index(sub)
+                        h = self.encoder(x, ei, edge_feat=ef)
+                        nid = f"mut_{b_idx}_{v}"
+                        mut_snap_embs[nid] = (h[0].detach().cpu().numpy(), 1)
+                        n_mut_attack += 1
+            # 存到一个特殊索引
+            self.ego_embeddings.append(mut_snap_embs)
+
+        print(f"[GCC-Dev] ego 嵌入生成完成: {len(self.ego_embeddings)} 快照, "
+              f"{total_nodes} 原始节点 + {n_mut_attack} 变异攻击节点, "
+              f"耗时 {__import__('time').time()-t0:.1f}s")
 
     def _train_small_snapshots_packed(self, snapshot_batch: list) -> float:
         """多个小快照打包成一个 batch 训练，减少 per-snapshot 开销。
