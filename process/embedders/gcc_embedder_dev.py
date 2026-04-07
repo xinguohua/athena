@@ -194,7 +194,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
             temperature: float = 0.07,
             # 子图采样
             r_hop: int = 4,
-            ego_max_nodes: int = 64,
+            ego_max_nodes: int = 32,
             # 增强
             drop_edge_p: float = 0.2,
             feat_mask_p: float = 0.2,
@@ -462,23 +462,22 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 -1,
             ))
 
-        # 变异图的攻击 ego 也加入训练集
+        # 变异 ego 也加入训练集（ego 级变异：每个 g_mut 已经是 ego 大小）
         mutation_map = getattr(self, 'mutation_map', None)
         n_mut = 0
         if mutation_map:
-            for b_idx, g_mut in mutation_map.items():
-                if g_mut is None or g_mut.vcount() == 0:
-                    continue
-                self._preheat_snapshot_properties(g_mut)
-                for v in range(g_mut.vcount()):
-                    if g_mut.vs[v].attributes().get('label', 0) == 1:
-                        sub = self._ego_subgraph(g_mut, v, r=self.r_hop, max_nodes=self.ego_max_nodes)
-                        if sub.vcount() == 0:
-                            continue
-                        x_np = self._build_node_features(sub)
-                        ei, ef = self._igraph_edges_to_edge_index(sub)
-                        self.train_ego_cache.append((x_np, ei.cpu(), ef.cpu(), 1, -1))
-                        n_mut += 1
+            for b_idx, ego_list in mutation_map.items():
+                if not isinstance(ego_list, list):
+                    ego_list = [ego_list]  # 兼容旧格式
+                for g_mut in ego_list:
+                    if g_mut is None or g_mut.vcount() == 0:
+                        continue
+                    self._preheat_snapshot_properties(g_mut)
+                    # ego 级变异：整个 g_mut 就是变异后的 ego，直接编码
+                    x_np = self._build_node_features(g_mut)
+                    ei, ef = self._igraph_edges_to_edge_index(g_mut)
+                    self.train_ego_cache.append((x_np, ei.cpu(), ef.cpu(), 1, -1))
+                    n_mut += 1
 
         train_benign = sum(1 for _, _, _, lab, _ in self.train_ego_cache if lab == 0)
         train_attack = sum(1 for _, _, _, lab, _ in self.train_ego_cache if lab == 1)
@@ -511,17 +510,25 @@ class GCCEmbedderDev(GraphEmbedderBase):
             if len(benign_nodes) > SAMPLE_PER_SNAPSHOT:
                 benign_nodes = _rng.sample(benign_nodes, SAMPLE_PER_SNAPSHOT)
 
+            from process.mutation.semantic import _get_properties
             for v in attack_nodes + benign_nodes:
                 sub = self._ego_subgraph(g, v, r=self.r_hop, max_nodes=self.ego_max_nodes)
                 if sub.vcount() == 0:
                     continue
                 x_np = self._build_node_features(sub)
                 ei, ef = self._igraph_edges_to_edge_index(sub)
-                lab = int(g.vs[v].attributes().get('label', 0))
-                self.test_ego_cache.append((x_np, ei.cpu(), ef.cpu(), lab, sidx))
+                # ego 级标注：子图内含 label=1 节点 → 整个 ego 标为攻击
+                ego_lab = 0
+                for vi in range(sub.vcount()):
+                    if sub.vs[vi].attributes().get('label', 0) == 1:
+                        ego_lab = 1
+                        break
+                vtype = str(g.vs[v].attributes().get('type', ''))
+                prop = _get_properties(g, v)
+                self.test_ego_cache.append((x_np, ei.cpu(), ef.cpu(), ego_lab, sidx, vtype, prop, v))
 
-        test_benign = sum(1 for _, _, _, lab, _ in self.test_ego_cache if lab == 0)
-        test_attack = sum(1 for _, _, _, lab, _ in self.test_ego_cache if lab == 1)
+        test_benign = sum(1 for e in self.test_ego_cache if e[3] == 0)
+        test_attack = sum(1 for e in self.test_ego_cache if e[3] == 1)
         print(f"[GCC-Dev] 测试集: {len(self.test_ego_cache)} ego "
               f"(良性={test_benign}, 攻击={test_attack}), "
               f"耗时 {__import__('time').time()-t0:.1f}s")
@@ -582,22 +589,32 @@ class GCCEmbedderDev(GraphEmbedderBase):
         has_ego = bool(self.use_malicious_snapshots and hasattr(self, '_mal_ego_pool') and len(
             self._mal_ego_pool) > 0)
         if has_ego:
-            Z_attack = self._build_neg_augmented(Bc, device, mode='standard')
+            if getattr(self, 'mimicry_mode', False):
+                Z_attack = self._build_neg_augmented(
+                    Bc, device, [x for x in all_x], [e for e in all_e], all_node_counts, mode='mimicry')
+            else:
+                Z_attack = self._build_neg_augmented(Bc, device, mode='standard')
             if Z_attack is not None:
                 Z_neg_parts.append(Z_attack)
 
-        # 打包的小快照：收集所有专属变异图的 ego 子图
+        # 打包的小快照：收集专属变异 ego（每快照最多采样 K 个，避免负样本编码过慢）
+        MAX_MUT_PER_SNAPSHOT = 5
         mutation_map = getattr(self, 'mutation_map', None)
         if mutation_map:
             for sidx, _ in snapshot_batch:
                 if sidx in mutation_map:
-                    g_neg = mutation_map[sidx]
-                    try:
-                        Z_mut = self._encode_ego_subgraphs_from_graph(g_neg, device)
-                        if Z_mut is not None and Z_mut.size(0) > 0:
-                            Z_neg_parts.append(Z_mut)
-                    except Exception:
-                        pass
+                    ego_list = mutation_map[sidx]
+                    if not isinstance(ego_list, list):
+                        ego_list = [ego_list]
+                    if len(ego_list) > MAX_MUT_PER_SNAPSHOT:
+                        ego_list = random.sample(ego_list, MAX_MUT_PER_SNAPSHOT)
+                    for g_ego in ego_list:
+                        try:
+                            Z_mut = self._encode_single_ego_graph(g_ego, device)
+                            if Z_mut is not None:
+                                Z_neg_parts.append(Z_mut)
+                        except Exception:
+                            pass
 
         Z_neg = torch.cat(Z_neg_parts, dim=0) if Z_neg_parts else None
 
@@ -649,6 +666,22 @@ class GCCEmbedderDev(GraphEmbedderBase):
 
         Z = torch.cat(ego_embeddings, dim=0)  # [N_attack, hidden]
         return F.normalize(self.proj_head(Z), dim=-1)  # [N_attack, D]
+
+    def _encode_single_ego_graph(self, g_ego, device) -> Optional[torch.Tensor]:
+        """编码单个 ego 级变异图为 [1, D] 嵌入。
+
+        g_ego 已经是 ego 大小（~32节点），直接编码，不再做 r-hop 展开。
+        """
+        if g_ego is None or g_ego.vcount() == 0:
+            return None
+        self._preheat_snapshot_properties(g_ego)
+        x_np = self._build_node_features(g_ego)
+        x_t = torch.from_numpy(x_np).to(device)
+        e_t, ef_t = self._igraph_edges_to_edge_index(g_ego)
+        Z_layers = self.encoder(x_t, e_t.to(device), edge_feat=ef_t.to(device), return_all=True)
+        H = Z_layers[-1]
+        graph_emb = H.mean(dim=0, keepdim=True)  # [1, hidden]
+        return F.normalize(self.proj_head(graph_emb), dim=-1)  # [1, D]
 
     def _train_one_snapshot(self, g, sidx: Optional[int] = None) -> float:
         """单个 snapshot 训练（优化 + 稳定版 NT-Xent）"""
@@ -757,16 +790,22 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 if Z_attack is not None:
                     Z_neg_parts.append(Z_attack)
 
-            # (2) 专属变异图：提取 label=1 节点的 ego 子图（粒度跟攻击池一致）
+            # (2) 专属变异 ego（每快照最多采样 K 个）
+            MAX_MUT_PER_SNAPSHOT = 5
             mutation_map = getattr(self, 'mutation_map', None)
             if mutation_map and sidx is not None and sidx in mutation_map:
-                g_neg = mutation_map[sidx]
-                try:
-                    Z_mut = self._encode_ego_subgraphs_from_graph(g_neg, device)
-                    if Z_mut is not None and Z_mut.size(0) > 0:
-                        Z_neg_parts.append(Z_mut)
-                except Exception:
-                    pass
+                ego_list = mutation_map[sidx]
+                if not isinstance(ego_list, list):
+                    ego_list = [ego_list]
+                if len(ego_list) > MAX_MUT_PER_SNAPSHOT:
+                    ego_list = random.sample(ego_list, MAX_MUT_PER_SNAPSHOT)
+                for g_ego in ego_list:
+                    try:
+                        Z_mut = self._encode_single_ego_graph(g_ego, device)
+                        if Z_mut is not None:
+                            Z_neg_parts.append(Z_mut)
+                    except Exception:
+                        pass
 
             Z_neg = torch.cat(Z_neg_parts, dim=0) if Z_neg_parts else None
 
@@ -1121,32 +1160,67 @@ class GCCEmbedderDev(GraphEmbedderBase):
         X_neg_raw = torch.cat(neg_x_list, dim=0)
 
         # ---- 根据策略增强负样本 ----
+        aug_ef_parts = None  # 增强后的 edge_feat 列表
         if mode == 'mimicry' and benign_x_list is not None and len(benign_x_list) > 0:
             # Mimicry [32]：向攻击节点连接良性边，模糊恶意信号
-            # 将良性 ego 的边注入到恶意 ego 中，使攻击图的连接模式更像良性
             X_neg_aug = X_neg_raw
             aug_e_cols = []
-            total_neg_nodes = X_neg_raw.size(0)
+            aug_ef_parts = []
             benign_all_x = torch.cat(benign_x_list, dim=0)
             n_benign_nodes = benign_all_x.size(0)
 
-            for ei, off, nc in zip(neg_e_list, offsets_neg, neg_node_counts):
+            for ei, efi, off, nc in zip(neg_e_list, neg_ef_list, offsets_neg, neg_node_counts):
                 aug_e_cols.append(ei + off)
+                aug_ef_parts.append(efi)
                 if nc > 0 and n_benign_nodes > 0:
-                    # 为每个恶意子图添加若干条良性边（连接恶意节点到其他恶意节点，用良性边模式）
-                    n_inject = max(1, nc // 3)  # 注入约 1/3 节点数的边
+                    n_inject = max(1, nc // 3)
                     src = torch.randint(off, off + nc, (n_inject,), device=device)
                     dst = torch.randint(off, off + nc, (n_inject,), device=device)
                     injected = torch.stack([src, dst], dim=0)
                     aug_e_cols.append(injected)
+                    # 注入边的 edge_feat 设为 0（进程类型）
+                    aug_ef_parts.append(torch.zeros(n_inject, dtype=efi.dtype, device=device))
 
             E_neg = torch.cat(aug_e_cols, dim=1)
         else:
-            E_neg_cols = [ei + off for ei, off in zip(neg_e_list, offsets_neg)]
-            E_neg = torch.cat(E_neg_cols, dim=1)
-            X_neg_aug = X_neg_raw
+            # standard 模式：对每个子图单独增强，再拼接
+            # no_aug: drop_edge_p=0, feat_mask_p=0 → 不增强
+            # graphcl: 均匀随机删边+掩盖
+            # gca: 度感知删边+掩盖
+            aug_e_cols = []
+            aug_ef_parts = []
+            aug_x_parts = []
+            for xi, ei, efi, off in zip(neg_x_list, neg_e_list, neg_ef_list, offsets_neg):
+                # 边增强（局部索引）+ 同步过滤 edge_feat
+                if self.drop_edge_p > 0 and ei.numel() > 0:
+                    n_orig = ei.size(1)
+                    if self.use_degree_coop_augment:
+                        ei_aug = self._augment_edges_degree_aware(ei, self.drop_edge_p)
+                    else:
+                        ei_aug = self._augment_edges(ei, self.drop_edge_p)
+                    # edge_feat 与删边后的边数对齐
+                    if efi.numel() > 0 and ei_aug.size(1) < n_orig:
+                        efi_aug = efi[:ei_aug.size(1)]
+                    else:
+                        efi_aug = efi
+                else:
+                    ei_aug = ei
+                    efi_aug = efi
+                aug_e_cols.append(ei_aug + off)
+                aug_ef_parts.append(efi_aug)
+                # 特征增强（每个子图单独做，避免 shape 不匹配）
+                if self.feat_mask_p > 0 and xi.numel() > 0:
+                    if self.use_degree_coop_augment:
+                        xi_aug = self._augment_features_degree_aware(xi, self.feat_mask_p, ei_aug)
+                    else:
+                        xi_aug = self._augment_features(xi, self.feat_mask_p)
+                else:
+                    xi_aug = xi
+                aug_x_parts.append(xi_aug)
+            E_neg = torch.cat(aug_e_cols, dim=1)
+            X_neg_aug = torch.cat(aug_x_parts, dim=0)
 
-        EF_neg = torch.cat(neg_ef_list, dim=0) if neg_ef_list else None
+        EF_neg = torch.cat(aug_ef_parts, dim=0) if aug_ef_parts else None
 
         # 编码
         Z_layers = self.encoder(X_neg_aug, E_neg, edge_feat=EF_neg, return_all=True)
@@ -2028,15 +2102,19 @@ class GCCEmbedderDev(GraphEmbedderBase):
         return valid
 
     def _ego_subgraph(self, g, center: int, r: int, max_nodes: int):
-        try:
-            nodes = set(g.neighborhood(vertices=center, order=r))
-        except Exception:
-            nodes = {center}
-        if len(nodes) > max_nodes:
-            # 保留中心 + 采样其他
-            nodes = {center} | set(random.sample(list(nodes - {center}), k=max_nodes - 1))
-        nodes_sorted = sorted(nodes)
-        return g.subgraph(nodes_sorted)
+        """BFS 顺序提取 ego 子图，保持连通性。"""
+        from collections import deque
+        visited = [center]
+        visited_set = {center}
+        queue = deque([center])
+        while queue and len(visited) < max_nodes:
+            v = queue.popleft()
+            for nb in g.neighbors(v, mode="all"):
+                if nb not in visited_set and len(visited) < max_nodes:
+                    visited.append(nb)
+                    visited_set.add(nb)
+                    queue.append(nb)
+        return g.subgraph(sorted(visited))
 
     # ---------- Word2Vec 支持 ----------
     def _tokenize_properties(self, text: str) -> List[str]:
@@ -2201,6 +2279,70 @@ class GCCEmbedderDev(GraphEmbedderBase):
             src.append(v); dst.append(u); cats.append(cat)
         return (torch.tensor([src, dst], dtype=torch.long, device=self.device),
                 torch.tensor(cats, dtype=torch.long, device=self.device))
+
+    def augment_ego(self, x: torch.Tensor, edge_index: torch.Tensor,
+                    edge_feat: torch.Tensor = None,
+                    drop_edge_p: float = None, feat_mask_p: float = None):
+        """统一的 ego 子图增强函数，供 Stage 1 / Stage 2 共用。
+
+        Args:
+            x: 节点特征 [N, D]
+            edge_index: 边索引 [2, E]
+            edge_feat: 边类别 [E] (可选)
+            drop_edge_p: 删边概率，None 时使用 self.drop_edge_p
+            feat_mask_p: 特征掩盖概率，None 时使用 self.feat_mask_p
+
+        Returns:
+            (x_aug, edge_index_aug, edge_feat_aug)
+        """
+        dp = drop_edge_p if drop_edge_p is not None else self.drop_edge_p
+        fp = feat_mask_p if feat_mask_p is not None else self.feat_mask_p
+
+        # --- 删边（带 keep mask，同步过滤 edge_feat）---
+        ei_aug = edge_index
+        ef_aug = edge_feat
+        if edge_index.numel() > 0 and dp > 0:
+            E = edge_index.size(1)
+            if self.use_degree_coop_augment:
+                src, dst = edge_index[0], edge_index[1]
+                num_nodes = int(torch.max(torch.stack([src, dst])).item() + 1)
+                deg = torch.zeros(num_nodes, dtype=torch.float32, device=x.device)
+                deg.index_add_(0, src, torch.ones_like(src, dtype=torch.float32))
+                deg.index_add_(0, dst, torch.ones_like(dst, dtype=torch.float32))
+                dmin, dmax = deg.min(), deg.max()
+                deg_norm = (deg - dmin) / (dmax - dmin + 1e-12) if (dmax - dmin) > 1e-12 else torch.zeros_like(deg)
+                s_e = 0.5 * (deg_norm[src] + deg_norm[dst])
+                p_e = torch.clamp(dp * s_e, 0.0, 1.0)
+                keep = torch.rand_like(p_e) > p_e
+            else:
+                keep = torch.rand(E, device=edge_index.device) > dp
+            if keep.sum() < 1:
+                keep[random.randrange(0, E)] = True
+            ei_aug = edge_index[:, keep]
+            if edge_feat is not None and edge_feat.numel() > 0:
+                ef_aug = edge_feat[keep]
+
+        # --- 特征掩盖 ---
+        x_aug = x
+        if x.numel() > 0 and fp > 0:
+            if self.use_degree_coop_augment and ei_aug.numel() > 0:
+                N = x.size(0)
+                src_a, dst_a = ei_aug[0], ei_aug[1]
+                nn = max(N, int(torch.max(torch.stack([src_a, dst_a])).item() + 1)) if src_a.numel() > 0 else N
+                deg = torch.zeros(nn, dtype=torch.float32, device=x.device)
+                deg.index_add_(0, src_a, torch.ones_like(src_a, dtype=torch.float32))
+                deg.index_add_(0, dst_a, torch.ones_like(dst_a, dtype=torch.float32))
+                deg = deg[:N]
+                dmin, dmax = deg.min(), deg.max()
+                deg_norm = (deg - dmin) / (dmax - dmin + 1e-12) if (dmax - dmin) > 1e-12 else torch.zeros_like(deg)
+                p_node = torch.clamp(fp * (1.0 - deg_norm), 0.0, 1.0)
+                mask = (torch.rand_like(x) < p_node.view(-1, 1)).float()
+                x_aug = x * (1.0 - mask)
+            else:
+                mask = (torch.rand_like(x) < fp).float()
+                x_aug = x * (1.0 - mask)
+
+        return x_aug, ei_aug, ef_aug
 
     def _augment_edges(self, edge_index: torch.Tensor, drop_p: float) -> torch.Tensor:
         """原始（均匀随机）删边增强：保持不变"""

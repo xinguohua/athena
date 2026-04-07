@@ -1,0 +1,12 @@
+{
+  "calls": 377,
+  "n_snapshots": 118,
+  "total_tokens": 452645,
+  "tokens_per_snapshot": 3836,
+  "total_latency_s": 1046.7,
+  "latency_per_snapshot": 8.87,
+  "model": "gpt-4o",
+  "provider": "chatanywhere",
+  "prompt_tokens": 390990,
+  "completion_tokens": 61655
+}

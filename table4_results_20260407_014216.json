@@ -1,0 +1,22 @@
+[
+  {
+    "strategy": "llm_deepseek_v3",
+    "ego_acc": 94.46376036373361,
+    "ego_prec": 58.92857142857143,
+    "ego_f1": 74.15730337078652,
+    "ego_rec": 100.0,
+    "ego_tp": 297,
+    "ego_fp": 207,
+    "ego_tn": 3235,
+    "ego_fn": 0,
+    "snap_acc": 83.75,
+    "snap_prec": 62.857142857142854,
+    "snap_f1": 77.19298245614036,
+    "snap_rec": 100.0,
+    "snap_tp": 22,
+    "snap_fp": 13,
+    "snap_tn": 45,
+    "snap_fn": 0,
+    "dataset": "theia/theia311"
+  }
+]

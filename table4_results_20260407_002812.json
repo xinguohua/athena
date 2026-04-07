@@ -1,0 +1,22 @@
+[
+  {
+    "strategy": "mimicry",
+    "ego_acc": 90.39850227333511,
+    "ego_prec": 45.67901234567901,
+    "ego_f1": 62.25026288117771,
+    "ego_rec": 97.6897689768977,
+    "ego_tp": 296,
+    "ego_fp": 352,
+    "ego_tn": 3084,
+    "ego_fn": 7,
+    "snap_acc": 85.0,
+    "snap_prec": 65.625,
+    "snap_f1": 77.77777777777777,
+    "snap_rec": 95.45454545454545,
+    "snap_tp": 21,
+    "snap_fp": 11,
+    "snap_tn": 47,
+    "snap_fn": 1,
+    "dataset": "theia/theia311"
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "strategy": "llm_guided",
+    "ego_acc": 96.84407595613801,
+    "ego_prec": 71.21951219512195,
+    "ego_f1": 83.1908831908832,
+    "ego_rec": 100.0,
+    "ego_tp": 292,
+    "ego_fp": 118,
+    "ego_tn": 3329,
+    "ego_fn": 0,
+    "snap_acc": 86.25,
+    "snap_prec": 66.66666666666667,
+    "snap_f1": 80.0,
+    "snap_rec": 100.0,
+    "snap_tp": 22,
+    "snap_fp": 11,
+    "snap_tn": 47,
+    "snap_fn": 0,
+    "dataset": "theia/theia311"
+  }
+]

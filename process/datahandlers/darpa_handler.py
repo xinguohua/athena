@@ -196,7 +196,6 @@ class DARPAHandler(BaseProcessor):
                     print(f"警告：创建快照时出错: {e}")
 
         elif mode == "time":
-            # window = pd.Timedelta(seconds=60)
             window = pd.Timedelta(minutes=1)
             df["timestamp_dt"] = pd.to_numeric(df["timestamp"], errors="coerce")  # 转为数值
             df["timestamp_dt"] = df["timestamp_dt"] // 1000  # 可能是微秒，转换为毫秒
@@ -204,10 +203,10 @@ class DARPAHandler(BaseProcessor):
             t_min, t_max = df["timestamp_dt"].min(), df["timestamp_dt"].max()
             if pd.isna(t_min) or pd.isna(t_max):
                 return []  # 没有有效时间戳，直接返回空
-            bins = pd.date_range(start=t_min, end=t_max + window, freq=window)
-            for i in range(len(bins) - 1):
-                part = df[(df["timestamp_dt"] >= bins[i]) & (df["timestamp_dt"] < bins[i + 1])]
-
+            # 用 groupby 代替逐窗口筛选，避免遍历大量空窗口
+            df["_time_bin"] = df["timestamp_dt"].dt.floor("1min")
+            grouped = df.groupby("_time_bin", sort=True)
+            for bin_ts, part in grouped:
                 if part.empty:
                     continue
 
@@ -216,50 +215,86 @@ class DARPAHandler(BaseProcessor):
                 if G.vcount() == 0 or G.ecount() == 0:
                     continue
 
-                self._process_subgraph(G, is_malicious, i)
+                self._process_subgraph(G, is_malicious, bin_ts)
 
                 snapshots.append(G)
+            # 清理临时列
+            df.drop(columns=["_time_bin"], inplace=True, errors="ignore")
 
         return snapshots
 
     def _build_graph_from_df(self, df):
         """给定 DataFrame 构建 igraph.Graph，返回 (features, edges, node_ids, relations, G)"""
         all_labels = set(self.all_labels)
-        nodes_props, nodes_type, edges_map, node_frequency,node_last_ts =  {}, {}, {}, {},{}
+        nodes_props, nodes_type, edges_map, node_frequency, node_last_ts = {}, {}, {}, {}, {}
 
-        for r in df.itertuples(index=False):
-            action = getattr(r, "action")
-            actor_id = getattr(r, "actorID")
-            object_id = getattr(r, "objectID")
-            raw_ts = getattr(r, "timestamp")
+        # 预取属性字典的局部引用，减少 self 查找开销
+        _netobj2pro = self.all_netobj2pro
+        _subject2pro = self.all_subject2pro
+        _file2pro = self.all_file2pro
+
+        # 提取列为 numpy array，避免 itertuples 的 namedtuple 创建开销
+        actors = df["actorID"].values
+        objects = df["objectID"].values
+        actions = df["action"].values
+        timestamps = df["timestamp"].values
+        actor_types = df["actor_type"].values
+        obj_types = df["object"].values
+        # exec/path 可能不存在（来自不同阶段的 df）
+        execs = df["exec"].values if "exec" in df.columns else [""]*len(df)
+        paths = df["path"].values if "path" in df.columns else [""]*len(df)
+
+        for i in range(len(actors)):
+            action = actions[i]
+            actor_id = actors[i]
+            object_id = objects[i]
+            raw_ts = timestamps[i]
             timestamp = float(raw_ts) if raw_ts is not None else 0.0
 
             # 频率统计
             node_frequency[actor_id] = node_frequency.get(actor_id, 0) + 1
             node_frequency[object_id] = node_frequency.get(object_id, 0) + 1
 
-            # === 更新时间戳 ===
-            node_last_ts[actor_id] = max(timestamp, node_last_ts.get(actor_id, 0))
-            node_last_ts[object_id] = max(timestamp, node_last_ts.get(object_id, 0))
+            # 更新时间戳
+            prev_a = node_last_ts.get(actor_id, 0)
+            if timestamp > prev_a:
+                node_last_ts[actor_id] = timestamp
+            prev_o = node_last_ts.get(object_id, 0)
+            if timestamp > prev_o:
+                node_last_ts[object_id] = timestamp
 
-            # actor 节点
-            props_actor = extract_properties(actor_id, r, action,
-                                             self.all_netobj2pro, self.all_subject2pro, self.all_file2pro)
-            add_node_properties(nodes_props, actor_id, props_actor)
+            # actor 节点属性
+            props_actor = _netobj2pro.get(actor_id) or _file2pro.get(actor_id) or _subject2pro.get(actor_id)
+            if props_actor is None:
+                exec_cmd = execs[i] if execs[i] else ""
+                path_val = paths[i] if paths[i] else ""
+                props_actor = f"{exec_cmd} {action} {path_val}".strip() if path_val else f"{exec_cmd} {action}"
+            if actor_id not in nodes_props:
+                nodes_props[actor_id] = set()
+            nodes_props[actor_id].add(props_actor)
             if actor_id not in nodes_type:
-                nodes_type[actor_id] = getattr(r, "actor_type")
+                nodes_type[actor_id] = actor_types[i]
 
-            # object 节点
-            props_obj = extract_properties(object_id, r, action,
-                                           self.all_netobj2pro, self.all_subject2pro, self.all_file2pro)
-            add_node_properties(nodes_props, object_id, props_obj)
+            # object 节点属性
+            props_obj = _netobj2pro.get(object_id) or _file2pro.get(object_id) or _subject2pro.get(object_id)
+            if props_obj is None:
+                exec_cmd = execs[i] if execs[i] else ""
+                path_val = paths[i] if paths[i] else ""
+                props_obj = f"{exec_cmd} {action} {path_val}".strip() if path_val else f"{exec_cmd} {action}"
+            if object_id not in nodes_props:
+                nodes_props[object_id] = set()
+            nodes_props[object_id].add(props_obj)
             if object_id not in nodes_type:
-                nodes_type[object_id] = getattr(r, "object")
+                nodes_type[object_id] = obj_types[i]
 
-            # === 累加动作和时间 ===
-            edges_map.setdefault((actor_id, object_id), {"actions": set(), "timestamp": []})
-            edges_map[(actor_id, object_id)]["actions"].add(action)
-            edges_map[(actor_id, object_id)]["timestamp"].append(timestamp)
+            # 累加动作和时间
+            key = (actor_id, object_id)
+            entry = edges_map.get(key)
+            if entry is None:
+                edges_map[key] = {"actions": {action}, "timestamp": [timestamp]}
+            else:
+                entry["actions"].add(action)
+                entry["timestamp"].append(timestamp)
 
         # === 创建图节点 ===
         node_ids = list(nodes_props.keys())
@@ -380,6 +415,11 @@ def collect_nodes_from_log(paths):
 
 
 def collect_edges_from_log(d, paths, benigin, max_lines= 600000):
+    # 先用 set 索引 d 中的 (actorID, objectID, action, timestamp) 四元组，
+    # 然后只收集匹配的事件，避免构造巨大 DataFrame 再 merge
+    d = d.astype(str)
+    d_keys = set(zip(d["actorID"], d["objectID"], d["action"], d["timestamp"]))
+
     info = []
     for p in paths:
         with open(p, "rb") as f:
@@ -401,26 +441,33 @@ def collect_edges_from_log(d, paths, benigin, max_lines= 600000):
                 action = ev.get("type", "")
                 actor = (ev.get("subject") or {}).get("com.bbn.tc.schema.avro.cdm18.UUID", "")
                 obj = (ev.get("predicateObject") or {}).get("com.bbn.tc.schema.avro.cdm18.UUID", "")
-                timestamp = ev.get("timestampNanos", "")
+                timestamp = str(ev.get("timestampNanos", ""))
                 cmd = ((ev.get("properties") or {}).get("map") or {}).get("cmdLine", "")
                 path = (ev.get("predicateObjectPath") or {}).get("string", "")
                 path2 = (ev.get("predicateObject2Path") or {}).get("string", "")
 
                 obj2 = (ev.get("predicateObject2") or {}).get("com.bbn.tc.schema.avro.cdm18.UUID")
-                if obj2:
+                if obj2 and (actor, obj2, action, timestamp) in d_keys:
                     info.append({
                         "actorID": actor, "objectID": obj2, "action": action,
                         "timestamp": timestamp, "exec": cmd, "path": path2
                     })
 
-                info.append({
-                    "actorID": actor, "objectID": obj, "action": action,
-                    "timestamp": timestamp, "exec": cmd, "path": path
-                })
+                if (actor, obj, action, timestamp) in d_keys:
+                    info.append({
+                        "actorID": actor, "objectID": obj, "action": action,
+                        "timestamp": timestamp, "exec": cmd, "path": path
+                    })
+
+    if not info:
+        # 无匹配事件，返回带额外列的空 DataFrame
+        result = d.copy()
+        for col in ["exec", "path"]:
+            if col not in result.columns:
+                result[col] = ""
+        return result.iloc[:0]
 
     rdf = pd.DataFrame.from_records(info).astype(str)
-    d = d.astype(str)
-
     return d.merge(rdf, how="inner",
                    on=["actorID", "objectID", "action", "timestamp"]) \
         .drop_duplicates()

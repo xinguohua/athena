@@ -1,0 +1,22 @@
+[
+  {
+    "strategy": "graphcl",
+    "ego_acc": 99.33137202460551,
+    "ego_prec": 94.66666666666667,
+    "ego_f1": 95.78414839797638,
+    "ego_rec": 96.9283276450512,
+    "ego_tp": 284,
+    "ego_fp": 16,
+    "ego_tn": 3430,
+    "ego_fn": 9,
+    "snap_acc": 92.5,
+    "snap_prec": 83.33333333333333,
+    "snap_f1": 86.95652173913044,
+    "snap_rec": 90.9090909090909,
+    "snap_tp": 20,
+    "snap_fp": 4,
+    "snap_tn": 54,
+    "snap_fn": 2,
+    "dataset": "theia/theia311"
+  }
+]

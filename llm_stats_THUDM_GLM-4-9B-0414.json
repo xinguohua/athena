@@ -1,0 +1,12 @@
+{
+  "calls": 780,
+  "n_snapshots": 118,
+  "total_tokens": 997720,
+  "tokens_per_snapshot": 8455,
+  "total_latency_s": 2053.6,
+  "latency_per_snapshot": 17.4,
+  "model": "THUDM/GLM-4-9B-0414",
+  "provider": "siliconflow",
+  "prompt_tokens": 835724,
+  "completion_tokens": 161996
+}

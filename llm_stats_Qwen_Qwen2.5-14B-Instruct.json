@@ -1,0 +1,12 @@
+{
+  "calls": 255,
+  "n_snapshots": 118,
+  "total_tokens": 327887,
+  "tokens_per_snapshot": 2779,
+  "total_latency_s": 1863.1,
+  "latency_per_snapshot": 15.79,
+  "model": "Qwen/Qwen2.5-14B-Instruct",
+  "provider": "siliconflow",
+  "prompt_tokens": 277147,
+  "completion_tokens": 50740
+}

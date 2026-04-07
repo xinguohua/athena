@@ -1,0 +1,12 @@
+{
+  "calls": 1002,
+  "n_snapshots": 118,
+  "total_tokens": 1443197,
+  "tokens_per_snapshot": 12230,
+  "total_latency_s": 14600.0,
+  "latency_per_snapshot": 123.73,
+  "model": "deepseek-ai/DeepSeek-V3",
+  "provider": "siliconflow",
+  "prompt_tokens": 1213137,
+  "completion_tokens": 230060
+}

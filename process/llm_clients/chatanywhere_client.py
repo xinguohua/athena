@@ -30,9 +30,10 @@ def chatanywhere_summarize(
     model: str = "gpt-3.5-turbo",
     temperature: float = 0.2,
     timeout: float = 30.0,
+    return_usage: bool = False,
 ) -> str:
     if not text or not text.strip():
-        return ""
+        return ("", {}) if return_usage else ""
     body = {
         "model": model,
         "temperature": max(0.0, float(temperature)),
@@ -54,6 +55,9 @@ def chatanywhere_summarize(
         result = str(content).strip()
         if not result:
             raise ValueError("LLM 返回空内容")
+        if return_usage:
+            usage = data.get("usage", {})
+            return result, usage
         return result
     except Exception as ex:
         raise RuntimeError(f"LLM API 调用失败: {ex}") from ex

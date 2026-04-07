@@ -1,0 +1,22 @@
+[
+  {
+    "strategy": "llm_glm4_9b",
+    "ego_acc": 95.50682000534903,
+    "ego_prec": 63.93088552915766,
+    "ego_f1": 77.89473684210526,
+    "ego_rec": 99.66329966329967,
+    "ego_tp": 296,
+    "ego_fp": 167,
+    "ego_tn": 3275,
+    "ego_fn": 1,
+    "snap_acc": 86.25,
+    "snap_prec": 66.66666666666667,
+    "snap_f1": 80.0,
+    "snap_rec": 100.0,
+    "snap_tp": 22,
+    "snap_fp": 11,
+    "snap_tn": 47,
+    "snap_fn": 0,
+    "dataset": "theia/theia311"
+  }
+]

