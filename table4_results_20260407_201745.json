@@ -1,0 +1,22 @@
+[
+  {
+    "strategy": "llm_qwen25_14b_moe",
+    "ego_acc": 98.23482214495854,
+    "ego_prec": 88.0701754385965,
+    "ego_f1": 88.38028169014085,
+    "ego_rec": 88.69257950530034,
+    "ego_tp": 251,
+    "ego_fp": 34,
+    "ego_tn": 3422,
+    "ego_fn": 32,
+    "snap_acc": 83.75,
+    "snap_prec": 66.66666666666667,
+    "snap_f1": 73.46938775510205,
+    "snap_rec": 81.81818181818181,
+    "snap_tp": 18,
+    "snap_fp": 9,
+    "snap_tn": 49,
+    "snap_fn": 4,
+    "dataset": "theia/theia311"
+  }
+]

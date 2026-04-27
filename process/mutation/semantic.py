@@ -51,7 +51,7 @@ def _log_semantic_mutation(g_mut, before_props, before_strategies, mutations, ll
         f.write(f"\n  LLM parsed mutations: {len(mutations)}\n")
         for m in mutations:
             f.write(f"    {m}\n")
-        f.write(f"\n  LLM raw response (first 500 chars):\n    {llm_response[:500]}\n")
+        f.write(f"\n  LLM raw response:\n{llm_response}\n")
 
 
 def _clean_set_str(prop: str) -> str:
@@ -287,6 +287,237 @@ def build_semantic_mutation_prompt(
     )
 
     return "".join(prompt_parts)
+
+
+def build_multi_strategy_prompt(
+    nodes_info: List[Dict],
+    context_triples: List[List[str]],
+) -> str:
+    """
+    构建三策略同时输出的 LLM prompt。
+    每个攻击节点同时生成 Replacement/Rewriting/Extension 三种变异，
+    供 StrategyMoE 可学习融合。
+    """
+
+    prompt_parts = [
+        "You are generating diverse attack variants in a provenance graph for contrastive learning.\n"
+        "Properties format: cmdLine,tgid,path (3 comma-separated fields).\n\n"
+        "## Task\n"
+        "For each node, generate 3 variants using ALL three strategies.\n"
+        "Each variant MUST be substantially different from the others — "
+        "different command structure, different token composition.\n\n"
+        "## Strategies\n"
+        "A. replacement: The command name is benign (in H_b), args are attack-specific.\n"
+        "   → Keep the attack args unchanged. Replace the command name AND restructure "
+        "the surrounding command syntax (add flags, change invocation style, alter path format).\n"
+        "   BAD: /bin/sh → /bin/bash (only 1 token change)\n"
+        "   GOOD: /bin/sh -c ./gtcache &>/dev/null & → "
+        "env LANG=C /usr/bin/perl -e 'exec(\"./gtcache\")' &>/dev/null &\n\n"
+        "B. rewriting: Rewrite the entire cmdLine into a functionally equivalent but "
+        "syntactically different command. Change the execution method, shell syntax, "
+        "and path structure while preserving the attack semantics.\n"
+        "   GOOD: /bin/sh -c ./gtcache &>/dev/null & → "
+        "nohup /usr/lib/update-notifier/package-data-helper ./gtcache >/dev/null 2>&1 &\n\n"
+        "C. extension: Keep the ENTIRE original command unchanged. "
+        "Wrap it in a realistic multi-step shell pipeline with ≥3 additional commands.\n"
+        "   BAD: systemctl status nginx && <original> (only 1 prefix)\n"
+        "   GOOD: cd /var/log && find . -name '*.tmp' -mtime +7 -delete; "
+        "logger -t maintenance 'cleanup done'; <original>\n\n"
+    ]
+
+    prompt_parts.append(f"## Nodes to mutate ({len(nodes_info)})\n\n")
+
+    for i, info in enumerate(nodes_info):
+        ctx_list = context_triples[i][:10] if i < len(context_triples) else []
+        ctx = "; ".join(ctx_list) if ctx_list else "N/A"
+        atk = info.get("attack_parts", "")
+        ben = info.get("benign_parts", "")
+        prompt_parts.append(
+            f"Node {i+1}:\n"
+            f"  properties: {info['properties']}\n"
+        )
+        if atk:
+            prompt_parts.append(f"  ATTACK-SPECIFIC (must keep in all 3 variants): {atk}\n")
+        if ben:
+            prompt_parts.append(f"  BENIGN (can replace): {ben}\n")
+        assoc = info.get("associated_nodes", [])
+        if assoc:
+            prompt_parts.append(f"  associated nodes:\n")
+            for a in assoc:
+                prompt_parts.append(f"    {a}\n")
+        prompt_parts.append(f"  context: {ctx}\n\n")
+
+    prompt_parts.append(
+        "## Output\n"
+        "Return ONLY a JSON array. Each entry has all 3 variants:\n"
+        '[{"node_id": 1,\n'
+        '  "replacement": "cmdLine,tgid,path",\n'
+        '  "rewriting": "cmdLine,tgid,path",\n'
+        '  "extension": "cmdLine,tgid,path"}]\n\n'
+        "Rules:\n"
+        "1. Exactly 3 comma-separated fields per variant: cmdLine,tgid,path. Keep tgid unchanged.\n"
+        "2. ATTACK-SPECIFIC parts MUST appear in ALL 3 variants.\n"
+        "3. The 3 variants must have substantially different token sequences "
+        "(not just swapping one command name).\n"
+    )
+
+    return "".join(prompt_parts)
+
+
+def generate_strategy_variants(
+    g_mut,
+    attack_node_indices: List[int],
+    benign_commands: Set[str],
+    benign_args: Set[str],
+    llm_fn=None,
+    r_hop: int = 2,
+    model_name: str = "unknown",
+) -> Dict[int, Dict[str, str]]:
+    """
+    为每个攻击进程节点生成 3 种策略的变异 properties，不修改图。
+
+    Returns:
+        {node_idx: {
+            "original": 原始 properties,
+            "replacement": replacement 变异,
+            "rewriting": rewriting 变异,
+            "extension": extension 变异,
+        }}
+    """
+    if not attack_node_indices or llm_fn is None:
+        return {}
+
+    # 收集攻击进程节点信息
+    proc_nodes = []
+    for idx in attack_node_indices:
+        if idx >= g_mut.vcount():
+            continue
+        vtype = str(g_mut.vs[idx].attributes().get("type", "")).lower()
+        if "process" not in vtype and "subject" not in vtype:
+            continue
+        prop = _get_properties(g_mut, idx)
+        cmd_line, _tgid, _path = _parse_process_properties(prop)
+        parts = cmd_line.split()
+        attack_parts, benign_parts_str = "", ""
+        if parts:
+            cmd = parts[0]
+            node_args = " ".join(parts[1:]) if len(parts) > 1 else ""
+            cmd_in = cmd in benign_commands
+            args_in = bool(node_args) and set(parts[1:]).issubset(benign_args)
+            if not cmd_in:
+                attack_parts = cmd + (" " + node_args if node_args else "")
+            elif not args_in and node_args:
+                attack_parts = node_args
+            if cmd_in:
+                benign_parts_str = cmd
+            if args_in and node_args:
+                benign_parts_str += (" " + node_args if benign_parts_str else node_args)
+        proc_nodes.append({
+            "idx": idx, "properties": prop,
+            "attack_parts": attack_parts, "benign_parts": benign_parts_str,
+        })
+
+    if not proc_nodes:
+        return {}
+
+    # 构建 prompt
+    nodes_info = []
+    context_triples = []
+    for pn in proc_nodes:
+        ctx = _build_context_triples(g_mut, pn["idx"], r_hop=r_hop)
+        context_triples.append(ctx)
+        associated = []
+        for nb in g_mut.neighbors(pn["idx"], mode="all"):
+            nb_type = str(g_mut.vs[nb].attributes().get("type", "")).lower()
+            nb_prop = _get_properties(g_mut, nb)
+            if "file" in nb_type or "net" in nb_type or "flow" in nb_type:
+                associated.append(f"id={nb} type={nb_type} properties={nb_prop[:50]}")
+        nodes_info.append({
+            "node_id": pn["idx"],
+            "properties": pn["properties"],
+            "associated_nodes": associated[:5],
+            "attack_parts": pn["attack_parts"],
+            "benign_parts": pn["benign_parts"],
+        })
+
+    prompt = build_multi_strategy_prompt(nodes_info, context_triples)
+
+    # 调用 LLM
+    result = {}
+    try:
+        response = llm_fn(prompt)
+        mutations = _parse_llm_response(response)
+
+        # 构建 node_id → proc_node 映射（同 _apply_mutations 的逻辑）
+        idx_map = {pn["idx"]: pn for pn in proc_nodes}
+        seq_map = {i + 1: pn for i, pn in enumerate(proc_nodes)}
+
+        for mut in mutations:
+            raw_id = mut.get("node_id")
+            try:
+                node_id = int(raw_id)
+            except (ValueError, TypeError):
+                continue
+            target = idx_map.get(node_id) or seq_map.get(node_id)
+            if target is None:
+                continue
+            actual_idx = target["idx"]
+            result[actual_idx] = {
+                "original": target["properties"],
+                "replacement": mut.get("replacement", target["properties"]),
+                "rewriting": mut.get("rewriting", target["properties"]),
+                "extension": mut.get("extension", target["properties"]),
+            }
+
+        # 没被 LLM 覆盖的节点，用原始 properties 填充
+        for pn in proc_nodes:
+            if pn["idx"] not in result:
+                result[pn["idx"]] = {
+                    "original": pn["properties"],
+                    "replacement": pn["properties"],
+                    "rewriting": pn["properties"],
+                    "extension": pn["properties"],
+                }
+
+        # 日志
+        _log_multi_strategy(result, response, model_name)
+    except Exception as ex:
+        print(f"[MultiStrategy] LLM 调用失败: {ex}")
+        # 失败时用原始 properties 填充
+        for pn in proc_nodes:
+            result[pn["idx"]] = {
+                "original": pn["properties"],
+                "replacement": pn["properties"],
+                "rewriting": pn["properties"],
+                "extension": pn["properties"],
+            }
+
+    return result
+
+
+def _log_multi_strategy(variants: Dict[int, Dict[str, str]], llm_response: str, model_name: str):
+    """记录三策略变异日志，文件名带时间戳避免追加混淆"""
+    global _SEM_LOG_COUNT
+    _SEM_LOG_COUNT += 1
+    safe_name = model_name.replace("/", "_")
+    # 首次调用时生成带时间戳的文件名并缓存
+    if not hasattr(_log_multi_strategy, '_log_path') or _SEM_LOG_COUNT == 1:
+        import datetime
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        _log_multi_strategy._log_path = f"multi_strategy_log_{safe_name}_{ts}.txt"
+    log_file = _log_multi_strategy._log_path
+
+    with open(log_file, "a") as f:
+        f.write(f"\n{'='*60}\n")
+        f.write(f"调用 #{_SEM_LOG_COUNT}\n")
+        f.write(f"{'='*60}\n")
+        for idx, v in variants.items():
+            f.write(f"\n  Node idx={idx}\n")
+            f.write(f"    original:    {v['original']}\n")
+            f.write(f"    replacement: {v['replacement']}\n")
+            f.write(f"    rewriting:   {v['rewriting']}\n")
+            f.write(f"    extension:   {v['extension']}\n")
+        f.write(f"\n  LLM raw response:\n{llm_response}\n")
 
 
 def apply_semantic_mutation_llm(

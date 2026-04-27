@@ -21,7 +21,7 @@ except ImportError:
     ig = None
 
 from .structural import aligned_region_search, subgraph_replacement
-from .semantic import apply_semantic_mutation_llm, _collect_benign_corpus
+from .semantic import apply_semantic_mutation_llm, generate_strategy_variants, _collect_benign_corpus
 from .verification import verify_mutation, build_historical_profiles
 from .wl_kernel import top_k_similar_attacks
 
@@ -231,12 +231,14 @@ class EgoMutationPipeline:
         ego_max_nodes: int = 32,
         top_k: int = 5,
         max_region_size: int = 16,
+        use_multi_strategy: bool = False,
     ):
         self.snapshots = snapshots
         self.r_hop = r_hop
         self.ego_max_nodes = ego_max_nodes
         self.top_k = top_k
         self.max_region_size = max_region_size
+        self.use_multi_strategy = use_multi_strategy
 
         b_start, b_end = benign_range
         a_start, a_end = attack_range
@@ -311,12 +313,24 @@ class EgoMutationPipeline:
         return None
 
     def _semantic_mutate(self, g_mut, replaced, llm_fn, model_name="unknown"):
-        """对结构变异后的图做 LLM 语义变异"""
-        return apply_semantic_mutation_llm(
-            g_mut, replaced,
-            self.benign_commands, self.benign_args,
-            llm_fn=llm_fn, r_hop=1, model_name=model_name,
-        )
+        """对结构变异后的图做 LLM 语义变异。
+        use_multi_strategy=True 时生成三种策略变异存在图属性上（MoE 模式）；
+        否则用原有单策略变异直接改图 properties。
+        """
+        if self.use_multi_strategy:
+            variants = generate_strategy_variants(
+                g_mut, replaced,
+                self.benign_commands, self.benign_args,
+                llm_fn=llm_fn, r_hop=1, model_name=model_name,
+            )
+            g_mut["strategy_variants"] = variants
+            return g_mut
+        else:
+            return apply_semantic_mutation_llm(
+                g_mut, replaced,
+                self.benign_commands, self.benign_args,
+                llm_fn=llm_fn, r_hop=1, model_name=model_name,
+            )
 
     def _mutate_one_ego(self, ego_b, ego_a, llm_fn=None):
         """对一对 (良性ego, 攻击ego) 做子图替换变异"""
@@ -377,21 +391,35 @@ class EgoMutationPipeline:
             sample_nodes = random.sample(all_nodes, n_sample) if n_sample < len(all_nodes) else all_nodes
 
             snap_egos = []
+            snap_pending_count = 0  # 当前快照已送入 pending 的数量
             for c in sample_nodes:
                 if len(snap_egos) >= egos_per_snapshot:
                     break
-                ego_b = _extract_ego(g_b, c, self.r_hop, self.ego_max_nodes)
-                if ego_b.vcount() < 5:
+                if snap_pending_count >= egos_per_snapshot:
+                    break
+
+                # 先用默认大小提取良性 ego，找到匹配的攻击 ego 后，
+                # 根据攻击子图大小重新提取合适大小的良性 ego
+                ego_b_full = _extract_ego(g_b, c, self.r_hop, self.ego_max_nodes)
+                if ego_b_full.vcount() < 5:
                     continue
 
-                similar = self._find_similar_attack_egos(ego_b, self.top_k)
+                similar = self._find_similar_attack_egos(ego_b_full, self.top_k)
                 n_struct_total += 1
                 for ego_a, sim in similar:
+                    # 计算攻击 ego 中攻击节点数，动态确定良性 ego 大小
+                    n_atk_in_a = sum(1 for v in range(ego_a.vcount())
+                                     if ego_a.vs[v].attributes().get('label', 0) == 1)
+                    # 良性 ego 大小 = 攻击节点数 × 2，最少 5，最多 ego_max_nodes
+                    adaptive_size = max(5, min(n_atk_in_a * 2, self.ego_max_nodes))
+                    ego_b = _extract_ego(g_b, c, self.r_hop, adaptive_size)
+
                     res = self._structural_mutate(ego_b, ego_a)
                     if res is not None:
                         g_mut, replaced = res
                         if llm_fn is not None:
                             pending.append((b_idx, g_mut, replaced))
+                            snap_pending_count += 1
                         else:
                             snap_egos.append(g_mut)
                         n_struct_ok += 1
@@ -443,7 +471,7 @@ class EgoMutationPipeline:
                           f"成功{n_llm_ok}, {elapsed:.0f}s已用, "
                           f"~{eta:.0f}s剩余 ({rate:.1f}个/s)", flush=True)
 
-        # 截断每个快照的 ego 数量
+        # 截断每个快照的 ego 数量（阶段1已限制，这里做兜底）
         for b_idx in list(result.keys()):
             if len(result[b_idx]) > egos_per_snapshot:
                 result[b_idx] = result[b_idx][:egos_per_snapshot]

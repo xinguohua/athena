@@ -130,9 +130,11 @@ class TechniqueSemanticMapper:
         triples_path: str = os.path.join(
             os.path.dirname(__file__), "data/technique_triples_raw.json"
         ),
+        aux_triples_path: str = None,
         model_name: str = "sentence-transformers/all-MiniLM-L12-v2",
         top_k: int = 5,
         threshold: float = 0.0,
+        aux_weight: float = 0.3,
         # 兼容旧接口参数（忽略）
         **kwargs,
     ) -> None:
@@ -140,6 +142,7 @@ class TechniqueSemanticMapper:
         self.model_name = model_name
         self.top_k = int(max(1, top_k))
         self.threshold = threshold
+        self.aux_weight = aux_weight
 
         # 加载技术描述库
         self._tech_descs = _load_technique_descriptions(triples_path)
@@ -160,11 +163,33 @@ class TechniqueSemanticMapper:
         self._tech_embeddings = self._model.encode(
             self._tech_texts, show_progress_bar=False, normalize_embeddings=True
         )
+
+        # 辅助描述库（用于混合匹配：主库匹配 + 辅助库补充区分度）
+        self._aux_embeddings = None
+        if aux_triples_path and os.path.exists(aux_triples_path):
+            aux_descs = _load_technique_descriptions(aux_triples_path)
+            # 按主库的 tech_ids 顺序对齐辅助描述
+            aux_texts = [aux_descs.get(tid, "") for tid in self._tech_ids]
+            print(f"[SemMapper] 编码 {sum(1 for t in aux_texts if t)} 个辅助技术描述...")
+            self._aux_embeddings = self._model.encode(
+                aux_texts, show_progress_bar=False, normalize_embeddings=True
+            )
+
         print(f"[SemMapper] 技术描述库就绪。")
 
     def snapshot_to_query(self, snap) -> str:
         """将快照翻译为查询文本。"""
         return snapshot_to_query(snap)
+
+    def _compute_similarities(self, q_emb: np.ndarray) -> np.ndarray:
+        """计算查询与技术库的混合相似度。"""
+        sim_main = np.dot(self._tech_embeddings, q_emb.T).flatten()
+        if self._aux_embeddings is not None:
+            sim_aux = np.dot(self._aux_embeddings, q_emb.T).flatten()
+            # 加权混合：主库 + 辅助库
+            w = self.aux_weight
+            return (1 - w) * sim_main + w * sim_aux
+        return sim_main
 
     def predict_top(self, query: str) -> Optional[Tuple[str, float]]:
         """返回最佳匹配的 (mitre_id, cosine_similarity)。
@@ -179,8 +204,7 @@ class TechniqueSemanticMapper:
             [query], show_progress_bar=False, normalize_embeddings=True
         )
 
-        # 计算余弦相似度（已归一化，点积即余弦）
-        similarities = np.dot(self._tech_embeddings, q_emb.T).flatten()
+        similarities = self._compute_similarities(q_emb)
 
         # 取 top_k
         top_indices = np.argsort(similarities)[::-1][:self.top_k]
@@ -202,7 +226,7 @@ class TechniqueSemanticMapper:
         q_emb = self._model.encode(
             [query], show_progress_bar=False, normalize_embeddings=True
         )
-        similarities = np.dot(self._tech_embeddings, q_emb.T).flatten()
+        similarities = self._compute_similarities(q_emb)
         top_indices = np.argsort(similarities)[::-1][:self.top_k]
 
         results = []
@@ -212,6 +236,36 @@ class TechniqueSemanticMapper:
                 results.append((self._tech_ids[idx], score))
 
         return results
+
+    def predict_top_k_detail(self, query: str) -> List[dict]:
+        """返回 top_k 个最匹配的详细信息，包含技术描述文本。
+        每项: {"tech_id": str, "score": float, "tech_text": str}
+        """
+        if not query or not query.strip():
+            return []
+
+        q_emb = self._model.encode(
+            [query], show_progress_bar=False, normalize_embeddings=True
+        )
+        similarities = self._compute_similarities(q_emb)
+        top_indices = np.argsort(similarities)[::-1][:self.top_k]
+
+        results = []
+        for idx in top_indices:
+            score = float(similarities[idx])
+            if score >= self.threshold:
+                results.append({
+                    "tech_id": self._tech_ids[idx],
+                    "score": score,
+                    "tech_text": self._tech_texts[idx],
+                })
+        return results
+
+    def get_tech_text(self, tech_id: str) -> str:
+        """根据技术 ID 返回描述文本。"""
+        if tech_id in self._tech_descs:
+            return self._tech_descs[tech_id]
+        return ""
 
     def predict_codes(self, queries: List[str]) -> List[str]:
         """批量查询，返回技术 ID 列表。"""

@@ -56,8 +56,8 @@ EVENT_MAP = {
     "EVENT_CHANGE_PRINCIPAL": "changes principal",
     "EVENT_LSEEK": "seeks in file",
     "EVENT_MODIFY_FILE_ATTRIBUTES": "writes configuration file",
-    "EVENT_RENAME": "writes file",
-    "EVENT_UNLINK": "writes file",
+    "EVENT_RENAME": "renames file",
+    "EVENT_UNLINK": "deletes file",
     "EVENT_MMAP": "maps memory",
     "EVENT_MPROTECT": "changes memory protection",
     "EVENT_CLONE": "executes process",
@@ -65,11 +65,19 @@ EVENT_MAP = {
     "EVENT_ACCEPT": "receives network connection",
     "EVENT_LOGIN": "reads credential file",
     "EVENT_LOGOUT": "exits",
+    "EVENT_LOADLIBRARY": "loads shared library",
+    "EVENT_UPDATE": "writes",
+    "EVENT_CHECK_FILE_ATTRIBUTES": "reads",
+    "EVENT_READ_SOCKET_PARAMS": "reads network connection",
+    "EVENT_WRITE_SOCKET_PARAMS": "writes network connection",
+    "EVENT_DUP": "duplicates",
+    "EVENT_OTHER": "executes",
 }
 
 # 低信息量动作前缀：translate_event 返回以这些词开头的结果会被过滤
 LOW_INFO_PREFIXES = {"closes", "exits", "opens", "seeks", "maps memory",
-                     "changes memory", "creates", "changes principal"}
+                     "changes memory", "creates", "changes principal",
+                     "duplicates"}
 
 # ============================================================
 # 日志侧：进程名 → 功能角色

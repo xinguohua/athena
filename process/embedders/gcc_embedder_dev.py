@@ -99,6 +99,56 @@ class TypedGINConv(nn.Module):
         return self.mlp(combined)
 
 
+class StrategyMoE(nn.Module):
+    """三种变异策略的可学习加权融合（学 GAugLLM SimilarityAttentionMLP）。
+
+    输入：3 种变异的 word2vec 向量 (content) + 原始 properties 的 word2vec 向量 (context)
+    输出：加权融合后的特征向量
+
+    权重由两部分决定：
+    - content_weights: MLP 学的，衡量变异内容对对比学习的价值
+    - similarity: content · context 点积，衡量变异对原始攻击语义的保留程度
+    """
+    def __init__(self, emb_dim: int, n_strategies: int = 3, temperature: float = 0.2):
+        super().__init__()
+        hidden = emb_dim // 2
+        self.fc1 = nn.Linear(emb_dim, hidden)
+        self.relu = nn.LeakyReLU()
+        self.fc2 = nn.Linear(n_strategies * hidden, n_strategies)
+        self.temperature = temperature
+        self.n_strategies = n_strategies
+
+    def forward(self, content_embs: torch.Tensor, context_emb: torch.Tensor):
+        """
+        Args:
+            content_embs: (N, 3, D) — 3 种变异的 word2vec 向量
+            context_emb:  (N, D)    — 原始 properties 的 word2vec 向量
+        Returns:
+            weights: (N, 3) — 每种策略的权重
+            fused:   (N, D) — 融合后的特征
+        """
+        # Step 1: MLP 内容权重
+        parts = []
+        for i in range(self.n_strategies):
+            h = self.relu(self.fc1(content_embs[:, i]))
+            parts.append(h)
+        content_weights = self.fc2(torch.cat(parts, dim=1))  # (N, 3)
+
+        # Step 2: 内容-上下文相似度
+        sims = []
+        for i in range(self.n_strategies):
+            sim = (content_embs[:, i] * context_emb).sum(dim=1, keepdim=True)
+            sims.append(sim)
+        sims = torch.cat(sims, dim=1)  # (N, 3)
+
+        # Step 3: 相加 + softmax
+        weights = F.softmax((content_weights + sims) / self.temperature, dim=1)
+
+        # Step 4: 加权融合
+        fused = (weights.unsqueeze(-1) * content_embs).sum(dim=1)  # (N, D)
+        return weights, fused
+
+
 class GINEncoder(nn.Module):
     def __init__(self, in_dim: int, hidden_dim: int, out_dim: int,
                  num_layers: int = 3, dropout: float = 0.1, **kwargs):
@@ -237,6 +287,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 #   - w_attr: 属性稀少权重（来自 g 内属性相对频率的反比）
                 # 最终节点权重：w_eff = (1 - alpha) * norm(w_base) + alpha * norm(w_attr)
                 attr_weight_alpha: float = 0.3,
+                use_strategy_moe: bool = False,
     ):
         super().__init__(snapshots, features, mapp)
         if mal_stopwords is None:
@@ -346,10 +397,15 @@ class GCCEmbedderDev(GraphEmbedderBase):
         ).to(self.device)
         # 分层时序单元（训练期使用，内置状态管理）
         self.temporal = TemporalPerLayer(self.encoder.layer_dims).to(self.device)
-        # 优化器包含 encoder、projection head，且在启用时包含 temporal
+        # StrategyMoE：三种变异策略的可学习融合
+        self.use_strategy_moe = bool(use_strategy_moe)
+        self.strategy_moe = StrategyMoE(in_dim, n_strategies=3).to(self.device) if self.use_strategy_moe else None
+        # 优化器包含 encoder、projection head，且在启用时包含 temporal / strategy_moe
         opt_params = list(self.encoder.parameters()) + list(self.proj_head.parameters())
         if self.use_temporal:
             opt_params += list(self.temporal.parameters())
+        if self.strategy_moe is not None:
+            opt_params += list(self.strategy_moe.parameters())
         self.optimizer = torch.optim.Adam(opt_params, lr=self.lr, weight_decay=1e-4)
 
         # 训练后缓存：每快照一个 {node_id: vec}
@@ -475,6 +531,31 @@ class GCCEmbedderDev(GraphEmbedderBase):
                     self._preheat_snapshot_properties(g_mut)
                     # ego 级变异：整个 g_mut 就是变异后的 ego，直接编码
                     x_np = self._build_node_features(g_mut)
+
+                    # MoE 模式：预计算变异 word2vec 向量，存在图属性上
+                    # 不在此处过 MoE（避免梯度断裂），训练时在 _encode_single_ego_graph 中实时过
+                    if self.strategy_moe is not None:
+                        variants_dict = None
+                        try:
+                            variants_dict = g_mut["strategy_variants"]
+                        except (KeyError, TypeError):
+                            pass
+                        if variants_dict:
+                            variant_vecs = {}
+                            for idx, v in variants_dict.items():
+                                if idx >= g_mut.vcount():
+                                    continue
+                                def _get_vec(s):
+                                    return self._w2v_vector_from_tokens(self._tokenize_properties(s))
+                                content_np = np.stack([
+                                    _get_vec(v.get("replacement", "")),
+                                    _get_vec(v.get("rewriting", "")),
+                                    _get_vec(v.get("extension", "")),
+                                ])  # (3, D)
+                                context_np = _get_vec(v.get("original", ""))  # (D,)
+                                variant_vecs[idx] = (content_np, context_np)
+                            g_mut["variant_vecs"] = variant_vecs  # 挂在图上，训练时取
+
                     ei, ef = self._igraph_edges_to_edge_index(g_mut)
                     self.train_ego_cache.append((x_np, ei.cpu(), ef.cpu(), 1, -1))
                     n_mut += 1
@@ -511,8 +592,9 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 benign_nodes = _rng.sample(benign_nodes, SAMPLE_PER_SNAPSHOT)
 
             from process.mutation.semantic import _get_properties
+            test_ego_max = min(5, self.ego_max_nodes)
             for v in attack_nodes + benign_nodes:
-                sub = self._ego_subgraph(g, v, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                sub = self._ego_subgraph(g, v, r=self.r_hop, max_nodes=test_ego_max)
                 if sub.vcount() == 0:
                     continue
                 x_np = self._build_node_features(sub)
@@ -671,12 +753,33 @@ class GCCEmbedderDev(GraphEmbedderBase):
         """编码单个 ego 级变异图为 [1, D] 嵌入。
 
         g_ego 已经是 ego 大小（~32节点），直接编码，不再做 r-hop 展开。
+        MoE 模式：对有 variant_vecs 的攻击节点，实时过 StrategyMoE 融合特征（有梯度）。
         """
         if g_ego is None or g_ego.vcount() == 0:
             return None
         self._preheat_snapshot_properties(g_ego)
         x_np = self._build_node_features(g_ego)
         x_t = torch.from_numpy(x_np).to(device)
+
+        # MoE：实时融合变异向量（梯度可传回 StrategyMoE）
+        if self.strategy_moe is not None:
+            variant_vecs = None
+            try:
+                variant_vecs = g_ego["variant_vecs"]
+            except (KeyError, TypeError):
+                pass
+            if variant_vecs:
+                indices = list(variant_vecs.keys())
+                contents = torch.tensor(
+                    np.stack([variant_vecs[i][0] for i in indices]),
+                    dtype=torch.float32, device=device)  # (K, 3, D)
+                contexts = torch.tensor(
+                    np.stack([variant_vecs[i][1] for i in indices]),
+                    dtype=torch.float32, device=device)  # (K, D)
+                _, fused = self.strategy_moe(contents, contexts)  # (K, D) 有梯度
+                for j, idx in enumerate(indices):
+                    x_t[idx] = fused[j]
+
         e_t, ef_t = self._igraph_edges_to_edge_index(g_ego)
         Z_layers = self.encoder(x_t, e_t.to(device), edge_feat=ef_t.to(device), return_all=True)
         H = Z_layers[-1]
@@ -732,9 +835,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
             subs, node_counts, freq_weights = [], [], []
             x_list, e_list, ef_list, ids_list = [], [], [], []
 
-            # 构造 batch ego graph
+            # 构造 batch ego graph（ego 大小与负样本/测试一致）
+            train_ego_max = min(5, self.ego_max_nodes)
             for c in batch_centers:
-                sub = self._ego_subgraph(g, c, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                sub = self._ego_subgraph(g, c, r=self.r_hop, max_nodes=train_ego_max)
                 if sub.vcount() == 0:
                     continue
                 xi_t = torch.from_numpy(self._build_node_features(sub)).to(device)
@@ -817,9 +921,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
             )
 
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(
-                list(self.encoder.parameters()) + list(self.proj_head.parameters()), max_norm=5.0
-            )
+            clip_params = list(self.encoder.parameters()) + list(self.proj_head.parameters())
+            if self.strategy_moe is not None:
+                clip_params += list(self.strategy_moe.parameters())
+            torch.nn.utils.clip_grad_norm_(clip_params, max_norm=5.0)
             self.optimizer.step()
 
             total_loss += float(loss.detach().cpu().item())
@@ -1130,8 +1235,10 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 neg_ef_list.append(_ef_zero)
                 neg_node_counts.append(1)
                 continue
+            # 负样本 ego 用较小的 max_nodes，减少 MemoryObject 噪声稀释攻击信号
+            neg_ego_max = min(5, self.ego_max_nodes)
             try:
-                sub = self._ego_subgraph(g, center=center, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                sub = self._ego_subgraph(g, center=center, r=self.r_hop, max_nodes=neg_ego_max)
             except Exception:
                 sub = None
             if sub is None or sub.vcount() == 0:
@@ -1246,6 +1353,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         else:
             chosen = [random.choice(pool) for _ in range(Bc)]
 
+        neg_ego_max = min(5, self.ego_max_nodes)
         x_list, e_list, node_counts = [], [], []
         for (sidx, center) in chosen:
             g = self.snapshots[sidx]
@@ -1255,7 +1363,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 node_counts.append(0)
                 continue
             try:
-                sub = self._ego_subgraph(g, center=center, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                sub = self._ego_subgraph(g, center=center, r=self.r_hop, max_nodes=neg_ego_max)
             except Exception:
                 sub = None
             if sub is None or sub.vcount() == 0:
@@ -1333,6 +1441,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
         else:
             chosen = [random.choice(pool) for _ in range(Bc)]
 
+        neg_ego_max = min(5, self.ego_max_nodes)
         x_list, e_list, node_counts = [], [], []
         for (sidx, center) in chosen:
             g = self.snapshots[sidx]
@@ -1342,7 +1451,7 @@ class GCCEmbedderDev(GraphEmbedderBase):
                 node_counts.append(0)
                 continue
             try:
-                sub = self._ego_subgraph(g, center=center, r=self.r_hop, max_nodes=self.ego_max_nodes)
+                sub = self._ego_subgraph(g, center=center, r=self.r_hop, max_nodes=neg_ego_max)
             except Exception:
                 sub = None
             if sub is None or sub.vcount() == 0:

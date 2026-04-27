@@ -148,6 +148,16 @@ AUGMENT_PRESETS = {
         "use_mutation_pipeline": True,
         "llm_model": "THUDM/GLM-4-9B-0414", "llm_provider": "siliconflow",
     },
+    # ---- MoE 三策略融合（论文方法改进版）----
+    "llm_qwen25_14b_moe": {
+        "drop_edge_p": 0.2, "feat_mask_p": 0.2,
+        "use_degree_coop_augment": True, "use_malicious_snapshots": True,
+        "use_malicious_negatives": False, "combine": False,
+        "use_mutation_pipeline": True,
+        "llm_model": "Qwen/Qwen2.5-14B-Instruct", "llm_provider": "siliconflow",
+        "use_strategy_moe": True,
+        "use_multi_strategy": True,
+    },
 }
 
 
@@ -271,6 +281,7 @@ def _run_mutation_pipeline(embedder, handler, preset: dict):
         ego_max_nodes=32,
         top_k=5,
         max_region_size=16,
+        use_multi_strategy=preset.get("use_multi_strategy", False),
     )
 
     llm_model = preset.get("llm_model", None)
@@ -441,6 +452,7 @@ def _train_single_encoder(strategy_name, handler, preset, seed_val):
         "train_indices": train_indices,
         "num_epochs": preset.get("num_epochs", 3),
         "attr_weight_alpha": preset.get("attr_weight_alpha", 0.3),
+        "use_strategy_moe": preset.get("use_strategy_moe", False),
     }
 
     embedder = embedder_cls(handler.snapshots, **embedder_kwargs)

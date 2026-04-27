@@ -1,0 +1,17 @@
+services:
+  prographer:
+    # Reuse the already-built PIDSMaker image to avoid long dependency rebuilds.
+    # This still runs the ORIGINAL ProGrapher code mounted from this repo.
+    image: pidsmaker-pids
+    container_name: prographer-runner
+    working_dir: /workspace/prographer
+    stdin_open: true
+    tty: true
+    shm_size: "16gb"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: /workspace/prographer
+    volumes:
+      - ./:/workspace/prographer
+      - /mnt/bigdata/aptdata:/mnt/bigdata/aptdata
+    gpus: all

@@ -1,0 +1,12 @@
+[
+  {
+    "strategy": "llm_qwen25_14b_moe",
+    "dataset": "theia/theia311",
+    "acc": 0,
+    "prec": 0,
+    "f1": 0,
+    "rec": 0,
+    "fpr": 0,
+    "error": "'list' object has no attribute 'get'"
+  }
+]

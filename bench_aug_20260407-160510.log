@@ -1,0 +1,34 @@
+[Log] writing to bench_aug_20260407-160510.log
+[数据准备] 发现缓存 snapshot_data_bench_theia_theia311.pkl，直接加载...
+[数据准备] 从缓存加载 199 个快照，耗时: 0.2s
+
+============================================================
+ 策略: llm_qwen25_14b_moe
+============================================================
+ 参数: {
+  "drop_edge_p": 0.2,
+  "feat_mask_p": 0.2,
+  "use_degree_coop_augment": true,
+  "use_malicious_snapshots": true,
+  "use_malicious_negatives": false,
+  "combine": false,
+  "use_mutation_pipeline": true,
+  "llm_model": "Qwen/Qwen2.5-14B-Instruct",
+  "llm_provider": "siliconflow",
+  "use_strategy_moe": true,
+  "use_multi_strategy": true
+}
+[LLM-guided] 运行 EgoMutationPipeline（ego 级变异）...
+[EgoMutPipeline] 初始化: 59 攻击ego, 119 良性快照, 耗时 0.4s
+[LLM] 使用 siliconflow / Qwen/Qwen2.5-14B-Instruct
+
+[EgoMutPipeline] 生成 ego 级难负样本: 每快照5个, 119个良性快照, LLM=有(并发8线程)
+[阶段1] 结构变异 20/119: 成功 114/114
+[阶段1] 结构变异 40/119: 成功 224/224
+[阶段1] 结构变异 60/119: 成功 368/368
+[阶段1] 结构变异 80/119: 成功 534/534
+[阶段1] 结构变异 100/119: 成功 738/738
+[阶段1] 结构变异 119/119: 成功 1002/1002
+[阶段1] 结构变异完成: 1002个, 耗��� 8.1s
+[阶段2] LLM 语义变异: 1002个ego, 8线程并发
+[阶段2] LLM 20/1002: 成功20, 34s已用, ~1693s剩余 (0.6个/s)

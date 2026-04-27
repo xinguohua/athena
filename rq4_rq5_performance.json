@@ -1,0 +1,61 @@
+{
+  "dataset": "theia",
+  "scene": "theia311",
+  "device": "cuda",
+  "table_viii": {
+    "train_s": 533.4,
+    "inference_s": 10.006,
+    "peak_mem_mb": 6737.0
+  },
+  "table_ix": {
+    "Snapshot Construction": {
+      "time_s": 192.27
+    },
+    "Contrastive Learning": {
+      "time_s": 341.16
+    },
+    "MLP Train": {
+      "time_s": 0.0
+    },
+    "Anomaly Detection": {
+      "time_s": 4.617
+    },
+    "Anomaly Interpretation": {
+      "time_s": 5.389
+    }
+  },
+  "table_x": {
+    "detection_only": {
+      "acc": 68.75,
+      "prec": 20.0,
+      "rec": 4.55,
+      "f1": 7.41,
+      "fpr": 6.897,
+      "tp": 1,
+      "fp": 4,
+      "tn": 54,
+      "fn": 21
+    },
+    "detection_interpretation": {
+      "acc": 68.75,
+      "prec": 20.0,
+      "rec": 4.55,
+      "f1": 7.41,
+      "fpr": 6.897,
+      "tp": 1,
+      "fp": 4,
+      "tn": 54,
+      "fn": 21
+    }
+  },
+  "timing_detail": {
+    "Snapshot Construction": 192.27,
+    "Contrastive Learning": 341.16,
+    "MLP Train": 0.0,
+    "Anomaly Detection": 4.617,
+    "Anomaly Interpretation": 5.389
+  },
+  "n_snapshots": 199,
+  "n_mal_snapshots": 80,
+  "n_true_positive": 22
+}

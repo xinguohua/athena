@@ -1,0 +1,20 @@
+{
+  "dataset": "theia",
+  "scene": "theia311",
+  "num_runs": 3,
+  "device": "cuda",
+  "table_x": {
+    "detection_only": {
+      "metrics": {},
+      "inference_time": 0,
+      "detect_time": 0,
+      "interp_time": 0
+    },
+    "detection_interpretation": {
+      "metrics": {},
+      "inference_time": 0,
+      "detect_time": 0,
+      "interp_time": 0
+    }
+  }
+}
